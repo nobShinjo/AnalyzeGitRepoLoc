@@ -12,6 +12,7 @@ from datetime import datetime, timedelta
 
 import pandas as pd
 import plotly.express as px
+from plotly.subplots import make_subplots
 
 
 def run_cloc(
@@ -118,14 +119,36 @@ def plot_data(monthly_data: pd.DataFrame, output_path: str):
     """
 
     grouped_data = monthly_data.groupby(["month", "language"]).sum().reset_index()
-    pivot_data = grouped_data.pivot(index="month", columns="language", values="code")
-    fig = px.area(
-        data_frame=pivot_data,
-        x="month",
-        y="loc",
-        title="LOC by Language per Month",
-        color="language",
+    language_data = grouped_data.pivot(index="month", columns="language", values="code")
+    sum_data = language_data.pop("SUM")
+
+    # 言語別統計
+    fig_lang = px.area(data_frame=language_data, color="language")
+    fig_lang_traces = []
+    for trace in range(len(fig_lang["data"])):
+        fig_lang_traces.append(fig_lang["data"][trace])
+
+    # 合計LOC
+    fig_sum = px.line(data_frame=sum_data)
+    fig_sum_traces = []
+    for trace in range(len(fig_sum["data"])):
+        fig_sum["data"][trace]["showlegend"] = False
+        fig_sum_traces.append(fig_sum["data"][trace])
+
+    fig = make_subplots(
+        rows=1,
+        cols=1,
+        x_title="Month",
+        y_title="LOC",
     )
+    fig.update_layout(
+        title={"text": "LOC by Language / Month", "x": 0.5, "xanchor": "center"}
+    )
+
+    for traces in fig_lang_traces:
+        fig.append_trace(traces, row=1, col=1)
+    for traces in fig_sum_traces:
+        fig.append_trace(traces, row=1, col=1)
     fig.show()
     fig.write_html(os.path.join(output_path, "report.html"))
 
