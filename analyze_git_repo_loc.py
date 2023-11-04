@@ -9,10 +9,15 @@ import os
 import subprocess
 import sys
 from datetime import datetime, timedelta
+from os.path import abspath
 
 import pandas as pd
 import plotly.express as px
 from plotly.subplots import make_subplots
+
+# global 変数
+CURRENT_PATH: str = os.getcwd()
+""" カレントパス """
 
 
 def run_cloc(
@@ -36,6 +41,7 @@ def run_cloc(
     """
 
     try:
+        os.chdir(repo_path)
         git_log = subprocess.run(
             [
                 "git",
@@ -66,9 +72,10 @@ def run_cloc(
         # output_filename: str = os.path.join(
         #     output_path, f"cloc_output_{start_date.strftime('%Y%m')}.json"
         # )
+
         result = subprocess.run(
             [
-                "./cloc.exe",
+                f"{CURRENT_PATH}/cloc.exe",
                 "--by-file-by-lang",
                 "--json",
                 "--vcs=git",
@@ -99,6 +106,7 @@ def process_cloc_output(cloc_output: pd.DataFrame, month: datetime) -> pd.DataFr
     Returns:
         pd.DataFrame: (各言語名, LOCカウント数)のDataFrame
     """
+
     data_dict = json.loads(cloc_output)
     language_data = data_dict["by_lang"]
     language_data.pop("header", None)
@@ -168,6 +176,8 @@ def analyze_git_repo_loc(
     Returns:
         loc_dict (DataFrame): 各月のLOC数データ
     """
+
+    # 開始、終了日付を定義
     try:
         start_date: datetime = datetime.strptime(start_date_str, "%Y-%m-%d")
         end_date: datetime = datetime.strptime(end_date_str, "%Y-%m-%d")
@@ -189,7 +199,7 @@ def analyze_git_repo_loc(
             output_path=output_path,
         )
         monthly_data: pd.DataFrame = pd.DataFrame()
-        if cloc_output:
+        if cloc_output and cloc_output != "{}\n":
             monthly_data = process_cloc_output(
                 cloc_output=cloc_output, month=current_date.strftime("%Y-%m")
             )
@@ -220,7 +230,7 @@ if __name__ == "__main__":
 
     # gitリポジトリ解析
     loc_data: pd.DataFrame = analyze_git_repo_loc(
-        repo_path=args.repo_path,
+        repo_path=abspath(args.repo_path),
         start_date_str=args.start_date,
         end_date_str=args.end_date,
         output_path=output_dir,
