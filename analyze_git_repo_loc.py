@@ -6,6 +6,7 @@ Analyze Git repositories and visualize code LOC.
 import argparse
 import json
 import os
+import sqlite3
 import subprocess
 import sys
 from datetime import datetime, timedelta
@@ -13,11 +14,96 @@ from os.path import abspath
 
 import pandas as pd
 import plotly.express as px
+from git import Repo
 from plotly.subplots import make_subplots
 
 # global 変数
 CURRENT_PATH: str = os.getcwd()
 """ カレントパス """
+
+
+def get_commit_hashes(
+    repo_path: str, start_date: datetime, end_date: datetime, interval="daily"
+):
+    """
+    get_commit_hashes  指定されたリポジトリ内のコミットハッシュを特定する時間間隔で取得する。
+
+
+    Args:
+        repo_path (str): Git リポジトリパス
+        start_date (datetime): 開始日付
+        end_date (datetime): 終了日付
+        interval (str, optional): 取得するコミットの間隔. Defaults to "daily".
+
+    Raises:
+        ValueError: 不適切なコミット間隔が指定された
+
+    Returns:
+        _type_: コミットハッシュと日付のリスト
+    """
+
+    # リポジトリオブジェクトを初期化する
+    repo = Repo(repo_path)
+
+    # インターバルを表すtimedeltaオブジェクトを設定する
+    intervals = {
+        "daily": timedelta(days=1),
+        "weekly": timedelta(weeks=1),
+        "monthly": timedelta(days=30),  # 注意: 平均的な月の長さを日数で近似
+    }
+    delta = intervals.get(interval)
+    if not delta:
+        raise ValueError("Invalid interval. Choose 'daily', 'weekly', or 'monthly'.")
+
+    # ループを開始する前の日付で絞り込む
+    since_str = f'--since="{start_date.strftime("%Y-%m-%d")}"'
+    until_str = f'--until="{end_date.strftime("%Y-%m-%d")}"'
+
+    # コミットを検索してリストに追加する
+    last_added_commit_date = start_date - delta
+    commit_list = []
+    for commit in repo.iter_commits("main", since=since_str, until=until_str):
+        commit_date = datetime.fromtimestamp(commit.committed_date)
+        if last_added_commit_date + delta <= commit_date:
+            commit_list.append(
+                (commit.hexsha, commit_date.strftime("%Y-%m-%d %H:%M:%S"))
+            )
+            last_added_commit_date = commit_date
+
+    return commit_list
+
+
+def store_commits_to_database(db_path: str, commits):
+    # SQLite3 DBへ接続する
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+
+    # テーブルが存在しない場合は作成する
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS commits (
+            hash TEXT PRIMARY KEY,
+            date TEXT NOT NULL
+        )
+    """
+    )
+
+    # コミット情報をデータベースに格納する
+    cursor.executemany(
+        """
+        INSERT OR IGNORE INTO commits (hash, date)
+        VALUES (?, ?)
+    """,
+        commits,
+    )
+
+    # 変更をコミットし、閉じる
+    conn.commit()
+    conn.close()
+
+
+# 使用例:
+db_path = "path/to/your/database.db"
 
 
 def run_cloc(
@@ -76,7 +162,6 @@ def run_cloc(
         result = subprocess.run(
             [
                 f"{CURRENT_PATH}/cloc.exe",
-                "--by-file-by-lang",
                 "--json",
                 "--vcs=git",
                 f"--list-file={files}",
@@ -219,6 +304,15 @@ if __name__ == "__main__":
     parser.add_argument("-o", "--output", type=str, default="./out", help="Output path")
     parser.add_argument("-s", "--start_date", type=str, help="Start Date yyyy-mm-dd")
     parser.add_argument("-e", "--end_date", type=str, help="End Date yyyy-mm-dd")
+    parser.add_argument(
+        "-b", "--branch", type=str, default="main", help="Branch name (default: main)"
+    )
+    parser.add_argument(
+        "--interval",
+        choices=["daily", "weekly", "monthly"],
+        default="monthly",
+        help="Interval (default: monthly)",
+    )
     args = parser.parse_args()
 
     # 出力先ディレクトリ作成
@@ -227,6 +321,9 @@ if __name__ == "__main__":
     ).replace(os.sep, "/")
     if not os.path.exists(output_dir):
         os.makedirs(output_dir, exist_ok=True)
+
+    # 出力ディレクトリに解析結果を格納するSQLite Datebaseファイルを作成する
+    db_path: str = os.path.join(output_dir, "analysis_results.db")
 
     # gitリポジトリ解析
     loc_data: pd.DataFrame = analyze_git_repo_loc(
