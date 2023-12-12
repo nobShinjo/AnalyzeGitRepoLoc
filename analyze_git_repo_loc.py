@@ -6,7 +6,6 @@ Analyze Git repositories and visualize code LOC.
 import argparse
 import json
 import os
-import sqlite3
 import subprocess
 import sys
 from datetime import datetime, timedelta
@@ -19,7 +18,6 @@ from plotly.subplots import make_subplots
 
 # Global variables
 CURRENT_PATH: str = os.getcwd()
-""" カレントパス """
 
 
 def get_commits(
@@ -32,8 +30,8 @@ def get_commits(
     """
     get_commits Get a list of Commit object.
 
-    This function retrieves a list of commits for a given repository and branch.
-    It filters for a given date/time range and a given interval.
+    This function retrieves a list of commits for a specified repository and branch.
+    It filters for a specified date range and interval.
 
     Args:
         repo_path (str): The file system path to the Git repository.
@@ -81,86 +79,38 @@ def get_commits(
     return commits
 
 
-def store_commits_to_database(db_path: str, commits):
-    # SQLite3 DBへ接続する
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
-
-    # テーブルが存在しない場合は作成する
-    cursor.execute(
-        """
-        CREATE TABLE IF NOT EXISTS commits (
-            hash TEXT PRIMARY KEY,
-            date TEXT NOT NULL
-        )
+def run_cloc(commit: Commit) -> str:
     """
-    )
+    Run the `cloc` to analyze LOC for a specific commit in a Git repository.
 
-    # コミット情報をデータベースに格納する
-    cursor.executemany(
-        """
-        INSERT OR IGNORE INTO commits (hash, date)
-        VALUES (?, ?)
-    """,
-        commits,
-    )
-
-    # 変更をコミットし、閉じる
-    conn.commit()
-    conn.close()
-
-
-# 使用例:
-db_path = "path/to/your/database.db"
-
-
-def run_cloc(
-    repo_path: str, start_date: datetime, end_date: datetime, output_path: str
-) -> str:
-    """
-    run_cloc 指定したgitリポジトリに対して、cloc解析する
+    This function executes the `cloc` program with JSON output format, targeting
+    the provided commit. `cloc` is a command line tool used to count blank lines,
+    comment lines, and physical lines of source code in many programming languages.
 
     Args:
-        repo_path (str): Git リポジトリパス
-        start_date (datetime): 開始日付
-        end_date (datetime): 終了日付
-        output_path (str): ファイル出力先
+        commit (Commit): A GitPython `Commit` object representing the commit to analyze.
 
     Returns:
-        str: cloc解析結果(json形式)
+        str: A JSON-formatted string containing the `cloc` analysis result.
 
     Remarks:
-        git log コマンドで開始日付から終了日付までの変更を検索し、clocコマンドで詳細のLOCを解析する
-        cloc --by-file --json --git
+        The command executed is equivalent to:
+            cloc --json --vcs=git ./ <commit hash>
+        and produces output in the following format:
+            {
+                "Language": {
+                    "files": count,
+                    "blank": count,
+                    "comment": count,
+                    "code": count
+                },
+                ...
+            }
+
+    Raises:
+        subprocess.CalledProcessError: If the `cloc` command fails to execute properly.
+        SystemExit: If there is an error during the execution of the `cloc` command.
     """
-
-    try:
-        os.chdir(repo_path)
-        git_log = subprocess.run(
-            [
-                "git",
-                "log",
-                f"--since={start_date.strftime('%Y-%m-%d')}",
-                f"--until={end_date.strftime('%Y-%m-%d')}",
-                "--name-only",
-                "--pretty=format:",
-            ],
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-        if not git_log.stdout:
-            return ""
-
-        # git_log.stdoutから、空行は削除して、カンマ区切りのファイル名を連結いた文字列を作成する
-        files = ",".join([file for file in git_log.stdout.split("\n") if file.strip()])
-
-    except subprocess.CalledProcessError as e:
-        print(f"Error: {str(e)}", file=sys.stderr)
-        sys.exit(-1)
-
-    if files is None:
-        return ""
 
     try:
         # output_filename: str = os.path.join(
@@ -169,11 +119,11 @@ def run_cloc(
 
         result = subprocess.run(
             [
-                f"{CURRENT_PATH}/cloc.exe",
+                "cloc.exe",
                 "--json",
                 "--vcs=git",
-                f"--list-file={files}",
-                repo_path,
+                "./",
+                commit.hexsha,
             ],
             check=True,
             capture_output=True,
@@ -190,7 +140,7 @@ def run_cloc(
 
 def process_cloc_output(cloc_output: pd.DataFrame, month: datetime) -> pd.DataFrame:
     """
-    process_cloc_output clocコマンドのjson出力をpd.DataFrameに変換する
+    process_cloc_output clocコマンドのjson出力を pd.DataFrame に変換する
 
     Args:
         cloc_output (DataFrame): clocコマンドのjson形式の出力文字列
@@ -255,22 +205,41 @@ def plot_data(monthly_data: pd.DataFrame, output_path: str):
 
 
 def analyze_git_repo_loc(
-    repo_path: str, start_date_str: str, end_date_str: str, output_path: str
+    repo_path: str,
+    branch: str,
+    start_date_str: str,
+    end_date_str: str,
+    output_path: str,
+    interval: str = "daily",
 ) -> pd.DataFrame:
     """
-    analyze_git_repo_loc Gitリポジトリ内のLOC（Lines Of Code）を分析し、指定された日付範囲内の変更量を計算します。
+    analyze_git_repo_loc Analyze and extract LOC statistics from a Git repository.
 
-    Parameters:
-        repo_path (str): Gitリポジトリへのパス
-        start_date (str): 開始日付
-        end_date (str): 終了日付
-        output_path (str): ファイル出力先
+    Specified repository path, branch name, date range, and an optional interval, this function
+    extracts the counts of lines of code, including the number of files, comments, blank,
+    and lines of code per language. It runs `cloc` for each commit within the specfied range
+    and compiles the results into a single DataFrame.
+
+    Args:
+        repo_path (str): The file system path to the Git repository.
+        branch (str): The name of the branch to retrieve commits from.
+        start_date_str (str): The start date for filtering commits in 'YYYY-MM-DD' format.
+        end_date_str (str): The end date for filtering commits in 'YYYY-MM-DD' format.
+        output_path (str): The file system path to output data generated by `cloc`.
+        interval (str, optional): The Interval to filter LOC ("hourly", "daily", "weekly", etc.).
+                                  Defaults to 'daily'.
 
     Returns:
-        loc_dict (DataFrame): 各月のLOC数データ
+        pd.DataFrame: A DataFrame containing the analysis results with columns for Commit hash,
+                      Date, Language, Number of files, Comments, Blank lines, and Code lines.
+
+    Raises:
+        ValueError: If the provided start or end date strings are not in the correct format
+                    or represent invalid dates.
+        SystemExit: If failing to parse the start or end date strings.
     """
 
-    # 開始、終了日付を定義
+    # Define start and end dates as datetime type.
     try:
         start_date: datetime = datetime.strptime(start_date_str, "%Y-%m-%d")
         end_date: datetime = datetime.strptime(end_date_str, "%Y-%m-%d")
@@ -278,31 +247,105 @@ def analyze_git_repo_loc(
         print(f"Error: {str(e)}", file=sys.stderr)
         sys.exit(-1)
 
-    current_date: datetime = start_date
-    all_data: pd.DataFrame = pd.DataFrame()
+    # Get a list of Commits filtered by the specified date and interval.
+    commits = get_commits(
+        repo_path=repo_path,
+        branch=branch,
+        start_date=start_date,
+        end_date=end_date,
+        interval=interval,
+    )
 
-    while current_date <= end_date:
-        next_date: datetime = (
-            current_date.replace(day=1) + timedelta(days=32)
-        ).replace(day=1)
-        cloc_output: str = run_cloc(
-            repo_path=repo_path,
-            start_date=current_date,
-            end_date=next_date,
-            output_path=output_path,
+    cloc_df: pd.DataFrame = pd.DataFrame(
+        columns=[
+            "Commit",
+            "Date",
+            "Language",
+            "files",
+            "comment",
+            "blank",
+            "code",
+        ],
+    )
+
+    # Change the directory to the repository path.
+    os.chdir(repo_path)
+
+    # Analyse LOC for each commit.
+    for commit in commits:
+        result = run_cloc(commit=commit)
+
+        # Decode json string to dict type
+        # Remove header and sum columns from the json object.
+        json_dict = json.loads(result)
+        json_dict.pop("header", None)
+        json_dict.pop("SUM", None)
+
+        # Create a dataframe from the json dict type.
+        df = pd.DataFrame.from_dict(json_dict, orient="index")
+        df.reset_index(inplace=True)
+        df.rename(columns={"index": "Language"}, inplace=True)
+
+        # Insert Commit and Date columns at the head of columns in the dataframe.
+        df.insert(0, "Commit", commit.hexsha)
+        committed_date = datetime.fromtimestamp(commit.committed_date)
+        df.insert(1, "Date", committed_date.strftime("%Y-%m-%d %H:%M:%S"))
+
+        # Concatenate data frames
+        cloc_df = pd.concat([cloc_df, df])
+
+    return cloc_df
+
+
+def check_cloc_path() -> None:
+    """
+    check_cloc_path Checks the presence of `cloc.exe` in the system's PATH or current directory.
+
+    This function attempts to run `cloc.exe --version` to determine if 'cloc.exe' is installed
+    and accessible. If the execution is successful, it prints out the version of 'cloc.exe'.
+    If 'cloc.exe' is not found, the function prints an error message and exits with a status code of -1.
+
+    Raises:
+        FileNotFoundError: If `cloc.exe` is not found on the system's PATH or current directory.
+    """
+    try:
+        version_result = subprocess.run(
+            [
+                "cloc.exe",
+                "--version",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
         )
-        monthly_data: pd.DataFrame = pd.DataFrame()
-        if cloc_output and cloc_output != "{}\n":
-            monthly_data = process_cloc_output(
-                cloc_output=cloc_output, month=current_date.strftime("%Y-%m")
-            )
-        all_data = pd.concat([all_data, monthly_data])
-        current_date = next_date
-    return all_data
+        print(f"cloc.exe: Ver. {version_result.stdout}")
+    except FileNotFoundError:
+        print(
+            "Error: cloc.exe was not found on the system's PATH or in the current directory."
+        )
+        sys.exit(-1)
+
+
+def make_output_dir(output_path: str):
+    """
+    make_output_dir Make output directory
+
+    Args:
+        output_path (str): Output directory name
+
+    Returns:
+        _type_: Full path of output directory
+    """
+    output_full_path: str = os.path.join(
+        os.getcwd().replace(os.sep, "/"), output_path
+    ).replace(os.sep, "/")
+    if not os.path.exists(output_full_path):
+        os.makedirs(output_full_path, exist_ok=True)
+    return output_full_path
 
 
 if __name__ == "__main__":
-    # コマンドライン引数解析
+    # Parsing command line arguments
     parser = argparse.ArgumentParser(
         prog="Analyze Git Repository LOC",
         description="Analyze Git repositories and visualize code LOC.",
@@ -323,22 +366,22 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    # 出力先ディレクトリ作成
-    output_dir: str = os.path.join(
-        os.getcwd().replace(os.sep, "/"), args.output
-    ).replace(os.sep, "/")
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir, exist_ok=True)
+    # Make output directory
+    output_dir = make_output_dir(args.output)
 
-    # 出力ディレクトリに解析結果を格納するSQLite Datebaseファイルを作成する
-    db_path: str = os.path.join(output_dir, "analysis_results.db")
+    # Check cloc.exe path
+    check_cloc_path()
 
-    # gitリポジトリ解析
+    # Analyze LOC against the git repository
     loc_data: pd.DataFrame = analyze_git_repo_loc(
         repo_path=abspath(args.repo_path),
+        branch=args.branch,
         start_date_str=args.start_date,
         end_date_str=args.end_date,
         output_path=output_dir,
+        interval=args.interval,
     )
-    # Chart出力
+    # Save to csv file.
+    loc_data.to_csv(output_dir + "loc_data.csv")
+    # Create charts
     plot_data(monthly_data=loc_data, output_path=output_dir)
