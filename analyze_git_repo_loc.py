@@ -14,63 +14,71 @@ from os.path import abspath
 
 import pandas as pd
 import plotly.express as px
-from git import Repo
+from git import Commit, Repo
 from plotly.subplots import make_subplots
 
-# global 変数
+# Global variables
 CURRENT_PATH: str = os.getcwd()
 """ カレントパス """
 
 
-def get_commit_hashes(
-    repo_path: str, start_date: datetime, end_date: datetime, interval="daily"
-):
+def get_commits(
+    repo_path: str,
+    branch: str,
+    start_date: datetime,
+    end_date: datetime,
+    interval="daily",
+) -> list[Commit]:
     """
-    get_commit_hashes  指定されたリポジトリ内のコミットハッシュを特定する時間間隔で取得する。
+    get_commits Get a list of Commit object.
 
+    This function retrieves a list of commits for a given repository and branch.
+    It filters for a given date/time range and a given interval.
 
     Args:
-        repo_path (str): Git リポジトリパス
-        start_date (datetime): 開始日付
-        end_date (datetime): 終了日付
-        interval (str, optional): 取得するコミットの間隔. Defaults to "daily".
+        repo_path (str): The file system path to the Git repository.
+        branch (str): The name of the branch to retrieve commits from.
+        start_date (datetime): The start date for filtering commits.
+        end_date (datetime): The end date for filtering commits.
+        interval (str, optional): The interval to use for filtering commits. Defaults to 'daily'.
 
     Raises:
-        ValueError: 不適切なコミット間隔が指定された
+        ValueError: If the provided `interval` is not one of 'daily', 'weekly', or 'monthly'.
 
     Returns:
-        _type_: コミットハッシュと日付のリスト
+        list[Commit]: A list of commit object.
     """
 
-    # リポジトリオブジェクトを初期化する
+    # Initialize the repository object
     repo = Repo(repo_path)
 
-    # インターバルを表すtimedeltaオブジェクトを設定する
+    # Set the timedelta object that defines the interval.
+    # NOTE: Approximate average length of month in days
     intervals = {
         "daily": timedelta(days=1),
         "weekly": timedelta(weeks=1),
-        "monthly": timedelta(days=30),  # 注意: 平均的な月の長さを日数で近似
+        "monthly": timedelta(days=30),
     }
     delta = intervals.get(interval)
     if not delta:
         raise ValueError("Invalid interval. Choose 'daily', 'weekly', or 'monthly'.")
 
-    # ループを開始する前の日付で絞り込む
-    since_str = f'--since="{start_date.strftime("%Y-%m-%d")}"'
-    until_str = f'--until="{end_date.strftime("%Y-%m-%d")}"'
+    # Start and end dates to filter
+    since = f'--since="{start_date.strftime("%Y-%m-%d")}"'
+    until = f'--until="{end_date.strftime("%Y-%m-%d")}"'
 
-    # コミットを検索してリストに追加する
-    last_added_commit_date = start_date - delta
-    commit_list = []
-    for commit in repo.iter_commits("main", since=since_str, until=until_str):
+    # Search and filter commits in order and add them to the list
+    # NOTE: Commit dates are ordered by newest to oldest, so filter by end date
+    last_added_commit_date = end_date
+    commits: list[Commit] = []
+    for commit in repo.iter_commits(branch, since=since, until=until):
         commit_date = datetime.fromtimestamp(commit.committed_date)
-        if last_added_commit_date + delta <= commit_date:
-            commit_list.append(
-                (commit.hexsha, commit_date.strftime("%Y-%m-%d %H:%M:%S"))
-            )
+        if commit_date <= last_added_commit_date - delta:
+            # commits.append((commit.hexsha, commit_date.strftime("%Y-%m-%d %H:%M:%S")))
+            commits.append(commit)
             last_added_commit_date = commit_date
 
-    return commit_list
+    return commits
 
 
 def store_commits_to_database(db_path: str, commits):
