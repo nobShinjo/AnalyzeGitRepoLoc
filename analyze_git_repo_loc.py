@@ -6,6 +6,7 @@ Analyze Git repositories and visualize code LOC.
 import argparse
 import json
 import os
+import pathlib
 import subprocess
 import sys
 from datetime import datetime, timedelta
@@ -21,7 +22,7 @@ CURRENT_PATH: str = os.getcwd()
 
 
 def get_commits(
-    repo_path: str,
+    repo_path: pathlib.Path,
     branch: str,
     start_date: datetime,
     end_date: datetime,
@@ -34,7 +35,7 @@ def get_commits(
     It filters for a specified date range and interval.
 
     Args:
-        repo_path (str): The file system path to the Git repository.
+        repo_path (pathlib.Path): The file system path to the Git repository.
         branch (str): The name of the branch to retrieve commits from.
         start_date (datetime): The start date for filtering commits.
         end_date (datetime): The end date for filtering commits.
@@ -193,7 +194,7 @@ def plot_data(monthly_data: pd.DataFrame, output_path: str):
 
 
 def analyze_git_repo_loc(
-    repo_path: str,
+    repo_path: pathlib.Path,
     branch: str,
     start_date_str: str,
     end_date_str: str,
@@ -208,7 +209,7 @@ def analyze_git_repo_loc(
     and compiles the results into a single DataFrame.
 
     Args:
-        repo_path (str): The file system path to the Git repository.
+        repo_path (pathlib.Path): The file system path to the Git repository.
         branch (str): The name of the branch to retrieve commits from.
         start_date_str (str): The start date for filtering commits in 'YYYY-MM-DD' format.
         end_date_str (str): The end date for filtering commits in 'YYYY-MM-DD' format.
@@ -370,7 +371,9 @@ if __name__ == "__main__":
         description="Analyze Git repositories and visualize code LOC.",
     )
     # pylint: enable=line-too-long
-    parser.add_argument("repo_path", type=str, help="Path of Git repository")
+    parser.add_argument(
+        "repo_path", type=pathlib.Path, required=True, help="Path of Git repository"
+    )
     parser.add_argument("-o", "--output", type=str, default="./out", help="Output path")
     parser.add_argument(
         "-s", "--start_date", type=str, default=None, help="Start Date yyyy-mm-dd"
@@ -397,7 +400,7 @@ if __name__ == "__main__":
 
     # Analyze LOC against the git repository
     loc_data: pd.DataFrame = analyze_git_repo_loc(
-        repo_path=abspath(args.repo_path),
+        repo_path=args.repo_path,
         branch=args.branch,
         start_date_str=args.start_date,
         end_date_str=args.end_date,
