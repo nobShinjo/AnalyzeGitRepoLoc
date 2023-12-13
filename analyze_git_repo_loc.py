@@ -266,17 +266,7 @@ def analyze_git_repo_loc(
     # Analyse LOC for each commit.
     for commit in commits:
         result = run_cloc(commit=commit)
-
-        # Decode json string to dict type
-        # Remove header and sum columns from the json object.
-        json_dict = json.loads(result)
-        json_dict.pop("header", None)
-        json_dict.pop("SUM", None)
-
-        # Create a dataframe from the json dict type.
-        df = pd.DataFrame.from_dict(json_dict, orient="index")
-        df.reset_index(inplace=True)
-        df.rename(columns={"index": "Language"}, inplace=True)
+        df = convert_json_to_dataframe(result)
 
         # Insert Commit and Date columns at the head of columns in the dataframe.
         df.insert(0, "Commit", commit.hexsha)
@@ -287,6 +277,37 @@ def analyze_git_repo_loc(
         cloc_df = pd.concat([cloc_df, df])
 
     return cloc_df
+
+
+def convert_json_to_dataframe(json_str):
+    """
+    Convert a JSON string to a pandas DataFrame after removing specified keys.
+
+    This function takes a JSON string and decodes it into a dictionary, removes
+    the 'header' and 'SUM' elements if they exist, and then converts it into a
+    pandas DataFrame. The index of the DataFrame is reset, and the first column
+    is renamed to 'Language'.
+
+    Args:
+        json_str (str): A JSON string representation of the data to be converted into a DataFrame.
+
+    Returns:
+    df : pandas.DataFrame
+        The resulting pandas DataFrame with the 'header' and 'SUM' entries removed,
+        and the 'index' column renamed to 'Language'.
+    """
+
+    # Decode json string to dict type
+    json_dict = json.loads(json_str)
+    json_dict.pop("header", None)
+    json_dict.pop("SUM", None)
+
+    # Create a dataframe from the json dict type.
+    df = pd.DataFrame.from_dict(json_dict, orient="index")
+    df.reset_index(inplace=True)
+    df.rename(columns={"index": "Language"}, inplace=True)
+
+    return df
 
 
 def check_cloc_path() -> None:
