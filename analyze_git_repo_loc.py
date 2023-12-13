@@ -289,6 +289,7 @@ def analyze_git_repo_loc(
         # Concatenate data frames
         cloc_df = pd.concat([cloc_df, df])
 
+    cloc_df.reset_index(inplace=True, drop=True)
     return cloc_df
 
 
