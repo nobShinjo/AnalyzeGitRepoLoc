@@ -360,22 +360,16 @@ def check_cloc_path() -> None:
         sys.exit(1)
 
 
-def make_output_dir(output_path: str):
+def make_output_dir(output_dir: Path):
     """
     make_output_dir Make output directory
 
     Args:
-        output_path (str): Output directory name
-
-    Returns:
-        _type_: Full path of output directory
+        output_dir (Path): Output directory path
     """
-    output_full_path: str = os.path.join(
-        os.getcwd().replace(os.sep, "/"), output_path
-    ).replace(os.sep, "/")
-    if not os.path.exists(output_full_path):
-        os.makedirs(output_full_path, exist_ok=True)
-    return output_full_path
+    output_dir.resolve()
+    if not output_dir.exists():
+        output_dir.mkdir(parents=True)
 
 
 if __name__ == "__main__":
@@ -419,7 +413,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # Make output directory
-    output_dir = make_output_dir(args.output)
+    output_path: Path = args.output
+    make_output_dir(output_path)
 
     # Check cloc.exe path
     check_cloc_path()
