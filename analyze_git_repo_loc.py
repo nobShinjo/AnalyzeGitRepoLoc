@@ -273,6 +273,8 @@ def analyze_git_repo_loc(
         ],
     )
 
+    # Memorize current directory
+    current_path: Path = Path().resolve()
     # Change the directory to the repository path.
     os.chdir(repo_path)
 
@@ -290,6 +292,10 @@ def analyze_git_repo_loc(
         cloc_df = pd.concat([cloc_df, df])
 
     cloc_df.reset_index(inplace=True, drop=True)
+
+    # Return to original directory.
+    os.chdir(current_path)
+
     return cloc_df
 
 
