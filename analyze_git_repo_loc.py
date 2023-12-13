@@ -13,7 +13,7 @@ from os.path import abspath
 
 import pandas as pd
 import plotly.express as px
-from git import Commit, Repo
+from git import Commit, InvalidGitRepositoryError, NoSuchPathError, Repo
 from plotly.subplots import make_subplots
 
 # Global variables
@@ -48,7 +48,17 @@ def get_commits(
     """
 
     # Initialize the repository object
-    repo = Repo(repo_path)
+    try:
+        repo = Repo(repo_path)
+    except InvalidGitRepositoryError as e:
+        print(
+            f"InvalidGitRepositoryError: Not a git repository. {str(e)}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    except NoSuchPathError as e:
+        print(f"NoSuchPathError: No such path. {str(e)}", file=sys.stderr)
+        sys.exit(1)
 
     # Set the timedelta object that defines the interval.
     # NOTE: Approximate average length of month in days
@@ -133,7 +143,7 @@ def run_cloc(commit: Commit) -> str:
             print(result.stdout)
     except subprocess.CalledProcessError as e:
         print(f"Error: {str(e)}", file=sys.stderr)
-        sys.exit(-1)
+        sys.exit(1)
 
     return result.stdout
 
@@ -245,16 +255,20 @@ def analyze_git_repo_loc(
         end_date: datetime = datetime.strptime(end_date_str, "%Y-%m-%d")
     except ValueError as e:
         print(f"Error: {str(e)}", file=sys.stderr)
-        sys.exit(-1)
+        sys.exit(1)
 
     # Get a list of Commits filtered by the specified date and interval.
-    commits = get_commits(
-        repo_path=repo_path,
-        branch=branch,
-        start_date=start_date,
-        end_date=end_date,
-        interval=interval,
-    )
+    try:
+        commits = get_commits(
+            repo_path=repo_path,
+            branch=branch,
+            start_date=start_date,
+            end_date=end_date,
+            interval=interval,
+        )
+    except ValueError as e:
+        print(f"Error: {str(e)}", file=sys.stderr)
+        sys.exit(1)
 
     cloc_df: pd.DataFrame = pd.DataFrame(
         columns=[
@@ -319,11 +333,12 @@ def check_cloc_path() -> None:
             text=True,
         )
         print(f"cloc.exe: Ver. {version_result.stdout}")
-    except FileNotFoundError:
+    except FileNotFoundError as e:
         print(
-            "Error: cloc.exe was not found on the system's PATH or in the current directory."
+            f"Error: Not found cloc.exe. {str(e)}",
+            file=sys.stderr,
         )
-        sys.exit(-1)
+        sys.exit(1)
 
 
 def make_output_dir(output_path: str):
