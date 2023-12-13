@@ -317,7 +317,7 @@ def check_cloc_path() -> None:
 
     This function attempts to run `cloc.exe --version` to determine if 'cloc.exe' is installed
     and accessible. If the execution is successful, it prints out the version of 'cloc.exe'.
-    If 'cloc.exe' is not found, the function prints an error message and exits with a status code of -1.
+    If 'cloc.exe' is not found, the function prints an error message and exits.
 
     Raises:
         FileNotFoundError: If `cloc.exe` is not found on the system's PATH or current directory.
