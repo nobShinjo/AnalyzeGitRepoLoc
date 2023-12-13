@@ -227,8 +227,15 @@ def analyze_git_repo_loc(
 
     # Define start and end dates as datetime type.
     try:
-        start_date: datetime = datetime.strptime(start_date_str, "%Y-%m-%d")
-        end_date: datetime = datetime.strptime(end_date_str, "%Y-%m-%d")
+        if start_date_str is None:
+            start_date: datetime = datetime.strptime("1970-01-01", "%Y-%m-%d")
+        else:
+            start_date: datetime = datetime.strptime(start_date_str, "%Y-%m-%d")
+
+        if end_date_str is None:
+            end_date: datetime = datetime.now()
+        else:
+            end_date: datetime = datetime.strptime(end_date_str, "%Y-%m-%d")
     except ValueError as e:
         print(f"Error: {str(e)}", file=sys.stderr)
         sys.exit(1)
@@ -365,8 +372,12 @@ if __name__ == "__main__":
     # pylint: enable=line-too-long
     parser.add_argument("repo_path", type=str, help="Path of Git repository")
     parser.add_argument("-o", "--output", type=str, default="./out", help="Output path")
-    parser.add_argument("-s", "--start_date", type=str, help="Start Date yyyy-mm-dd")
-    parser.add_argument("-e", "--end_date", type=str, help="End Date yyyy-mm-dd")
+    parser.add_argument(
+        "-s", "--start_date", type=str, default=None, help="Start Date yyyy-mm-dd"
+    )
+    parser.add_argument(
+        "-e", "--end_date", type=str, default=None, help="End Date yyyy-mm-dd"
+    )
     parser.add_argument(
         "-b", "--branch", type=str, default="main", help="Branch name (default: main)"
     )
