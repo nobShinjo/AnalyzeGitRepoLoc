@@ -267,7 +267,7 @@ def analyze_git_repo_loc(
             "Commit",
             "Date",
             "Language",
-            "files",
+            "nFiles",
             "comment",
             "blank",
             "code",
