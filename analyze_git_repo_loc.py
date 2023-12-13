@@ -13,6 +13,7 @@ from pathlib import Path
 
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 from git import Commit, InvalidGitRepositoryError, NoSuchPathError, Repo
 from plotly.subplots import make_subplots
 from tqdm import tqdm
@@ -154,40 +155,59 @@ def run_cloc(commit: Commit, lang: list[str] = None) -> str:
     return result.stdout
 
 
-def plot_data(monthly_data: pd.DataFrame, output_path: str):
+def plot_data(trend_data: pd.DataFrame, sum_data: pd.DataFrame) -> go.Figure:
     """
-    plot_data グラフを表示, 保存する
+    Plot the trend of lines of code (LOC) over time by language and the total LOC.
+
+    This function creates a subplot figure with an area plot to represent the LOC trend by language
+    and overlays line plots representing the total LOC.
+    The resulting plot is displayed using Plotly.
 
     Args:
-        monthly_data (DataFrame): 各月のLOC数データ
-        output_path (str): ファイル出力先
+        trend_data (pd.DataFrame): A DataFrame containing the trend data of LOC by language.
+        sum_data (pd.DataFrame): A DataFrame containing the summarized trend data of total LOC.
+
+    Returns:
+        go.Figure : The final Plotly figure object that contains the combined area and line plot.
+
+    Examples:
+    >>> trend_data = pd.DataFrame({
+    ...     "Date": pd.to_datetime(["2021-01-01", "2021-02-01", "2021-03-01"]),
+    ...     "Language": ["Python", "Python", "Python"],
+    ...     "LOC": [100, 200, 300],
+    ... })
+    >>> sum_data = pd.DataFrame({
+    ...     "Date": pd.to_datetime(["2021-01-01", "2021-02-01", "2021-03-01"]),
+    ...     "Total_LOC": [1000, 1500, 1800],
+    ... })
+    >>> fig = plot_data(trend_data, sum_data)
+
+    Notes:
+        Both `trend_data` and `sum_data` should have a 'Date' field for the plots to align properly
+        on the x-axis.
     """
 
-    grouped_data = monthly_data.groupby(["month", "language"]).sum().reset_index()
-    language_data = grouped_data.pivot(index="month", columns="language", values="code")
-    sum_data = language_data.pop("SUM")
-
-    # 言語別統計
-    fig_lang = px.area(data_frame=language_data, color="language")
+    # Field area plot of LOC trend by language
+    fig_lang = px.area(data_frame=trend_data, color="Language")
     fig_lang_traces = []
     for trace in range(len(fig_lang["data"])):
         fig_lang_traces.append(fig_lang["data"][trace])
 
-    # 合計LOC
+    # Line plots of total LOC trend
     fig_sum = px.line(data_frame=sum_data)
     fig_sum_traces = []
     for trace in range(len(fig_sum["data"])):
         fig_sum["data"][trace]["showlegend"] = False
         fig_sum_traces.append(fig_sum["data"][trace])
 
-    fig = make_subplots(
+    fig: go.Figure = make_subplots(
         rows=1,
         cols=1,
-        x_title="Month",
+        x_title="Date",
         y_title="LOC",
     )
     fig.update_layout(
-        title={"text": "LOC by Language / Month", "x": 0.5, "xanchor": "center"}
+        title={"text": "LOC trend by Language", "x": 0.5, "xanchor": "center"}
     )
 
     for traces in fig_lang_traces:
@@ -195,7 +215,7 @@ def plot_data(monthly_data: pd.DataFrame, output_path: str):
     for traces in fig_sum_traces:
         fig.append_trace(traces, row=1, col=1)
     fig.show()
-    fig.write_html(os.path.join(output_path, "report.html"))
+    return fig
 
 
 def analyze_git_repo_loc(
@@ -430,4 +450,7 @@ if __name__ == "__main__":
     # Save to csv file.
     loc_data.to_csv(output_dir + "/loc_data.csv")
     # Create charts
-    plot_data(monthly_data=loc_data, output_path=output_dir)
+    plot: go.Figure = plot_data(
+        trend_data=loc_trend_by_language, sum_data=trend_of_total_loc
+    )
+    plot.write_html(output_path / "report.html")
