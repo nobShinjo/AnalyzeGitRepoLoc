@@ -10,7 +10,6 @@ import pathlib
 import subprocess
 import sys
 from datetime import datetime, timedelta
-from os.path import abspath
 
 import pandas as pd
 import plotly.express as px
@@ -380,7 +379,7 @@ if __name__ == "__main__":
     )
     # pylint: enable=line-too-long
     parser.add_argument(
-        "repo_path", type=pathlib.Path, required=True, help="Path of Git repository"
+        "repo_path", type=pathlib.Path, default="./", help="Path of Git repository"
     )
     parser.add_argument("-o", "--output", type=str, default="./out", help="Output path")
     parser.add_argument(
