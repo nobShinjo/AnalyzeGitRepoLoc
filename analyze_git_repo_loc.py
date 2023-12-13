@@ -15,6 +15,7 @@ import pandas as pd
 import plotly.express as px
 from git import Commit, InvalidGitRepositoryError, NoSuchPathError, Repo
 from plotly.subplots import make_subplots
+from tqdm import tqdm
 
 # Global variables
 CURRENT_PATH: str = os.getcwd()
@@ -277,7 +278,7 @@ def analyze_git_repo_loc(
     os.chdir(repo_path)
 
     # Analyse LOC for each commit.
-    for commit in commits:
+    for commit in tqdm(commits):
         result = run_cloc(commit=commit, lang=lang)
         df = convert_json_to_dataframe(result)
 
