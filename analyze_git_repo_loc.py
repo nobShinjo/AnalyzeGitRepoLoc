@@ -416,7 +416,7 @@ if __name__ == "__main__":
     output_path: Path = args.output
     make_output_dir(output_path)
 
-    # Check cloc.exe path
+    # Check 'cloc.exe' path
     check_cloc_path()
 
     # Analyze LOC against the git repository
