@@ -90,7 +90,7 @@ def get_commits(
     return commits
 
 
-def run_cloc(commit: Commit) -> str:
+def run_cloc(commit: Commit, lang: list[str] = None) -> str:
     """
     Run the `cloc` to analyze LOC for a specific commit in a Git repository.
 
@@ -100,13 +100,14 @@ def run_cloc(commit: Commit) -> str:
 
     Args:
         commit (Commit): A GitPython `Commit` object representing the commit to analyze.
+        lang (list[str], optional): List of languages to search. Defaults to 'None'.
 
     Returns:
         str: A JSON-formatted string containing the `cloc` analysis result.
 
     Remarks:
         The command executed is equivalent to:
-            cloc --json --vcs=git ./ <commit hash>
+            cloc --json --quiet --vcs=git --include-lang=L1, L2, L3 ./ <commit hash>
         and produces output in the following format:
             {
                 "Language": {
@@ -123,16 +124,21 @@ def run_cloc(commit: Commit) -> str:
         SystemExit: If there is an error during the execution of the `cloc` command.
     """
 
-    try:
-        # output_filename: str = os.path.join(
-        #     output_path, f"cloc_output_{start_date.strftime('%Y%m')}.json"
-        # )
+    # Generate argument options for the language list to be searched
+    if lang is None:
+        include_lang: str = ""
+    else:
+        include_lang: str = "--include-lang=" + ",".join(lang)
 
+    try:
+        # Run cloc.exe and analyze LOC
         result = subprocess.run(
             [
                 "cloc.exe",
                 "--json",
+                "--quiet",
                 "--vcs=git",
+                include_lang,
                 "./",
                 commit.hexsha,
             ],
@@ -199,6 +205,7 @@ def analyze_git_repo_loc(
     start_date_str: str,
     end_date_str: str,
     interval: str = "daily",
+    lang: list = None,
 ) -> pd.DataFrame:
     """
     analyze_git_repo_loc Analyze and extract LOC statistics from a Git repository.
@@ -215,6 +222,7 @@ def analyze_git_repo_loc(
         end_date_str (str): The end date for filtering commits in 'YYYY-MM-DD' format.
         interval (str, optional): The Interval to filter LOC ("hourly", "daily", "weekly", etc.).
                                   Defaults to 'daily'.
+        lang (list[str], optional): List of languages to search. Defaults to 'None'
 
     Returns:
         pd.DataFrame: A DataFrame containing the analysis results with columns for Commit hash,
@@ -271,7 +279,7 @@ def analyze_git_repo_loc(
 
     # Analyse LOC for each commit.
     for commit in commits:
-        result = run_cloc(commit=commit)
+        result = run_cloc(commit=commit, lang=lang)
         df = convert_json_to_dataframe(result)
 
         # Insert Commit and Date columns at the head of columns in the dataframe.
@@ -389,6 +397,14 @@ if __name__ == "__main__":
         choices=["daily", "weekly", "monthly"],
         default="monthly",
         help="Interval (default: monthly)",
+    )
+    parser.add_argument(
+        "--lang",
+        nargs="+",
+        type=str,
+        help="Count only the given space separated, case-insensitive languages L1 L2 L3 etc. \n \
+        Use 'cloc --show-lang' to see the list of recognized languages.",
+        required=True,
     )
     args = parser.parse_args()
 
