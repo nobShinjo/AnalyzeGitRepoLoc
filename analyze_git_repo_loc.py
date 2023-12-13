@@ -188,13 +188,13 @@ def plot_data(trend_data: pd.DataFrame, sum_data: pd.DataFrame) -> go.Figure:
     """
 
     # Field area plot of LOC trend by language
-    fig_lang = px.area(data_frame=trend_data, color="Language")
+    fig_lang = px.area(data_frame=trend_data, color="Language", line_shape=None)
     fig_lang_traces = []
     for trace in range(len(fig_lang["data"])):
         fig_lang_traces.append(fig_lang["data"][trace])
 
     # Line plots of total LOC trend
-    fig_sum = px.line(data_frame=sum_data)
+    fig_sum = px.line(data_frame=sum_data, markers=True)
     fig_sum_traces = []
     for trace in range(len(fig_sum["data"])):
         fig_sum["data"][trace]["showlegend"] = False
@@ -206,8 +206,32 @@ def plot_data(trend_data: pd.DataFrame, sum_data: pd.DataFrame) -> go.Figure:
         x_title="Date",
         y_title="LOC",
     )
+    fig.update_xaxes(
+        showline=True,
+        linewidth=1,
+        linecolor="grey",
+        color="black",
+        gridcolor="lightgrey",
+        gridwidth=0.5,
+        title_font_size=18,
+        tickfont_size=16,
+    )
+    fig.update_yaxes(
+        showline=True,
+        linewidth=1,
+        linecolor="grey",
+        color="black",
+        gridcolor="lightgrey",
+        gridwidth=0.5,
+        title_font_size=18,
+        tickfont_size=16,
+    )
     fig.update_layout(
-        title={"text": "LOC trend by Language", "x": 0.5, "xanchor": "center"}
+        plot_bgcolor="white",
+        title={"text": "LOC trend by Language", "x": 0.5, "xanchor": "center"},
+        xaxis={"dtick": "M1"},
+        legend_title_font_size=14,
+        legend_font_size=14,
     )
 
     for traces in fig_lang_traces:
