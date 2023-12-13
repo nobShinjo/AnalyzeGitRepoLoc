@@ -148,28 +148,6 @@ def run_cloc(commit: Commit) -> str:
     return result.stdout
 
 
-def process_cloc_output(cloc_output: pd.DataFrame, month: datetime) -> pd.DataFrame:
-    """
-    process_cloc_output clocコマンドのjson出力を pd.DataFrame に変換する
-
-    Args:
-        cloc_output (DataFrame): clocコマンドのjson形式の出力文字列
-        month (datetime): データ対称年月
-
-    Returns:
-        pd.DataFrame: (各言語名, LOCカウント数)のDataFrame
-    """
-
-    data_dict = json.loads(cloc_output)
-    language_data = data_dict["by_lang"]
-    language_data.pop("header", None)
-    language_data.pop("nFiles", None)
-    data = pd.DataFrame.from_dict(language_data, orient="index", columns=["code"])
-    data["month"] = month
-    data["language"] = data.index
-    return data
-
-
 def plot_data(monthly_data: pd.DataFrame, output_path: str):
     """
     plot_data グラフを表示, 保存する
