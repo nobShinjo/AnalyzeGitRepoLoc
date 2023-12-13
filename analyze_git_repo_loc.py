@@ -107,11 +107,11 @@ def run_cloc(commit: Commit, lang: list[str] = None) -> str:
 
     Remarks:
         The command executed is equivalent to:
-            cloc --json --quiet --vcs=git --include-lang=L1, L2, L3 ./ <commit hash>
+            cloc --json --quiet --git --include-lang=L1, L2, L3 <commit hash>
         and produces output in the following format:
             {
                 "Language": {
-                    "files": count,
+                    "nfiles": count,
                     "blank": count,
                     "comment": count,
                     "code": count
@@ -137,17 +137,16 @@ def run_cloc(commit: Commit, lang: list[str] = None) -> str:
                 "cloc.exe",
                 "--json",
                 "--quiet",
-                "--vcs=git",
+                "--git",
                 include_lang,
-                "./",
                 commit.hexsha,
             ],
             check=True,
             capture_output=True,
             text=True,
         )
-        if result.stdout:
-            print(result.stdout)
+        # if result.stdout:
+        #     print(result.stdout)
     except subprocess.CalledProcessError as e:
         print(f"Error: {str(e)}", file=sys.stderr)
         sys.exit(1)
@@ -375,12 +374,14 @@ def make_output_dir(output_path: str):
 if __name__ == "__main__":
     # Parsing command line arguments
     parser = argparse.ArgumentParser(
-        prog="Analyze Git Repository LOC",
+        prog="analyze_git_repo_loc",
         description="Analyze Git repositories and visualize code LOC.",
     )
     # pylint: enable=line-too-long
     parser.add_argument(
-        "repo_path", type=pathlib.Path, default="./", help="Path of Git repository"
+        "repo_path",
+        type=pathlib.Path,
+        help="Path of Git repository",
     )
     parser.add_argument("-o", "--output", type=str, default="./out", help="Output path")
     parser.add_argument(
@@ -402,9 +403,9 @@ if __name__ == "__main__":
         "--lang",
         nargs="+",
         type=str,
+        default=None,
         help="Count only the given space separated, case-insensitive languages L1 L2 L3 etc. \n \
         Use 'cloc --show-lang' to see the list of recognized languages.",
-        required=True,
     )
     args = parser.parse_args()
 
@@ -423,6 +424,6 @@ if __name__ == "__main__":
         interval=args.interval,
     )
     # Save to csv file.
-    loc_data.to_csv(output_dir + "loc_data.csv")
+    loc_data.to_csv(output_dir + "/loc_data.csv")
     # Create charts
     plot_data(monthly_data=loc_data, output_path=output_dir)
