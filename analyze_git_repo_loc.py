@@ -458,7 +458,10 @@ if __name__ == "__main__":
     trend_of_total_loc = trend_of_total_loc[["SUM"]]
 
     # Save to csv file.
-    loc_data.to_csv(output_dir + "/loc_data.csv")
+    loc_data.to_csv(output_path / "loc_data.csv")
+    loc_trend_by_language.to_csv(output_path / "loc_trend_by_language.csv")
+    trend_of_total_loc.to_csv(output_path / "trend_of_total_loc.csv")
+
     # Create charts
     plot: go.Figure = plot_data(
         trend_data=loc_trend_by_language, sum_data=trend_of_total_loc
