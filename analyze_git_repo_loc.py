@@ -447,6 +447,16 @@ if __name__ == "__main__":
         end_date_str=args.end_date,
         interval=args.interval,
     )
+
+    loc_trend_by_language: pd.DataFrame = loc_data.pivot_table(
+        index="Date", columns="Language", values="code", fill_value=0
+    )
+    loc_trend_by_language = loc_trend_by_language.astype(int)
+
+    trend_of_total_loc: pd.DataFrame = loc_trend_by_language.copy(deep=True)
+    trend_of_total_loc["SUM"] = trend_of_total_loc.sum(axis=1)
+    trend_of_total_loc = trend_of_total_loc[["SUM"]]
+
     # Save to csv file.
     loc_data.to_csv(output_dir + "/loc_data.csv")
     # Create charts
