@@ -6,10 +6,10 @@ Analyze Git repositories and visualize code LOC.
 import argparse
 import json
 import os
-import pathlib
 import subprocess
 import sys
 from datetime import datetime, timedelta
+from pathlib import Path
 
 import pandas as pd
 import plotly.express as px
@@ -22,7 +22,7 @@ CURRENT_PATH: str = os.getcwd()
 
 
 def get_commits(
-    repo_path: pathlib.Path,
+    repo_path: Path,
     branch: str,
     start_date: datetime,
     end_date: datetime,
@@ -35,7 +35,7 @@ def get_commits(
     It filters for a specified date range and interval.
 
     Args:
-        repo_path (pathlib.Path): The file system path to the Git repository.
+        repo_path (Path): The file system path to the Git repository.
         branch (str): The name of the branch to retrieve commits from.
         start_date (datetime): The start date for filtering commits.
         end_date (datetime): The end date for filtering commits.
@@ -199,7 +199,7 @@ def plot_data(monthly_data: pd.DataFrame, output_path: str):
 
 
 def analyze_git_repo_loc(
-    repo_path: pathlib.Path,
+    repo_path: Path,
     branch: str,
     start_date_str: str,
     end_date_str: str,
@@ -215,7 +215,7 @@ def analyze_git_repo_loc(
     and compiles the results into a single DataFrame.
 
     Args:
-        repo_path (pathlib.Path): The file system path to the Git repository.
+        repo_path (Path): The file system path to the Git repository.
         branch (str): The name of the branch to retrieve commits from.
         start_date_str (str): The start date for filtering commits in 'YYYY-MM-DD' format.
         end_date_str (str): The end date for filtering commits in 'YYYY-MM-DD' format.
@@ -381,10 +381,12 @@ if __name__ == "__main__":
     # pylint: enable=line-too-long
     parser.add_argument(
         "repo_path",
-        type=pathlib.Path,
+        type=Path,
         help="Path of Git repository",
     )
-    parser.add_argument("-o", "--output", type=str, default="./out", help="Output path")
+    parser.add_argument(
+        "-o", "--output", type=Path, default="./out", help="Output path"
+    )
     parser.add_argument(
         "-s", "--start_date", type=str, default=None, help="Start Date yyyy-mm-dd"
     )
