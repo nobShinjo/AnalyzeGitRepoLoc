@@ -11,9 +11,11 @@ import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 
+import colorama
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+from colorama import Cursor, Fore, Style
 from git import Commit, InvalidGitRepositoryError, NoSuchPathError, Repo
 from plotly.subplots import make_subplots
 from tqdm import tqdm
@@ -85,6 +87,7 @@ def get_commits(
             commits.append(commit)
             last_added_commit_date = commit_date
 
+    print(f"-> {len(commits)} commits found.", end=os.linesep + os.linesep)
     return commits
 
 
@@ -327,7 +330,8 @@ def analyze_git_repo_loc(
     os.chdir(repo_path)
 
     # Analyse LOC for each commit.
-    for commit in tqdm(commits):
+    print_h1("# Analyse LOC for each commit.")
+    for commit in tqdm(commits, desc="Commits"):
         result = run_cloc(commit=commit, lang=lang)
         df = convert_json_to_dataframe(result)
 
@@ -485,6 +489,36 @@ def save_dataframe(data: pd.DataFrame, csv_file: Path) -> None:
     print(f"- Save: {csv_file}")
     data.to_csv(csv_file)
 
+
+def print_ok(up: int = 0, back: int = 0):
+    """
+    print_ok Print OK with GREEN
+
+    Args:
+        up (int): Specified number of lines OK is output on the line above
+        back (int): Specified number of characters Output OK at the back
+    """
+    if up > 0:
+        print(Cursor.UP(up), end="")
+    if back > 0:
+        print(Cursor.FORWARD(back), end="")
+
+    print(Style.DIM + "..." + Style.NORMAL + Fore.GREEN + "OK", end="")
+
+    if up > 0:
+        print(Cursor.DOWN(up))
+
+
+def print_h1(text: str):
+    """
+    print_h1 Print specified text as H1 (header level 1)
+
+    Args:
+        text (str): The text to be printed
+    """
+    print(Fore.CYAN + Style.BRIGHT + text)
+
+
 if __name__ == "__main__":
     # Parsing command line arguments
     parser = argparse.ArgumentParser(
@@ -525,14 +559,27 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    # Make output directory
+    # Colorama initialize.
+    colorama.init(autoreset=True)
+
+    # Output program name and description.
+    print_h1(f"# Start {parser.prog}.")
+    print(Style.DIM + f"- {parser.description}", end=os.linesep + os.linesep)
+
+    # Make output directory.
+    print_h1("# Make output directory.")
     output_path: Path = args.output
     make_output_dir(output_path)
+    print_ok(up=2, back=50)
 
+    # Find 'cloc.exe' path.
+    print_h1("# Find 'cloc.exe' path.")
     cloc_path = find_cloc_path()
     verify_cloc_executable(cloc_path)
+    print_ok(up=4, back=50)
 
-    # Analyze LOC against the git repository
+    # Analyze LOC against the git repository.
+    print_h1("# Analyze LOC against the git repository.")
     loc_data: pd.DataFrame = analyze_git_repo_loc(
         repo_path=args.repo_path,
         branch=args.branch,
@@ -540,7 +587,10 @@ if __name__ == "__main__":
         end_date_str=args.end_date,
         interval=args.interval,
     )
+    print_ok(up=10, back=50)
 
+    # Forming dataframe type data.
+    print_h1("# Forming dataframe type data.")
     loc_trend_by_language: pd.DataFrame = loc_data.pivot_table(
         index="Date", columns="Language", values="code", fill_value=0
     )
@@ -549,13 +599,30 @@ if __name__ == "__main__":
     trend_of_total_loc: pd.DataFrame = loc_trend_by_language.copy(deep=True)
     trend_of_total_loc["SUM"] = trend_of_total_loc.sum(axis=1)
     trend_of_total_loc = trend_of_total_loc[["SUM"]]
+    print_ok(up=1, back=50)
 
+    # Save to csv files.
+    print_h1("# Save to csv files.")
     save_dataframe(loc_data, output_path / "loc_data.csv")
     save_dataframe(loc_trend_by_language, output_path / "loc_trend_by_language.csv")
     save_dataframe(trend_of_total_loc, output_path / "trend_of_total_loc.csv")
+    print_ok(up=4, back=50)
 
-    # Create charts
+    # Create charts.
+    print_h1("# Create charts.")
     plot: go.Figure = plot_data(
         trend_data=loc_trend_by_language, sum_data=trend_of_total_loc
     )
     plot.write_html(output_path / "report.html")
+    print_ok(up=1, back=50)
+
+    print_h1("# LOC Analyze")
+    print(
+        Cursor.UP()
+        + Cursor.FORWARD(50)
+        + Style.DIM
+        + "..."
+        + Style.NORMAL
+        + Fore.GREEN
+        + "FINISH"
+    )
