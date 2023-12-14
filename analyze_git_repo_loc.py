@@ -20,6 +20,10 @@ from git import Commit, InvalidGitRepositoryError, NoSuchPathError, Repo
 from plotly.subplots import make_subplots
 from tqdm import tqdm
 
+# Global variables
+cloc_path: Path = None
+""" The file system path to 'cloc.exe' """
+
 
 def get_commits(
     repo_path: Path,
@@ -135,7 +139,7 @@ def run_cloc(commit: Commit, lang: list[str] = None) -> str:
         # Run cloc.exe and analyze LOC
         result = subprocess.run(
             [
-                "cloc.exe",
+                str(cloc_path.resolve()),
                 "--json",
                 "--quiet",
                 "--git",
@@ -447,7 +451,7 @@ def verify_cloc_executable(executable_path: Path) -> None:
     try:
         version_result = subprocess.run(
             [
-                str(executable_path),
+                str(executable_path.resolve()),
                 "--version",
             ],
             check=True,
