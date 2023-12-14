@@ -599,6 +599,9 @@ if __name__ == "__main__":
         index="Date", columns="Language", values="code", fill_value=0
     )
     loc_trend_by_language = loc_trend_by_language.astype(int)
+    loc_trend_by_language = loc_trend_by_language.sort_values(
+        by=loc_trend_by_language.index[-1], axis=1, ascending=False
+    )
 
     trend_of_total_loc: pd.DataFrame = loc_trend_by_language.copy(deep=True)
     trend_of_total_loc["SUM"] = trend_of_total_loc.sum(axis=1)
