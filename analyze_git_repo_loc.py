@@ -474,6 +474,16 @@ def make_output_dir(output_dir: Path):
         print(f"Output dir exists. ({output_dir.resolve()})")
 
 
+def save_dataframe(data: pd.DataFrame, csv_file: Path) -> None:
+    """
+    save_dataframe Save dataframe type to csv file
+
+    Args:
+        data (pd.DataFrame): Data of dataframe type to be saved.
+        csv_file (Path): Full path to save csv file
+    """
+    print(f"- Save: {csv_file}")
+    data.to_csv(csv_file)
 
 if __name__ == "__main__":
     # Parsing command line arguments
@@ -540,10 +550,9 @@ if __name__ == "__main__":
     trend_of_total_loc["SUM"] = trend_of_total_loc.sum(axis=1)
     trend_of_total_loc = trend_of_total_loc[["SUM"]]
 
-    # Save to csv file.
-    loc_data.to_csv(output_path / "loc_data.csv")
-    loc_trend_by_language.to_csv(output_path / "loc_trend_by_language.csv")
-    trend_of_total_loc.to_csv(output_path / "trend_of_total_loc.csv")
+    save_dataframe(loc_data, output_path / "loc_data.csv")
+    save_dataframe(loc_trend_by_language, output_path / "loc_trend_by_language.csv")
+    save_dataframe(trend_of_total_loc, output_path / "trend_of_total_loc.csv")
 
     # Create charts
     plot: go.Figure = plot_data(
