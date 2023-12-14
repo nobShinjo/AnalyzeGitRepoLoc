@@ -292,6 +292,13 @@ def analyze_git_repo_loc(
         print(f"Error: {str(e)}", file=sys.stderr)
         sys.exit(1)
 
+    # Output analysis conditions.
+    print(f"- repository:\t{repo_path.resolve()}")
+    print(f"- branch:\t{branch}")
+    print(f"- since:\t{start_date:%Y-%m-%d %H:%M:%S}")
+    print(f"- until:\t{end_date:%Y-%m-%d %H:%M:%S}")
+    print(f"- interval:\t{interval}")
+
     # Get a list of Commits filtered by the specified date and interval.
     try:
         commits = get_commits(
