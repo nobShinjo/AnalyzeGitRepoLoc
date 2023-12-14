@@ -464,7 +464,11 @@ def make_output_dir(output_dir: Path):
     """
     output_dir.resolve()
     if not output_dir.exists():
+        print(f"Make dir. ({output_dir})")
         output_dir.mkdir(parents=True)
+    else:
+        print(f"Output dir exists. ({output_dir.resolve()})")
+
 
 
 if __name__ == "__main__":
