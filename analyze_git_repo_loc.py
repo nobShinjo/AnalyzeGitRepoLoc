@@ -374,28 +374,79 @@ def convert_json_to_dataframe(json_str):
     return df
 
 
-def check_cloc_path() -> None:
+def find_cloc_path() -> Path:
     """
-    check_cloc_path Checks the presence of `cloc.exe` in the system's PATH or current directory.
+    Searches for the 'cloc.exe' executable in the system PATH and current working directory.
 
-    This function attempts to run `cloc.exe --version` to determine if 'cloc.exe' is installed
-    and accessible. If the execution is successful, it prints out the version of 'cloc.exe'.
-    If 'cloc.exe' is not found, the function prints an error message and exits.
+    The function searches each directory in the PATH environment variable
+    for a file named 'cloc.exe'. If it is not found, the function then checks
+    the current working directory. If 'cloc.exe' is found and is an executable file,
+    its full path is returned.
+
+    Returns:
+        Path: The full path to the 'cloc.exe'.
 
     Raises:
-        FileNotFoundError: If `cloc.exe` is not found on the system's PATH or current directory.
+        FileNotFoundError: If 'cloc.exe' is not found.
+
+    Usage example:
+        >>> cloc_path = find_cloc_path()
+        >>> print(cloc_path)
+        WindowsPath('C:/path/to/cloc.exe')
+        # this output can vary depending on the actual found path
+    """
+    cloc_exe_filename: str = "cloc.exe"
+
+    # Find full path of 'cloc.exe' from 'PATH' environment varliable.
+    for path in os.environ["PATH"].split(os.pathsep):
+        full_path = Path(path) / cloc_exe_filename
+        if full_path.is_file() and os.access(str(full_path), os.X_OK):
+            print(f"Path: {full_path}")
+            return full_path
+
+    # Find 'cloc.exe' from current directory.
+    current_dir = Path.cwd()
+    full_path = current_dir / cloc_exe_filename
+    if full_path.is_file() and os.access(str(full_path), os.X_OK):
+        print(f"Path: {full_path}")
+        return full_path
+
+    raise FileNotFoundError("Not found cloc.exe.")
+
+
+def verify_cloc_executable(executable_path: Path) -> None:
+    """
+    Verifies that the 'cloc' executable is present at the specified path and can be run.
+
+    This function attempts to run `cloc --version` using the given cloc executable path.
+    If successful, it prints out the version of cloc. If the executable is not found,
+    an error message is printed and the program exits with status code 1.
+
+    Args:
+        executable_path (Path): The file system path to the cloc executable.
+
+    Returns:
+        None
+
+    Raises:
+        FileNotFoundError: If the cloc executable is not found at the given path.
+
+    Usage example:
+        >>> from pathlib import Path
+        >>> cloc_path = Path('/usr/bin/cloc')
+        >>> verify_cloc_executable(cloc_path)
     """
     try:
         version_result = subprocess.run(
             [
-                "cloc.exe",
+                str(executable_path),
                 "--version",
             ],
             check=True,
             capture_output=True,
             text=True,
         )
-        print(f"cloc.exe: Ver. {version_result.stdout}")
+        print(f"- cloc.exe: Ver. {version_result.stdout}")
     except FileNotFoundError as e:
         print(
             f"Error: Not found cloc.exe. {str(e)}",
@@ -460,8 +511,8 @@ if __name__ == "__main__":
     output_path: Path = args.output
     make_output_dir(output_path)
 
-    # Check 'cloc.exe' path
-    check_cloc_path()
+    cloc_path = find_cloc_path()
+    verify_cloc_executable(cloc_path)
 
     # Analyze LOC against the git repository
     loc_data: pd.DataFrame = analyze_git_repo_loc(
