@@ -18,9 +18,6 @@ from git import Commit, InvalidGitRepositoryError, NoSuchPathError, Repo
 from plotly.subplots import make_subplots
 from tqdm import tqdm
 
-# Global variables
-CURRENT_PATH: str = os.getcwd()
-
 
 def get_commits(
     repo_path: Path,
