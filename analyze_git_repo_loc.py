@@ -252,7 +252,7 @@ def analyze_git_repo_loc(
     start_date_str: str,
     end_date_str: str,
     interval: str = "daily",
-    lang: list = None,
+    lang: list[str] = None,
 ) -> pd.DataFrame:
     """
     analyze_git_repo_loc Analyze and extract LOC statistics from a Git repository.
@@ -302,6 +302,7 @@ def analyze_git_repo_loc(
     print(f"- since:\t{start_date:%Y-%m-%d %H:%M:%S}")
     print(f"- until:\t{end_date:%Y-%m-%d %H:%M:%S}")
     print(f"- interval:\t{interval}")
+    print(f"- language:\t{lang if lang else 'All'}")
 
     # Get a list of Commits filtered by the specified date and interval.
     try:
@@ -555,10 +556,9 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--lang",
-        nargs="+",
-        type=str,
+        type=lambda s: [item.strip() for item in s.split(",")],
         default=None,
-        help="Count only the given space separated, case-insensitive languages L1 L2 L3 etc. \n \
+        help="Count only the given space separated, case-insensitive languages L1,L2,L3, etc. \n \
         Use 'cloc --show-lang' to see the list of recognized languages.",
     )
     args = parser.parse_args()
@@ -590,6 +590,7 @@ if __name__ == "__main__":
         start_date_str=args.start_date,
         end_date_str=args.end_date,
         interval=args.interval,
+        lang=args.lang,
     )
     print_ok(up=10, back=50)
 
