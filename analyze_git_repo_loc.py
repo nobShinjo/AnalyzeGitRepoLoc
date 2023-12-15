@@ -218,7 +218,11 @@ def plot_data(trend_data: pd.DataFrame, sum_data: pd.DataFrame) -> go.Figure:
         gridcolor="lightgrey",
         gridwidth=0.5,
         title_font_size=18,
-        tickfont_size=16,
+        title_standoff=50,
+        tickangle=-45,
+        tickformat="'%y-%m",
+        tickfont_size=10,
+        automargin=True,
     )
     fig.update_yaxes(
         showline=True,
@@ -228,7 +232,13 @@ def plot_data(trend_data: pd.DataFrame, sum_data: pd.DataFrame) -> go.Figure:
         gridcolor="lightgrey",
         gridwidth=0.5,
         title_font_size=18,
-        tickfont_size=16,
+        tickfont_size=12,
+        range=[0, None],
+        autorange="max",
+        rangemode="tozero",
+        automargin=True,
+        spikethickness=1,
+        spikemode="toaxis+across",
     )
     fig.update_layout(
         plot_bgcolor="white",
