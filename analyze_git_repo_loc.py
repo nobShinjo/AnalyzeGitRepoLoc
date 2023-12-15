@@ -602,7 +602,7 @@ if __name__ == "__main__":
         interval=args.interval,
         lang=args.lang,
     )
-    print_ok(up=10, back=50)
+    print_ok(up=11, back=50)
 
     # Forming dataframe type data.
     print_h1("# Forming dataframe type data.")
