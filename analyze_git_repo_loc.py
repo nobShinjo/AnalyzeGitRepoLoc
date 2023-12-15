@@ -21,8 +21,12 @@ from plotly.subplots import make_subplots
 from tqdm import tqdm
 
 # Global variables
-cloc_path: Path = None
+cloc_path: Path = None()
 """ The file system path to 'cloc.exe' """
+cache_path: Path = None()
+""" The file path to '.cache/' """
+current_path: Path = None()
+""" The file path to current directory. """
 
 
 def get_commits(
@@ -339,16 +343,25 @@ def analyze_git_repo_loc(
         ],
     )
 
-    # Memorize current directory
-    current_path: Path = Path().resolve()
     # Change the directory to the repository path.
     os.chdir(repo_path)
 
     # Analyse LOC for each commit.
     print_h1("# Analyse LOC for each commit.")
     for commit in tqdm(commits, desc="Commits"):
-        result = run_cloc(commit=commit, lang=lang)
-        df = convert_json_to_dataframe(result)
+        # Check for cache files
+        cloc_result_file: Path = cache_path / f"{commit.hexsha}.json"
+        cloc_result: str = None
+        if cloc_result_file.exists():
+            with open(cloc_result_file, encoding="utf-8") as f:
+                cloc_result = f.read()
+        else:
+            # Run "cloc.exe"
+            cloc_result = run_cloc(commit=commit, lang=lang)
+            with open(cloc_result_file, mode="w", encoding="utf-8") as f:
+                json.dump(cloc_result, f, indent=2, ensure_ascii=False)
+
+        df = convert_json_to_dataframe(cloc_result)
 
         # Insert Commit and Date columns at the head of columns in the dataframe.
         df.insert(0, "Commit", commit.hexsha)
@@ -361,6 +374,7 @@ def analyze_git_repo_loc(
     cloc_df.reset_index(inplace=True, drop=True)
 
     # Return to original directory.
+    global current_path
     os.chdir(current_path)
 
     return cloc_df
@@ -478,12 +492,15 @@ def verify_cloc_executable(executable_path: Path) -> None:
         sys.exit(1)
 
 
-def make_output_dir(output_dir: Path):
+def make_output_dir(output_dir: Path) -> Path:
     """
     make_output_dir Make output directory
 
     Args:
         output_dir (Path): Output directory path
+
+    Returns:
+        Path: Output directory path
     """
     output_dir.resolve()
     if not output_dir.exists():
@@ -491,6 +508,7 @@ def make_output_dir(output_dir: Path):
         output_dir.mkdir(parents=True)
     else:
         print(f"Output dir exists. ({output_dir.resolve()})")
+    return output_dir
 
 
 def save_dataframe(data: pd.DataFrame, csv_file: Path) -> None:
@@ -500,6 +518,9 @@ def save_dataframe(data: pd.DataFrame, csv_file: Path) -> None:
     Args:
         data (pd.DataFrame): Data of dataframe type to be saved.
         csv_file (Path): Full path to save csv file
+
+    Returns:
+        None
     """
     print(f"- Save: {csv_file}")
     data.to_csv(csv_file)
@@ -576,15 +597,18 @@ if __name__ == "__main__":
     # Colorama initialize.
     colorama.init(autoreset=True)
 
+    # Get to Current directory
+    current_path.cwd()
+
     # Output program name and description.
     print_h1(f"# Start {parser.prog}.")
     print(Style.DIM + f"- {parser.description}", end=os.linesep + os.linesep)
 
     # Make output directory.
     print_h1("# Make output directory.")
-    output_path: Path = args.output
-    make_output_dir(output_path)
-    print_ok(up=2, back=50)
+    output_path: Path = make_output_dir(args.output / Path(args.repo_path).name)
+    cache_path = make_output_dir(args.output / ".cache" / Path(args.repo_path).name)
+    print_ok(up=3, back=50)
 
     # Find 'cloc.exe' path.
     print_h1("# Find 'cloc.exe' path.")
