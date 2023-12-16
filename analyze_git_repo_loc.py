@@ -598,7 +598,7 @@ if __name__ == "__main__":
     colorama.init(autoreset=True)
 
     # Get to Current directory
-    current_path.cwd()
+    current_path = Path.cwd()
 
     # Output program name and description.
     print_h1(f"# Start {parser.prog}.")
