@@ -159,7 +159,12 @@ def run_cloc(commit: Commit, lang: list[str] = None) -> str:
     except subprocess.CalledProcessError as e:
         print(f"Error: {str(e)}", file=sys.stderr)
         sys.exit(1)
-
+    except FileNotFoundError as e:
+        print(
+            f"Error: Not found cloc.exe. {str(e)}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
     return result.stdout
 
 
@@ -484,6 +489,9 @@ def verify_cloc_executable(executable_path: Path) -> None:
             text=True,
         )
         print(f"- cloc.exe: Ver. {version_result.stdout}")
+    except subprocess.CalledProcessError as e:
+        print(f"Error: {str(e)}", file=sys.stderr)
+        sys.exit(1)
     except FileNotFoundError as e:
         print(
             f"Error: Not found cloc.exe. {str(e)}",
