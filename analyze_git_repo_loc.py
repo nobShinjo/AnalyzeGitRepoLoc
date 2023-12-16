@@ -21,11 +21,11 @@ from plotly.subplots import make_subplots
 from tqdm import tqdm
 
 # Global variables
-cloc_path: Path = None()
+cloc_path: Path = None
 """ The file system path to 'cloc.exe' """
-cache_path: Path = None()
+cache_path: Path = None
 """ The file path to '.cache/' """
-current_path: Path = None()
+current_path: Path = None
 """ The file path to current directory. """
 
 
