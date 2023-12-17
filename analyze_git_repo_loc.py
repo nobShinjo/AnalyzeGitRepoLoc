@@ -670,9 +670,9 @@ class ChartBuilder:
         traces to it.
         """
         # Line plots of total LOC trend
-        fig_sum = px.line(data_frame=self._sum_data, markers=True)
+        fig_sum = px.line(data_frame=self._sum_data,x="Date", y="SUM", markers=True)
         for trace in fig_sum["data"]:
-            trace["showlegend"] = False
+            trace["showlegend"] = True
             self._fig.add_trace(trace, row=1, col=1, secondary_y=False)
 
         return self
@@ -690,7 +690,7 @@ class ChartBuilder:
         """
         fig_diff = px.line(data_frame=self._sum_data, x="Date", y="Diff", markers=True)
         for trace in fig_diff["data"]:
-            trace["showlegend"] = False
+            trace["showlegend"] = True
             self._fig.add_trace(trace, row=1, col=1, secondary_y=True)
         return self
 
@@ -795,6 +795,7 @@ class ChartBuilder:
         self.create_fig()
         self.create_trend_trace()
         self.create_sum_trace()
+        self.create_diff_trace()
         self.update_fig()
         return self._fig
 
