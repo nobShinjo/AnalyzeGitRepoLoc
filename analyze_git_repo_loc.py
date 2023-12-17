@@ -9,7 +9,7 @@ import os
 import subprocess
 import sys
 from datetime import datetime, timedelta
-from pathlib import Path, PurePath
+from pathlib import Path
 from typing import TypeVar
 
 import colorama
@@ -591,6 +591,7 @@ class ChartBuilder:
             cols=1,
             x_title="Date",
             y_title="LOC",
+            specs=[[{"secondary_y": True}]],
         )
         return self
 
@@ -670,14 +671,27 @@ class ChartBuilder:
         """
         # Line plots of total LOC trend
         fig_sum = px.line(data_frame=self._sum_data, markers=True)
-        fig_sum_traces = []
-        for trace in range(len(fig_sum["data"])):
-            fig_sum["data"][trace]["showlegend"] = False
-            fig_sum_traces.append(fig_sum["data"][trace])
+        for trace in fig_sum["data"]:
+            trace["showlegend"] = False
+            self._fig.add_trace(trace, row=1, col=1, secondary_y=False)
 
-        for traces in fig_sum_traces:
-            self._fig.append_trace(traces, row=1, col=1)
+        return self
 
+    def create_diff_trace(self) -> ChartBuilderSelf:
+        """
+        Adds a differential trace to an existing plotly figure within the ChartBuilder instance.
+
+        This method creates a line chart using the internal summed data focusing on the 'Diff' column.
+        It then adds this newly created trace to the main figure without including it in the legend.
+        The trace is placed on a secondary y-axis in the first row and column of the subplot grid.
+
+        Returns:
+            self (ChartBuilder): Returns the instance itself for method chaining purposes.
+        """
+        fig_diff = px.line(data_frame=self._sum_data, x="Date", y="Diff", markers=True)
+        for trace in fig_diff["data"]:
+            trace["showlegend"] = False
+            self._fig.add_trace(trace, row=1, col=1, secondary_y=True)
         return self
 
     def update_fig(self) -> ChartBuilderSelf:
@@ -710,6 +724,7 @@ class ChartBuilder:
             automargin=True,
         )
         self._fig.update_yaxes(
+            secondary_y=False,
             showline=True,
             linewidth=1,
             linecolor="grey",
@@ -724,6 +739,26 @@ class ChartBuilder:
             automargin=True,
             spikethickness=1,
             spikemode="toaxis+across",
+        )
+        self._fig.update_yaxes(
+            secondary_y=True,
+            showline=True,
+            linewidth=1,
+            linecolor="grey",
+            color="black",
+            gridcolor="lightgrey",
+            gridwidth=0.5,
+            title_text="Difference of LOC",
+            title_font_size=18,
+            tickfont_size=12,
+            range=[0, None],
+            autorange="max",
+            rangemode="tozero",
+            automargin=True,
+            spikethickness=1,
+            spikemode="toaxis+across",
+            # overlaying="y",
+            side="right",
         )
         self._fig.update_layout(
             plot_bgcolor="white",
@@ -939,6 +974,8 @@ if __name__ == "__main__":
     trend_of_total_loc: pd.DataFrame = loc_trend_by_language.copy(deep=True)
     trend_of_total_loc["SUM"] = trend_of_total_loc.sum(axis=1)
     trend_of_total_loc = trend_of_total_loc[["SUM"]]
+    trend_of_total_loc["Diff"] = trend_of_total_loc["SUM"].diff()
+    delta_data = trend_of_total_loc.reset_index()
     console.print_ok(up=1, forward=50)
 
     # Save to csv files.
