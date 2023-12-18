@@ -589,8 +589,6 @@ class ChartBuilder:
         self._fig: go.Figure = make_subplots(
             rows=1,
             cols=1,
-            x_title="Date",
-            y_title="LOC",
             specs=[[{"secondary_y": True}]],
         )
         return self
@@ -670,9 +668,12 @@ class ChartBuilder:
         traces to it.
         """
         # Line plots of total LOC trend
-        fig_sum = px.line(data_frame=self._sum_data, markers=True)
+        fig_sum = px.line(data_frame=self._sum_data, y="SUM", markers=True)
         for trace in fig_sum["data"]:
             trace["showlegend"] = False
+            trace["name"] = "SUM"
+            trace["marker"] = {"size": 8, "color": "#636EFA"}
+            trace["line"] = {"width": 2, "color": "#636EFA"}
             self._fig.add_trace(trace, row=1, col=1, secondary_y=False)
 
         return self
@@ -688,9 +689,12 @@ class ChartBuilder:
         Returns:
             self (ChartBuilder): Returns the instance itself for method chaining purposes.
         """
-        fig_diff = px.line(data_frame=self._sum_data, x="Date", y="Diff", markers=True)
+        fig_diff = px.line(data_frame=self._sum_data, y="Diff", markers=True)
         for trace in fig_diff["data"]:
             trace["showlegend"] = False
+            trace["name"] = "Diff"
+            trace["marker"] = {"size": 8, "color": "#EF553B"}
+            trace["line"] = {"width": 2, "color": "#EF553B"}
             self._fig.add_trace(trace, row=1, col=1, secondary_y=True)
         return self
 
@@ -716,11 +720,11 @@ class ChartBuilder:
             color="black",
             gridcolor="lightgrey",
             gridwidth=0.5,
+            title_text="Date",
             title_font_size=18,
-            title_standoff=50,
+            tickfont_size=14,
             tickangle=-45,
-            tickformat="'%y-%m",
-            tickfont_size=10,
+            tickformat="%b-%Y",
             automargin=True,
         )
         self._fig.update_yaxes(
@@ -731,8 +735,9 @@ class ChartBuilder:
             color="black",
             gridcolor="lightgrey",
             gridwidth=0.5,
+            title_text="LOC",
             title_font_size=18,
-            tickfont_size=12,
+            tickfont_size=14,
             range=[0, None],
             autorange="max",
             rangemode="tozero",
@@ -750,19 +755,25 @@ class ChartBuilder:
             gridwidth=0.5,
             title_text="Difference of LOC",
             title_font_size=18,
-            tickfont_size=12,
+            tickfont_size=14,
             range=[0, None],
             autorange="max",
             rangemode="tozero",
             automargin=True,
             spikethickness=1,
             spikemode="toaxis+across",
-            # overlaying="y",
+            overlaying="y",
             side="right",
         )
         self._fig.update_layout(
+            font_family="Open Sans",
             plot_bgcolor="white",
-            title={"text": "LOC trend by Language", "x": 0.5, "xanchor": "center"},
+            title={
+                "text": "LOC trend by Language",
+                "x": 0.5,
+                "xanchor": "center",
+                "font_size": 20,
+            },
             xaxis={"dtick": "M1"},
             legend_title_font_size=14,
             legend_font_size=14,
@@ -795,6 +806,7 @@ class ChartBuilder:
         self.create_fig()
         self.create_trend_trace()
         self.create_sum_trace()
+        self.create_diff_trace()
         self.update_fig()
         return self._fig
 
@@ -990,6 +1002,7 @@ if __name__ == "__main__":
     analyzer.create_charts(
         trend_data=loc_trend_by_language, sum_data=trend_of_total_loc
     )
+    analyzer.save_charts()
     console.print_ok(up=1, forward=50)
 
     console.print_h1("# LOC Analyze")
