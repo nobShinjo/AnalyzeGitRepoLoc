@@ -807,6 +807,7 @@ class ChartBuilder:
         self.create_trend_trace()
         self.create_sum_trace()
         self.create_diff_trace()
+        self.create_diff_trace()
         self.update_fig()
         return self._fig
 
