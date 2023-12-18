@@ -111,6 +111,22 @@ class GitRepoLOCAnalyzer:
             print(f"Directory exists. ({output_dir.resolve()})")
         return output_dir
 
+    def clear_cache_files(self):
+        """
+        Delete all files located in the directory specified by the `_cache_path` attribute.
+
+        This method checks if `_cache_path` exists and is a directory. If so,
+        it proceeds to iterate through all files within this directory (including
+        subdirectories) and deletes each file.
+
+        Raises:
+            AttributeError: If `_cache_path` does not exist or is not a directory.
+        """
+        if self._cache_path.exists() and self._cache_path.is_dir():
+            for file in tqdm(self._cache_path.glob("**/*")):
+                if file.is_file():
+                    file.unlink()
+
     def find_cloc_path(self) -> Path:
         """
         Searches for the 'cloc.exe' executable in the system PATH and current working directory.
@@ -939,6 +955,12 @@ if __name__ == "__main__":
         help="Count only the given space separated, case-insensitive languages L1,L2,L3, etc. \n \
         Use 'cloc --show-lang' to see the list of recognized languages.",
     )
+    parser.add_argument(
+        "--clear_cache",
+        action="store_true",
+        help="If set, the cache will be cleared before executing the main function.",
+    )
+
     args = parser.parse_args()
 
     # Get to Current directory
@@ -950,8 +972,8 @@ if __name__ == "__main__":
     console.print_h1(f"# Start {parser.prog}.")
     print(Style.DIM + f"- {parser.description}", end=os.linesep + os.linesep)
 
+    # Create GitRepoLOCAnalyzer
     try:
-        # Create GitRepoLOCAnalyzer
         console.print_h1("# Initialize LOC analyzer.")
         analyzer = GitRepoLOCAnalyzer(
             repo_path=args.repo_path,
@@ -959,6 +981,15 @@ if __name__ == "__main__":
             output_dir=args.output,
         )
         console.print_ok(up=6, forward=50)
+    except FileNotFoundError as ex:
+        print(f"Error: {str(ex)}", file=sys.stderr)
+        sys.exit(1)
+    # Remove cache files
+    try:
+        if args.clear_cache:
+            console.print_h1("# Remove cache files.")
+            analyzer.clear_cache_files()
+            console.print_ok(up=2, forward=50)
     except FileNotFoundError as ex:
         print(f"Error: {str(ex)}", file=sys.stderr)
         sys.exit(1)
