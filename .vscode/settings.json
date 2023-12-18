@@ -1,0 +1,34 @@
+{
+    "editor.codeActionsOnSave": {
+        "source.fixAll": "explicit",
+        "source.organizeImports": "explicit"
+    },
+    "cSpell.words": [
+        "astype",
+        "automargin",
+        "cloc",
+        "dataframe",
+        "dtick",
+        "gridcolor",
+        "gridwidth",
+        "hexsha",
+        "linecolor",
+        "linewidth",
+        "nfiles",
+        "rangemode",
+        "showlegend",
+        "showline",
+        "spikemode",
+        "spikethickness",
+        "tickangle",
+        "tickfont",
+        "tickformat",
+        "toaxis",
+        "tozero",
+        "tqdm",
+        "xanchor",
+        "xaxes",
+        "xaxis",
+        "yaxes"
+    ]
+}
