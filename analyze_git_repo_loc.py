@@ -1,6 +1,7 @@
 """
 Analyze Git repositories and visualize code LOC.
 
+Author:    Nob Shinjo
 """
 
 import argparse
