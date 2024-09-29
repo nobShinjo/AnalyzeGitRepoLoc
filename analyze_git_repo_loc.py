@@ -523,16 +523,92 @@ class GitRepoLOCAnalyzer:
         author_trend_chart = self._chart_builder.build(
             trend_data=author_trend_data, sum_data=sum_data, color_data="Author"
         )
+
         # Combine two charts
         self._chart = make_subplots(
             rows=2,
             cols=1,
-            subplot_titles=("LOC trend by Language", "LOC trend by Author"),
+            shared_xaxes=True,
+            subplot_titles=("Language Trend", "Author Trend"),
+            vertical_spacing=0.1,
+            specs=[[{"secondary_y": True}], [{"secondary_y": True}]],
         )
-        self._chart.add_trace(language_trend_chart["data"][0], row=1, col=1)
-        self._chart.add_trace(language_trend_chart["data"][1], row=1, col=1)
-        self._chart.add_trace(author_trend_chart["data"][0], row=2, col=1)
-        self._chart.add_trace(author_trend_chart["data"][1], row=2, col=1)
+
+        # Add traces from language_trend_chart
+        for trace in language_trend_chart["data"]:
+            self._chart.add_trace(trace, row=1, col=1)
+
+        # Add traces from author_trend_chart
+        for trace in author_trend_chart["data"]:
+            self._chart.add_trace(trace, row=2, col=1)
+
+        # Update layout
+        self._chart.update_xaxes(
+            showline=True,
+            linewidth=1,
+            linecolor="grey",
+            color="black",
+            gridcolor="lightgrey",
+            gridwidth=0.5,
+            title_text="Date",
+            title_font_size=18,
+            tickfont_size=14,
+            tickangle=-45,
+            tickformat="%b-%Y",
+            automargin=True,
+        )
+        self._chart.update_yaxes(
+            secondary_y=False,
+            showline=True,
+            linewidth=1,
+            linecolor="grey",
+            color="black",
+            gridcolor="lightgrey",
+            gridwidth=0.5,
+            title_text="LOC",
+            title_font_size=18,
+            tickfont_size=14,
+            range=[0, None],
+            autorange="max",
+            rangemode="tozero",
+            automargin=True,
+            spikethickness=1,
+            spikemode="toaxis+across",
+        )
+        self._chart.update_yaxes(
+            secondary_y=True,
+            showline=True,
+            linewidth=1,
+            linecolor="grey",
+            color="black",
+            gridcolor="lightgrey",
+            gridwidth=0.5,
+            title_text="Difference of LOC",
+            title_font_size=18,
+            tickfont_size=14,
+            range=[0, None],
+            autorange="max",
+            rangemode="tozero",
+            automargin=True,
+            spikethickness=1,
+            spikemode="toaxis+across",
+            overlaying="y",
+            side="right",
+        )
+        self._chart.update_layout(
+            font_family="Open Sans",
+            plot_bgcolor="white",
+            title={
+                "text": "LOC trend by Language and Author",
+                "x": 0.5,
+                "xanchor": "center",
+                "font_size": 20,
+            },
+            xaxis={"dtick": "M1"},
+            legend_title_font_size=14,
+            legend_font_size=14,
+        )
+
         self._chart.show()
 
     def save_charts(self) -> None:
@@ -774,6 +850,7 @@ class ChartBuilder:
             gridwidth=0.5,
             title_text="Date",
             title_font_size=18,
+            side="bottom",
             tickfont_size=14,
             tickangle=-45,
             tickformat="%b-%Y",
@@ -858,7 +935,6 @@ class ChartBuilder:
         self.create_fig()
         self.create_trend_trace(color_data)
         self.create_sum_trace()
-        self.create_diff_trace()
         self.create_diff_trace()
         self.update_fig()
         return self._fig
