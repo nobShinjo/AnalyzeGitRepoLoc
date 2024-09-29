@@ -149,7 +149,7 @@ class GitRepoLOCAnalyzer:
             WindowsPath('C:/path/to/cloc.exe')
             # this output can vary depending on the actual found path
         """
-        cloc_exe_filename: str = "cloc.exe"
+        cloc_exe_filename: str = "cloc.exe" if os.name == "nt" else "cloc"
 
         # Find full path of 'cloc.exe' from 'PATH' environment variable.
         for path in os.environ["PATH"].split(os.pathsep):
@@ -400,6 +400,7 @@ class GitRepoLOCAnalyzer:
                 start_date=start_date,
                 end_date=end_date,
                 interval=interval,
+                author=author,
             )
         except ValueError as e:
             print(f"Error: {str(e)}", file=sys.stderr)
@@ -523,16 +524,92 @@ class GitRepoLOCAnalyzer:
         author_trend_chart = self._chart_builder.build(
             trend_data=author_trend_data, sum_data=sum_data, color_data="Author"
         )
+
         # Combine two charts
         self._chart = make_subplots(
             rows=2,
             cols=1,
-            subplot_titles=("LOC trend by Language", "LOC trend by Author"),
+            shared_xaxes=True,
+            subplot_titles=("Language Trend", "Author Trend"),
+            vertical_spacing=0.1,
+            specs=[[{"secondary_y": True}], [{"secondary_y": True}]],
         )
-        self._chart.add_trace(language_trend_chart["data"][0], row=1, col=1)
-        self._chart.add_trace(language_trend_chart["data"][1], row=1, col=1)
-        self._chart.add_trace(author_trend_chart["data"][0], row=2, col=1)
-        self._chart.add_trace(author_trend_chart["data"][1], row=2, col=1)
+
+        # Add traces from language_trend_chart
+        for trace in language_trend_chart["data"]:
+            self._chart.add_trace(trace, row=1, col=1)
+
+        # Add traces from author_trend_chart
+        for trace in author_trend_chart["data"]:
+            self._chart.add_trace(trace, row=2, col=1)
+
+        # Update layout
+        self._chart.update_xaxes(
+            showline=True,
+            linewidth=1,
+            linecolor="grey",
+            color="black",
+            gridcolor="lightgrey",
+            gridwidth=0.5,
+            title_text="Date",
+            title_font_size=18,
+            tickfont_size=14,
+            tickangle=-45,
+            tickformat="%b-%Y",
+            automargin=True,
+        )
+        self._chart.update_yaxes(
+            secondary_y=False,
+            showline=True,
+            linewidth=1,
+            linecolor="grey",
+            color="black",
+            gridcolor="lightgrey",
+            gridwidth=0.5,
+            title_text="LOC",
+            title_font_size=18,
+            tickfont_size=14,
+            range=[0, None],
+            autorange="max",
+            rangemode="tozero",
+            automargin=True,
+            spikethickness=1,
+            spikemode="toaxis+across",
+        )
+        self._chart.update_yaxes(
+            secondary_y=True,
+            showline=True,
+            linewidth=1,
+            linecolor="grey",
+            color="black",
+            gridcolor="lightgrey",
+            gridwidth=0.5,
+            title_text="Difference of LOC",
+            title_font_size=18,
+            tickfont_size=14,
+            range=[0, None],
+            autorange="max",
+            rangemode="tozero",
+            automargin=True,
+            spikethickness=1,
+            spikemode="toaxis+across",
+            overlaying="y",
+            side="right",
+        )
+        self._chart.update_layout(
+            font_family="Open Sans",
+            plot_bgcolor="white",
+            title={
+                "text": "LOC trend by Language and Author",
+                "x": 0.5,
+                "xanchor": "center",
+                "font_size": 20,
+            },
+            xaxis={"dtick": "M1"},
+            legend_title_font_size=14,
+            legend_font_size=14,
+        )
+
         self._chart.show()
 
     def save_charts(self) -> None:
@@ -774,6 +851,7 @@ class ChartBuilder:
             gridwidth=0.5,
             title_text="Date",
             title_font_size=18,
+            side="bottom",
             tickfont_size=14,
             tickangle=-45,
             tickformat="%b-%Y",
@@ -834,7 +912,7 @@ class ChartBuilder:
 
     def build(
         self, trend_data: pd.DataFrame, sum_data: pd.DataFrame, color_data: str
-    ) -> ChartBuilderSelf:
+    ) -> go.Figure:
         """
         Constructs the chart by setting data and creating figure and traces.
 
@@ -858,7 +936,6 @@ class ChartBuilder:
         self.create_fig()
         self.create_trend_trace(color_data)
         self.create_sum_trace()
-        self.create_diff_trace()
         self.create_diff_trace()
         self.update_fig()
         return self._fig
@@ -1053,21 +1130,31 @@ if __name__ == "__main__":
 
     # Pivot table by language
     loc_trend_by_language: pd.DataFrame = loc_data.pivot_table(
-        index="Date", columns="Language", values="code", fill_value=0
+        index="Date", columns="Language", values="code", aggfunc="sum", fill_value=0
     )
     loc_trend_by_language = loc_trend_by_language.astype(int)
-    loc_trend_by_language = loc_trend_by_language.sort_values(
-        by=loc_trend_by_language.index[-1], axis=1, ascending=False
-    )
+    if not loc_trend_by_language.empty:
+        loc_trend_by_language = loc_trend_by_language.sort_values(
+            by=loc_trend_by_language.index[-1], axis=1, ascending=False
+        )
+    else:
+        raise ValueError(
+            f"{loc_trend_by_language} is empty. Please check the filtering conditions."
+        )
 
     # Pivot table by author
     loc_trend_by_author: pd.DataFrame = loc_data.pivot_table(
-        index="Date", columns="Author", values="code", fill_value=0
+        index="Date", columns="Author", values="code", aggfunc="sum", fill_value=0
     )
     loc_trend_by_author = loc_trend_by_author.astype(int)
-    loc_trend_by_author = loc_trend_by_author.sort_values(
-        by=loc_trend_by_author.index[-1], axis=1, ascending=False
-    )
+    if not loc_trend_by_author.empty:
+        loc_trend_by_author = loc_trend_by_author.sort_values(
+            by=loc_trend_by_author.index[-1], axis=1, ascending=False
+        )
+    else:
+        raise ValueError(
+            f"{loc_trend_by_author} is empty. Please check the filtering conditions."
+        )
 
     # Total LOC trend
     trend_of_total_loc: pd.DataFrame = loc_trend_by_language.copy(deep=True)
