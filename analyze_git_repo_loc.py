@@ -400,6 +400,7 @@ class GitRepoLOCAnalyzer:
                 start_date=start_date,
                 end_date=end_date,
                 interval=interval,
+                author=author,
             )
         except ValueError as e:
             print(f"Error: {str(e)}", file=sys.stderr)
