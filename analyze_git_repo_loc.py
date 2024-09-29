@@ -149,7 +149,7 @@ class GitRepoLOCAnalyzer:
             WindowsPath('C:/path/to/cloc.exe')
             # this output can vary depending on the actual found path
         """
-        cloc_exe_filename: str = "cloc.exe" if os.name == "nt" else "cloc"
+        cloc_exe_filename: str = "cloc.exe"
 
         # Find full path of 'cloc.exe' from 'PATH' environment variable.
         for path in os.environ["PATH"].split(os.pathsep):
@@ -209,7 +209,6 @@ class GitRepoLOCAnalyzer:
         start_date: datetime,
         end_date: datetime,
         interval="daily",
-        author: str = None,
     ) -> list[Commit]:
         """
         get_commits Get a list of Commit object.
@@ -223,7 +222,6 @@ class GitRepoLOCAnalyzer:
             end_date (datetime): The end date for filtering commits.
             interval (str, optional): The interval to use for filtering commits.
                                       Defaults to 'daily'. ("hourly", "daily", "weekly", etc.).
-            author (str, optional): The author name to filter commits. Defaults to 'None'.
 
         Raises:
             ValueError: If the provided `interval` is not one of 'daily', 'weekly', or 'monthly'.
@@ -257,10 +255,8 @@ class GitRepoLOCAnalyzer:
             commit_date = datetime.fromtimestamp(commit.committed_date)
             if commit_date <= last_added_commit_date - delta:
                 # commits.append((commit.hexsha, commit_date.strftime("%Y-%m-%d %H:%M:%S")))
-                author_name = commit.author.name
-                if author is None or author_name == author:
-                    commits.append((commit, author_name))
-                    last_added_commit_date = commit_date
+                commits.append(commit)
+                last_added_commit_date = commit_date
 
         print(f"-> {len(commits)} commits found.", end=os.linesep + os.linesep)
         return commits
@@ -338,7 +334,6 @@ class GitRepoLOCAnalyzer:
         end_date_str: str,
         interval: str = "daily",
         lang: list[str] = None,
-        author: str = None,
     ) -> pd.DataFrame:
         """
         analyze_git_repo_loc Analyze and extract LOC statistics from a Git repository.
@@ -355,7 +350,6 @@ class GitRepoLOCAnalyzer:
             interval (str, optional): The interval to use for filtering commits.
                                       Defaults to 'daily'. ("hourly", "daily", "weekly", etc.).
             lang (list[str], optional): List of languages to search. Defaults to 'None'
-            author (str, optional): The author name to filter commits. Defaults to 'None'.
 
         Returns:
             pd.DataFrame: A DataFrame containing the analysis results with columns for Commit hash,
@@ -390,7 +384,6 @@ class GitRepoLOCAnalyzer:
         analysis_config.append(f"- until:\t{end_date:%Y-%m-%d %H:%M:%S}")
         analysis_config.append(f"- interval:\t{interval}")
         analysis_config.append(f"- language:\t{lang if lang else 'All'}")
-        analysis_config.append(f"- author:\t{author if author else 'All'}")
         print(f"{os.linesep}".join(analysis_config))
 
         # Get a list of Commits filtered by the specified date and interval.
@@ -400,7 +393,6 @@ class GitRepoLOCAnalyzer:
                 start_date=start_date,
                 end_date=end_date,
                 interval=interval,
-                author=author,
             )
         except ValueError as e:
             print(f"Error: {str(e)}", file=sys.stderr)
@@ -424,7 +416,7 @@ class GitRepoLOCAnalyzer:
 
         # Analyse LOC for each commit.
         print("Analyse LOC for each commit.")
-        for commit, author_name in tqdm(commits, desc="Commits"):
+        for commit in tqdm(commits, desc="Commits"):
             # Check for cache files
             cloc_result_file: Path = self._cache_path / f"{commit.hexsha}.json"
             cloc_result: str = None
@@ -444,7 +436,7 @@ class GitRepoLOCAnalyzer:
             df.insert(0, "Commit", commit.hexsha)
             committed_date = datetime.fromtimestamp(commit.committed_date)
             df.insert(1, "Date", committed_date.strftime("%Y-%m-%d %H:%M:%S"))
-            df.insert(2, "Author", author_name)
+
             # Concatenate data frames
             cloc_df = pd.concat([cloc_df, df])
 
@@ -496,121 +488,23 @@ class GitRepoLOCAnalyzer:
         Returns:
             None
         """
-        csv_path = self._output_path / csv_file
-        print(f"- Save: {csv_path}")
-        data.to_csv(csv_path)
+        print(f"- Save: {csv_file}")
+        data.to_csv(self._output_path / csv_file)
 
-    def create_charts(
-        self,
-        language_trend_data: pd.DataFrame,
-        author_trend_data: pd.DataFrame,
-        sum_data: pd.DataFrame,
-    ):
+    def create_charts(self, trend_data: pd.DataFrame, sum_data: pd.DataFrame):
         """
         Creates charts using the provided trend and summation data.
 
         This method takes a trend dataframe and a summation dataframe,
-        builds a chart using the internal _chart_builder.
+        builds a chart using the internal _chart_builder, and then displays it.
         Args:
-            language_trend_data (pd.DataFrame):
-                A pandas DataFrame containing the trend data of LOC by language.
-            author_trend_data (pd.DataFrame):
-                A pandas DataFrame containing the trend data of LOC by author.
+            trend_data (pd.DataFrame): A pandas DataFrame that contains the trend data.
             sum_data (pd.DataFrame): A pandas DataFrame that contains the summary data.
         """
-        language_trend_chart = self._chart_builder.build(
-            trend_data=language_trend_data, sum_data=sum_data, color_data="Language"
+        self._chart = self._chart_builder.build(
+            trend_data=trend_data, sum_data=sum_data
         )
-        author_trend_chart = self._chart_builder.build(
-            trend_data=author_trend_data, sum_data=sum_data, color_data="Author"
-        )
-
-        # Combine two charts
-        self._chart = make_subplots(
-            rows=2,
-            cols=1,
-            shared_xaxes=True,
-            subplot_titles=("Language Trend", "Author Trend"),
-            vertical_spacing=0.1,
-            specs=[[{"secondary_y": True}], [{"secondary_y": True}]],
-        )
-
-        # Add traces from language_trend_chart
-        for trace in language_trend_chart["data"]:
-            self._chart.add_trace(trace, row=1, col=1)
-
-        # Add traces from author_trend_chart
-        for trace in author_trend_chart["data"]:
-            self._chart.add_trace(trace, row=2, col=1)
-
-        # Update layout
-        self._chart.update_xaxes(
-            showline=True,
-            linewidth=1,
-            linecolor="grey",
-            color="black",
-            gridcolor="lightgrey",
-            gridwidth=0.5,
-            title_text="Date",
-            title_font_size=18,
-            tickfont_size=14,
-            tickangle=-45,
-            tickformat="%b-%Y",
-            automargin=True,
-        )
-        self._chart.update_yaxes(
-            secondary_y=False,
-            showline=True,
-            linewidth=1,
-            linecolor="grey",
-            color="black",
-            gridcolor="lightgrey",
-            gridwidth=0.5,
-            title_text="LOC",
-            title_font_size=18,
-            tickfont_size=14,
-            range=[0, None],
-            autorange="max",
-            rangemode="tozero",
-            automargin=True,
-            spikethickness=1,
-            spikemode="toaxis+across",
-        )
-        self._chart.update_yaxes(
-            secondary_y=True,
-            showline=True,
-            linewidth=1,
-            linecolor="grey",
-            color="black",
-            gridcolor="lightgrey",
-            gridwidth=0.5,
-            title_text="Difference of LOC",
-            title_font_size=18,
-            tickfont_size=14,
-            range=[0, None],
-            autorange="max",
-            rangemode="tozero",
-            automargin=True,
-            spikethickness=1,
-            spikemode="toaxis+across",
-            overlaying="y",
-            side="right",
-        )
-        self._chart.update_layout(
-            font_family="Open Sans",
-            plot_bgcolor="white",
-            title={
-                "text": "LOC trend by Language and Author",
-                "x": 0.5,
-                "xanchor": "center",
-                "font_size": 20,
-            },
-            xaxis={"dtick": "M1"},
-            legend_title_font_size=14,
-            legend_font_size=14,
-        )
-
-        self._chart.show()
+        self._chart_builder.show()
 
     def save_charts(self) -> None:
         """
@@ -619,8 +513,7 @@ class GitRepoLOCAnalyzer:
         The file is saved to the path specified by _output_path with the filename 'report.html'.
         It's expected that the _chart attribute is already populated with a chart object.
         """
-        if self._chart is not None:
-            self._chart.write_html(self._output_path / "report.html")
+        self._chart.write_html(self._output_path / "report.html")
 
 
 class ChartBuilder:
@@ -717,7 +610,7 @@ class ChartBuilder:
         )
         return self
 
-    def create_trend_trace(self, color_data: str) -> ChartBuilderSelf:
+    def create_trend_trace(self) -> ChartBuilderSelf:
         """
         Generates a trend trace from the trend data and appends it to the chart figure.
 
@@ -728,10 +621,6 @@ class ChartBuilder:
 
         The plot is presumably created using Plotly Express, which is indicated by the `px`
         prefix on the `area()` function.
-
-        Args:
-            color_data (str): The name of the column in the trend data frame that contains
-                              the color data for the area plot.
 
         Returns:
             ChartBuilderSelf: The instance of the chart builder with the new trend trace
@@ -753,9 +642,9 @@ class ChartBuilder:
         the necessary data for plotting, while `_fig` should be a Plotly figure object that can
         have traces appended to it.
         """
-        # Field area plot of LOC trend
+        # Field area plot of LOC trend by language
         fig_lang = px.area(
-            data_frame=self._trend_data, color=color_data, line_shape=None
+            data_frame=self._trend_data, color="Language", line_shape=None
         )
         fig_lang_traces = []
         for trace in range(len(fig_lang["data"])):
@@ -810,8 +699,7 @@ class ChartBuilder:
         """
         Adds a differential trace to an existing plotly figure within the ChartBuilder instance.
 
-        This method creates a line chart using the internal summed data
-        focusing on the 'Diff' column.
+        This method creates a line chart using the internal summed data focusing on the 'Diff' column.
         It then adds this newly created trace to the main figure without including it in the legend.
         The trace is placed on a secondary y-axis in the first row and column of the subplot grid.
 
@@ -851,7 +739,6 @@ class ChartBuilder:
             gridwidth=0.5,
             title_text="Date",
             title_font_size=18,
-            side="bottom",
             tickfont_size=14,
             tickangle=-45,
             tickformat="%b-%Y",
@@ -911,8 +798,8 @@ class ChartBuilder:
         return self
 
     def build(
-        self, trend_data: pd.DataFrame, sum_data: pd.DataFrame, color_data: str
-    ) -> go.Figure:
+        self, trend_data: pd.DataFrame, sum_data: pd.DataFrame
+    ) -> ChartBuilderSelf:
         """
         Constructs the chart by setting data and creating figure and traces.
 
@@ -934,8 +821,9 @@ class ChartBuilder:
         self.set_trend_data(trend_data)
         self.set_sum_data(sum_data)
         self.create_fig()
-        self.create_trend_trace(color_data)
+        self.create_trend_trace()
         self.create_sum_trace()
+        self.create_diff_trace()
         self.create_diff_trace()
         self.update_fig()
         return self._fig
@@ -1069,12 +957,6 @@ if __name__ == "__main__":
         Use 'cloc --show-lang' to see the list of recognized languages.",
     )
     parser.add_argument(
-        "--author-name",
-        type=str,
-        default=None,
-        help="Author name to filter commits",
-    )
-    parser.add_argument(
         "--clear_cache",
         action="store_true",
         help="If set, the cache will be cleared before executing the main function.",
@@ -1099,7 +981,7 @@ if __name__ == "__main__":
             cache_dir=args.output / ".cache",
             output_dir=args.output,
         )
-        console.print_ok(up=7, forward=50)
+        console.print_ok(up=6, forward=50)
     except FileNotFoundError as ex:
         print(f"Error: {str(ex)}", file=sys.stderr)
         sys.exit(1)
@@ -1121,42 +1003,19 @@ if __name__ == "__main__":
         end_date_str=args.end_date,
         interval=args.interval,
         lang=args.lang,
-        author=args.author_name,
     )
-    console.print_ok(up=12, forward=50)
+    console.print_ok(up=11, forward=50)
 
     # Forming dataframe type data.
     console.print_h1("# Forming dataframe type data.")
-
-    # Pivot table by language
     loc_trend_by_language: pd.DataFrame = loc_data.pivot_table(
-        index="Date", columns="Language", values="code", aggfunc="sum", fill_value=0
+        index="Date", columns="Language", values="code", fill_value=0
     )
     loc_trend_by_language = loc_trend_by_language.astype(int)
-    if not loc_trend_by_language.empty:
-        loc_trend_by_language = loc_trend_by_language.sort_values(
-            by=loc_trend_by_language.index[-1], axis=1, ascending=False
-        )
-    else:
-        raise ValueError(
-            f"{loc_trend_by_language} is empty. Please check the filtering conditions."
-        )
-
-    # Pivot table by author
-    loc_trend_by_author: pd.DataFrame = loc_data.pivot_table(
-        index="Date", columns="Author", values="code", aggfunc="sum", fill_value=0
+    loc_trend_by_language = loc_trend_by_language.sort_values(
+        by=loc_trend_by_language.index[-1], axis=1, ascending=False
     )
-    loc_trend_by_author = loc_trend_by_author.astype(int)
-    if not loc_trend_by_author.empty:
-        loc_trend_by_author = loc_trend_by_author.sort_values(
-            by=loc_trend_by_author.index[-1], axis=1, ascending=False
-        )
-    else:
-        raise ValueError(
-            f"{loc_trend_by_author} is empty. Please check the filtering conditions."
-        )
 
-    # Total LOC trend
     trend_of_total_loc: pd.DataFrame = loc_trend_by_language.copy(deep=True)
     trend_of_total_loc["SUM"] = trend_of_total_loc.sum(axis=1)
     trend_of_total_loc = trend_of_total_loc[["SUM"]]
@@ -1168,16 +1027,13 @@ if __name__ == "__main__":
     console.print_h1("# Save to csv files.")
     analyzer.save_dataframe(loc_data, "loc_data.csv")
     analyzer.save_dataframe(loc_trend_by_language, "loc_trend_by_language.csv")
-    analyzer.save_dataframe(loc_trend_by_author, "loc_trend_by_author.csv")
     analyzer.save_dataframe(trend_of_total_loc, "trend_of_total_loc.csv")
-    console.print_ok(up=5, forward=50)
+    console.print_ok(up=4, forward=50)
 
     # Create charts.
     console.print_h1("# Create charts.")
     analyzer.create_charts(
-        language_trend_data=loc_trend_by_language,
-        author_trend_data=loc_trend_by_author,
-        sum_data=trend_of_total_loc,
+        trend_data=loc_trend_by_language, sum_data=trend_of_total_loc
     )
     analyzer.save_charts()
     console.print_ok(up=1, forward=50)
