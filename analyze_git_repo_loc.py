@@ -1133,18 +1133,28 @@ if __name__ == "__main__":
         index="Date", columns="Language", values="code", fill_value=0
     )
     loc_trend_by_language = loc_trend_by_language.astype(int)
-    loc_trend_by_language = loc_trend_by_language.sort_values(
-        by=loc_trend_by_language.index[-1], axis=1, ascending=False
-    )
+    if not loc_trend_by_language.empty:
+        loc_trend_by_language = loc_trend_by_language.sort_values(
+            by=loc_trend_by_language.index[-1], axis=1, ascending=False
+        )
+    else:
+        raise ValueError(
+            f"{loc_trend_by_language} is empty. Please check the filtering conditions."
+        )
 
     # Pivot table by author
     loc_trend_by_author: pd.DataFrame = loc_data.pivot_table(
         index="Date", columns="Author", values="code", fill_value=0
     )
     loc_trend_by_author = loc_trend_by_author.astype(int)
-    loc_trend_by_author = loc_trend_by_author.sort_values(
-        by=loc_trend_by_author.index[-1], axis=1, ascending=False
-    )
+    if not loc_trend_by_author.empty:
+        loc_trend_by_author = loc_trend_by_author.sort_values(
+            by=loc_trend_by_author.index[-1], axis=1, ascending=False
+        )
+    else:
+        raise ValueError(
+            f"{loc_trend_by_author} is empty. Please check the filtering conditions."
+        )
 
     # Total LOC trend
     trend_of_total_loc: pd.DataFrame = loc_trend_by_language.copy(deep=True)
