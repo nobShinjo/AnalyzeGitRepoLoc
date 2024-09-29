@@ -911,7 +911,7 @@ class ChartBuilder:
 
     def build(
         self, trend_data: pd.DataFrame, sum_data: pd.DataFrame, color_data: str
-    ) -> ChartBuilderSelf:
+    ) -> go.Figure:
         """
         Constructs the chart by setting data and creating figure and traces.
 
