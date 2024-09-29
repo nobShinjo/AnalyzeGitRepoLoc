@@ -149,7 +149,7 @@ class GitRepoLOCAnalyzer:
             WindowsPath('C:/path/to/cloc.exe')
             # this output can vary depending on the actual found path
         """
-        cloc_exe_filename: str = "cloc.exe"
+        cloc_exe_filename: str = "cloc.exe" if os.name == "nt" else "cloc"
 
         # Find full path of 'cloc.exe' from 'PATH' environment variable.
         for path in os.environ["PATH"].split(os.pathsep):
