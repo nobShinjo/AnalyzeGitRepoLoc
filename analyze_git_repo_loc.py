@@ -1130,7 +1130,7 @@ if __name__ == "__main__":
 
     # Pivot table by language
     loc_trend_by_language: pd.DataFrame = loc_data.pivot_table(
-        index="Date", columns="Language", values="code", fill_value=0
+        index="Date", columns="Language", values="code", aggfunc="sum", fill_value=0
     )
     loc_trend_by_language = loc_trend_by_language.astype(int)
     if not loc_trend_by_language.empty:
@@ -1144,7 +1144,7 @@ if __name__ == "__main__":
 
     # Pivot table by author
     loc_trend_by_author: pd.DataFrame = loc_data.pivot_table(
-        index="Date", columns="Author", values="code", fill_value=0
+        index="Date", columns="Author", values="code", aggfunc="sum", fill_value=0
     )
     loc_trend_by_author = loc_trend_by_author.astype(int)
     if not loc_trend_by_author.empty:
