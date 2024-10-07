@@ -37,6 +37,7 @@
         "tozero",
         "tqdm",
         "tzdata",
+        "venv",
         "xanchor",
         "xaxes",
         "xaxis",
