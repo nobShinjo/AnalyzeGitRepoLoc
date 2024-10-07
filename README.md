@@ -76,7 +76,13 @@ Analyze Git repositories and visualize code LOC.
 ### Example : Filter by Author
 
   ```shell
-  python .\analyze_git_repo_loc.py [repository_path] --interval monthly -o ./out --author-name "Nob Shinjo" 
+  python .\analyze_git_repo_loc.py [repository_path] --interval monthly -o ./out --author-name [auther name] 
+  ```
+
+### Example : Multi repository
+
+  ```shell
+  python .\analyze_git_repo_loc.py [repository_path],[repository_path],[repository_path] --interval monthly -o ./out 
   ```
 
 ### Example : Clear old cache files
@@ -95,12 +101,12 @@ Analyze Git repositories and visualize code LOC.
   usage: analyze_git_repo_loc [-h] [-o OUTPUT] [-s START_DATE] [-e END_DATE] [-b BRANCH] 
                             [--interval {daily,weekly,monthly}] [--lang LANG]
                             [--author-name AUTHOR_NAME] [--clear_cache]
-                            repo_path
+                            repo_paths
 
   Analyze Git repositories and visualize code LOC.
 
   positional arguments:
-    repo_path             Path of Git repository
+    repo_paths            Comma-separated list of Git repository paths
 
   options:
     -h, --help            show this help message and exit
