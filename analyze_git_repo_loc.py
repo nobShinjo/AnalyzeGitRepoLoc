@@ -465,8 +465,7 @@ class GitRepoLOCAnalyzer:
         is renamed to 'Language'.
 
         Args:
-            json_str (str): A JSON string representation of the data to be converted
-                            into a DataFrame.
+            json_str (str): A JSON string representation of the data to be converted into a DataFrame.
 
         Returns:
         df : pandas.DataFrame
@@ -506,7 +505,6 @@ class GitRepoLOCAnalyzer:
         language_trend_data: pd.DataFrame,
         author_trend_data: pd.DataFrame,
         sum_data: pd.DataFrame,
-        interval: str,
     ):
         """
         Creates charts using the provided trend and summation data.
@@ -519,24 +517,13 @@ class GitRepoLOCAnalyzer:
             author_trend_data (pd.DataFrame):
                 A pandas DataFrame containing the trend data of LOC by author.
             sum_data (pd.DataFrame): A pandas DataFrame that contains the summary data.
-            interval (str): The interval to use for formatting the x-axis ticks.
-                            Should be one of 'daily', 'weekly', or 'monthly'.
         """
         language_trend_chart = self._chart_builder.build(
-            trend_data=language_trend_data,
-            sum_data=sum_data,
-            color_data="Language",
-            interval=interval,
+            trend_data=language_trend_data, sum_data=sum_data, color_data="Language"
         )
-        language_trend_chart.write_html(self._output_path / "language_trend_chart.html")
-
         author_trend_chart = self._chart_builder.build(
-            trend_data=author_trend_data,
-            sum_data=sum_data,
-            color_data="Author",
-            interval=interval,
+            trend_data=author_trend_data, sum_data=sum_data, color_data="Author"
         )
-        author_trend_chart.write_html(self._output_path / "author_trend_chart.html")
 
         # Combine two charts
         self._chart = make_subplots(
@@ -568,7 +555,7 @@ class GitRepoLOCAnalyzer:
             title_font_size=18,
             tickfont_size=14,
             tickangle=-45,
-            tickformat=language_trend_chart["layout"]["xaxis"]["tickformat"],
+            tickformat="%b-%Y",
             automargin=True,
         )
         self._chart.update_yaxes(
@@ -923,32 +910,8 @@ class ChartBuilder:
         )
         return self
 
-    def update_xaxis_tickformat(self, interval: str) -> ChartBuilderSelf:
-        """
-        Update the x-axis tick format based on the interval.
-
-        Args:
-            interval (str): The interval to use for formatting the x-axis ticks.
-                            Should be one of 'daily', 'weekly', or 'monthly'.
-
-        Returns:
-            ChartBuilderSelf: The instance of the ChartBuilder for method chaining.
-        """
-        tickformat = {
-            "daily": "%b %d, %Y",
-            "weekly": "%b %d, %Y",
-            "monthly": "%b %Y",
-        }.get(interval, "%b %d, %Y")
-
-        self._fig.update_xaxes(tickformat=tickformat)
-        return self
-
     def build(
-        self,
-        trend_data: pd.DataFrame,
-        sum_data: pd.DataFrame,
-        color_data: str,
-        interval: str,
+        self, trend_data: pd.DataFrame, sum_data: pd.DataFrame, color_data: str
     ) -> go.Figure:
         """
         Constructs the chart by setting data and creating figure and traces.
@@ -963,9 +926,7 @@ class ChartBuilder:
                                        trend trace creation.
             sum_data (pd.DataFrame): A pandas DataFrame containing the data to be used for
                                      summary trace creation.
-            color_data (str): The name of the column in the trend data frame that contains
-                                the color data for the area plot.
-            interval (str): The interval to use for formatting the x-axis ticks.
+
         Returns:
             ChartBuilderSelf: The Plotly figure object configured with the trend and summary
                               traces, ready for display or further modification.
@@ -977,7 +938,6 @@ class ChartBuilder:
         self.create_sum_trace()
         self.create_diff_trace()
         self.update_fig()
-        self.update_xaxis_tickformat(interval)
         return self._fig
 
     def show(self) -> None:
@@ -1218,7 +1178,6 @@ if __name__ == "__main__":
         language_trend_data=loc_trend_by_language,
         author_trend_data=loc_trend_by_author,
         sum_data=trend_of_total_loc,
-        interval=args.interval,
     )
     analyzer.save_charts()
     console.print_ok(up=1, forward=50)
