@@ -18,7 +18,7 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from colorama import Cursor, Fore, Style
-from git import Commit, InvalidGitRepositoryError, NoSuchPathError, Repo
+from git import Commit, InvalidGitRepositoryError, NoSuchPathError, Repo, exc
 from plotly.subplots import make_subplots
 from tqdm import tqdm
 
@@ -210,7 +210,7 @@ class GitRepoLOCAnalyzer:
         end_date: datetime,
         interval="daily",
         author: str = None,
-    ) -> list[Commit]:
+    ) -> list[tuple[Commit, str]]:
         """
         get_commits Get a list of Commit object.
 
@@ -229,8 +229,12 @@ class GitRepoLOCAnalyzer:
             ValueError: If the provided `interval` is not one of 'daily', 'weekly', or 'monthly'.
 
         Returns:
-            list[Commit]: A list of commit object.
+            list[tuple[Commit, str]]: A list of tuples containing the Commit object and author name.
         """
+
+        # Check if the branch exists
+        if not self.branch_exists(branch):
+            raise RuntimeError(f"Branch '{branch}' does not exist.")
 
         # Set the timedelta object that defines the interval.
         # NOTE: Approximate average length of month in days
@@ -252,7 +256,7 @@ class GitRepoLOCAnalyzer:
         # Search and filter commits in order and add them to the list
         # NOTE: Commit dates are ordered by newest to oldest, so filter by end date
         last_added_commit_date = end_date
-        commits: list[Commit] = []
+        commits: list[tuple[Commit, str]] = []
         for commit in self._repo.iter_commits(branch, since=since, until=until):
             commit_date = datetime.fromtimestamp(commit.committed_date)
             if commit_date <= last_added_commit_date - delta:
@@ -264,6 +268,22 @@ class GitRepoLOCAnalyzer:
 
         print(f"-> {len(commits)} commits found.", end=os.linesep + os.linesep)
         return commits
+
+    def branch_exists(self, branch: str) -> bool:
+        """
+        Check if a branch exists in the repository.
+
+        Args:
+            branch (str): The branch name to check.
+
+        Returns:
+            bool: True if the branch exists, False otherwise.
+        """
+        try:
+            self._repo.git.show_ref(f"refs/heads/{branch}")
+            return True
+        except exc.GitCommandError:
+            return False
 
     def run_cloc(self, commit: Commit, lang: list[str] = None) -> str:
         """
@@ -406,6 +426,10 @@ class GitRepoLOCAnalyzer:
             print(f"Error: {str(e)}", file=sys.stderr)
             sys.exit(1)
 
+        if len(commits) == 0:
+            print("Error: Not found commits in the specified branch.", file=sys.stderr)
+            sys.exit(1)
+
         cloc_df: pd.DataFrame = pd.DataFrame(
             columns=[
                 "Commit",
@@ -473,16 +497,19 @@ class GitRepoLOCAnalyzer:
             The resulting pandas DataFrame with the 'header' and 'SUM' entries removed,
             and the 'index' column renamed to 'Language'.
         """
+        try:
+            # Decode json string to dict type
+            json_dict: dict = json.loads(json_str)
+            json_dict.pop("header", None)
+            json_dict.pop("SUM", None)
 
-        # Decode json string to dict type
-        json_dict: dict = json.loads(json_str)
-        json_dict.pop("header", None)
-        json_dict.pop("SUM", None)
-
-        # Create a dataframe from the json dict type.
-        df = pd.DataFrame.from_dict(json_dict, orient="index")
-        df.reset_index(inplace=True)
-        df.rename(columns={"index": "Language"}, inplace=True)
+            # Create a dataframe from the json dict type.
+            df = pd.DataFrame.from_dict(json_dict, orient="index")
+            df.reset_index(inplace=True)
+            df.rename(columns={"index": "Language"}, inplace=True)
+        except (json.JSONDecodeError, TypeError) as e:
+            print(f"Error: {str(e)}", file=sys.stderr)
+            return pd.DataFrame()
 
         return df
 
@@ -497,15 +524,15 @@ class GitRepoLOCAnalyzer:
         Returns:
             None
         """
-        csv_path = self._output_path / csv_file
-        print(f"- Save: {csv_path}")
-        data.to_csv(csv_path)
+        print(f"- Save: {csv_file}")
+        data.to_csv(csv_file)
 
     def create_charts(
         self,
         language_trend_data: pd.DataFrame,
         author_trend_data: pd.DataFrame,
         sum_data: pd.DataFrame,
+        output_path: Path,
         interval: str,
     ):
         """
@@ -519,6 +546,7 @@ class GitRepoLOCAnalyzer:
             author_trend_data (pd.DataFrame):
                 A pandas DataFrame containing the trend data of LOC by author.
             sum_data (pd.DataFrame): A pandas DataFrame that contains the summary data.
+            output_path (Path): The path to save the chart HTML file.
             interval (str): The interval to use for formatting the x-axis ticks.
                             Should be one of 'daily', 'weekly', or 'monthly'.
         """
@@ -528,7 +556,7 @@ class GitRepoLOCAnalyzer:
             color_data="Language",
             interval=interval,
         )
-        language_trend_chart.write_html(self._output_path / "language_trend_chart.html")
+        language_trend_chart.write_html(output_path / "language_trend_chart.html")
 
         author_trend_chart = self._chart_builder.build(
             trend_data=author_trend_data,
@@ -536,7 +564,7 @@ class GitRepoLOCAnalyzer:
             color_data="Author",
             interval=interval,
         )
-        author_trend_chart.write_html(self._output_path / "author_trend_chart.html")
+        author_trend_chart.write_html(output_path / "author_trend_chart.html")
 
         # Combine two charts
         self._chart = make_subplots(
@@ -625,15 +653,18 @@ class GitRepoLOCAnalyzer:
 
         self._chart.show()
 
-    def save_charts(self) -> None:
+    def save_charts(self, output_path: Path) -> None:
         """
         Saves the generated charts to HTML format.
 
         The file is saved to the path specified by _output_path with the filename 'report.html'.
         It's expected that the _chart attribute is already populated with a chart object.
+
+        Args:
+            output_path (Path): The path to save the chart HTML file.
         """
         if self._chart is not None:
-            self._chart.write_html(self._output_path / "report.html")
+            self._chart.write_html(output_path / "report.html")
 
 
 class ChartBuilder:
@@ -1071,17 +1102,22 @@ class ColoredConsolePrinter:
         self.print_colored(text, color=Fore.CYAN, bright=True)
 
 
-if __name__ == "__main__":
-    # Parsing command line arguments
-    parser = argparse.ArgumentParser(
-        prog="analyze_git_repo_loc",
-        description="Analyze Git repositories and visualize code LOC.",
-    )
+def parse_arguments(parser: argparse.ArgumentParser) -> argparse.Namespace:
+    """
+    parse_arguments Parse command line arguments.
+
+    Args:
+        parser (ArgumentParser): ArgumentParser object.
+
+    Returns:
+        argparse.Namespace: Parsed command line arguments.
+    """
+
     # pylint: enable=line-too-long
     parser.add_argument(
-        "repo_path",
-        type=Path,
-        help="Path of Git repository",
+        "repo_paths",
+        type=lambda s: [Path(item) for item in s.split(",")],
+        help="Comma-separated list of Git repository paths",
     )
     parser.add_argument(
         "-o", "--output", type=Path, default="./out", help="Output path"
@@ -1120,10 +1156,85 @@ if __name__ == "__main__":
         help="If set, the cache will be cleared before executing the main function.",
     )
 
-    args = parser.parse_args()
+    return parser.parse_args()
 
-    # Get to Current directory
-    current_path: Path = Path.cwd()
+
+def process_loc_data(
+    loc_data: pd.DataFrame, output_path: Path, analyzer, interval: str
+):
+    """
+    process_loc_data Process LOC data and save data and charts.
+
+    Args:
+        loc_data (pd.DataFrame): Data of LOC by language and author.
+        output_path (Path): The path to save the data and charts.
+        analyzer (_type_): analyzer object to save data and create charts.
+        interval (str): The interval to use for formatting the x-axis ticks.
+    """
+
+    # Pivot table by language
+    loc_trend_by_language = loc_data.pivot_table(
+        index="Date", columns="Language", values="code", aggfunc="sum", fill_value=0
+    ).astype(int)
+
+    if not loc_trend_by_language.empty:
+        loc_trend_by_language.sort_values(
+            by=loc_trend_by_language.index[-1],
+            axis=1,
+            ascending=False,
+            inplace=True,
+        )
+
+    # Pivot table by author
+    loc_trend_by_author = loc_data.pivot_table(
+        index="Date", columns="Author", values="code", aggfunc="sum", fill_value=0
+    ).astype(int)
+
+    if not loc_trend_by_author.empty:
+        loc_trend_by_author.sort_values(
+            by=loc_trend_by_author.index[-1],
+            axis=1,
+            ascending=False,
+            inplace=True,
+        )
+
+    # Total LOC trend
+    trend_of_total_loc = loc_trend_by_language.copy(deep=True)
+    trend_of_total_loc["SUM"] = trend_of_total_loc.sum(axis=1)
+    trend_of_total_loc = trend_of_total_loc[["SUM"]]
+    trend_of_total_loc["Diff"] = trend_of_total_loc["SUM"].diff()
+
+    # Save data and charts for the repository
+    analyzer.save_dataframe(loc_data, output_path / "loc_data.csv")
+    analyzer.save_dataframe(
+        loc_trend_by_language, output_path / "loc_trend_by_language.csv"
+    )
+    analyzer.save_dataframe(
+        loc_trend_by_author, output_path / "loc_trend_by_author.csv"
+    )
+    analyzer.save_dataframe(trend_of_total_loc, output_path / "trend_of_total_loc.csv")
+
+    analyzer.create_charts(
+        language_trend_data=loc_trend_by_language,
+        author_trend_data=loc_trend_by_author,
+        sum_data=trend_of_total_loc,
+        output_path=output_path,
+        interval=interval,
+    )
+    analyzer.save_charts(output_path)
+
+
+def main():
+    """
+    main function to execute the program.
+    """
+    # Parsing command line arguments
+    parser = argparse.ArgumentParser(
+        prog="analyze_git_repo_loc",
+        description="Analyze Git repositories and visualize code LOC.",
+    )
+    args = parse_arguments(parser)
+
     # Initialize ColoredConsolePrinter
     console = ColoredConsolePrinter()
 
@@ -1131,96 +1242,81 @@ if __name__ == "__main__":
     console.print_h1(f"# Start {parser.prog}.")
     print(Style.DIM + f"- {parser.description}", end=os.linesep + os.linesep)
 
-    # Create GitRepoLOCAnalyzer
-    try:
-        console.print_h1("# Initialize LOC analyzer.")
-        analyzer = GitRepoLOCAnalyzer(
-            repo_path=args.repo_path,
-            cache_dir=args.output / ".cache",
-            output_dir=args.output,
-        )
-        console.print_ok(up=7, forward=50)
-    except FileNotFoundError as ex:
-        print(f"Error: {str(ex)}", file=sys.stderr)
-        sys.exit(1)
-    # Remove cache files
-    try:
+    all_loc_data = []
+
+    for repo_path in args.repo_paths:
+        # Create GitRepoLOCAnalyzer
+        try:
+            analyzer = GitRepoLOCAnalyzer(
+                repo_path=repo_path,
+                cache_dir=args.output / ".cache",
+                output_dir=args.output,
+            )
+        except FileNotFoundError as ex:
+            print(f"Error: {str(ex)}", file=sys.stderr)
+            sys.exit(1)
+
+        # Remove cache files
         if args.clear_cache:
-            console.print_h1("# Remove cache files.")
-            analyzer.clear_cache_files()
-            console.print_ok(up=2, forward=50)
-    except FileNotFoundError as ex:
-        print(f"Error: {str(ex)}", file=sys.stderr)
-        sys.exit(1)
+            try:
+                console.print_h1("# Remove cache files.")
+                analyzer.clear_cache_files()
+                console.print_ok(up=2, forward=50)
+            except FileNotFoundError as ex:
+                print(f"Error: {str(ex)}", file=sys.stderr)
+                sys.exit(1)
 
-    # Analyze LOC against the git repository.
-    console.print_h1("# Analyze LOC against the git repository.")
-    loc_data = analyzer.analyze_git_repo_loc(
-        branch=args.branch,
-        start_date_str=args.start_date,
-        end_date_str=args.end_date,
-        interval=args.interval,
-        lang=args.lang,
-        author=args.author_name,
-    )
-    console.print_ok(up=12, forward=50)
-
-    # Forming dataframe type data.
-    console.print_h1("# Forming dataframe type data.")
-
-    # Pivot table by language
-    loc_trend_by_language: pd.DataFrame = loc_data.pivot_table(
-        index="Date", columns="Language", values="code", aggfunc="sum", fill_value=0
-    ).astype(int)
-
-    if not loc_trend_by_language.empty:
-        loc_trend_by_language = loc_trend_by_language.sort_values(
-            by=loc_trend_by_language.index[-1], axis=1, ascending=False
+        # Analyze LOC against the git repository.
+        console.print_h1(f"# Analyze LOC against the git repository: {repo_path}")
+        loc_data = analyzer.analyze_git_repo_loc(
+            branch=args.branch,
+            start_date_str=args.start_date,
+            end_date_str=args.end_date,
+            interval=args.interval,
+            lang=args.lang,
+            author=args.author_name,
         )
-    else:
-        raise ValueError(
-            f"{loc_trend_by_language} is empty. Please check the filtering conditions."
-        )
+        all_loc_data.append(loc_data)
 
-    # Pivot table by author
-    loc_trend_by_author: pd.DataFrame = loc_data.pivot_table(
-        index="Date", columns="Author", values="code", aggfunc="sum", fill_value=0
-    ).astype(int)
-    if not loc_trend_by_author.empty:
-        loc_trend_by_author = loc_trend_by_author.sort_values(
-            by=loc_trend_by_author.index[-1], axis=1, ascending=False
-        )
-    else:
-        raise ValueError(
-            f"{loc_trend_by_author} is empty. Please check the filtering conditions."
+        # Create output directory for the repository
+        repo_output_dir = args.output / repo_path.name
+        repo_output_dir.mkdir(parents=True, exist_ok=True)
+
+        # Forming dataframe type data.
+        console.print_h1("# Forming dataframe type data.")
+
+        # Combine processing into one consistent step to reduce duplication.
+        process_loc_data(
+            loc_data=loc_data,
+            output_path=repo_output_dir,
+            analyzer=analyzer,
+            interval=args.interval,
         )
 
-    # Total LOC trend
-    trend_of_total_loc: pd.DataFrame = loc_trend_by_language.copy(deep=True)
-    trend_of_total_loc["SUM"] = trend_of_total_loc.sum(axis=1)
-    trend_of_total_loc = trend_of_total_loc[["SUM"]]
-    trend_of_total_loc["Diff"] = trend_of_total_loc["SUM"].diff()
-    delta_data = trend_of_total_loc.reset_index()
-    console.print_ok(up=1, forward=50)
+    if len(args.repo_paths) > 1:
+        # Combine all LOC data
+        combined_loc_data = pd.concat(all_loc_data)
 
-    # Save to csv files.
-    console.print_h1("# Save to csv files.")
-    analyzer.save_dataframe(loc_data, "loc_data.csv")
-    analyzer.save_dataframe(loc_trend_by_language, "loc_trend_by_language.csv")
-    analyzer.save_dataframe(loc_trend_by_author, "loc_trend_by_author.csv")
-    analyzer.save_dataframe(trend_of_total_loc, "trend_of_total_loc.csv")
-    console.print_ok(up=5, forward=50)
+        # Create output directory for the combined data
+        combined_output_dir = args.output / datetime.now().strftime("%Y%m%d%H%M%S")
+        combined_output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Create charts.
-    console.print_h1("# Create charts.")
-    analyzer.create_charts(
-        language_trend_data=loc_trend_by_language,
-        author_trend_data=loc_trend_by_author,
-        sum_data=trend_of_total_loc,
-        interval=args.interval,
-    )
-    analyzer.save_charts()
-    console.print_ok(up=1, forward=50)
+        # Forming dataframe type data.
+        console.print_h1("# Forming dataframe type data.")
+        process_loc_data(
+            loc_data=combined_loc_data,
+            output_path=combined_output_dir,
+            analyzer=analyzer,
+            interval=args.interval,
+        )
+
+        # Save the list of repositories
+        with open(combined_output_dir / "repo_list.txt", "w", encoding="utf-8") as f:
+            f.write("\n".join([str(repo) for repo in args.repo_paths]))
 
     console.print_h1("# LOC Analyze")
     print(Cursor.UP() + Cursor.FORWARD(50) + Fore.GREEN + "FINISH")
+
+
+if __name__ == "__main__":
+    main()
