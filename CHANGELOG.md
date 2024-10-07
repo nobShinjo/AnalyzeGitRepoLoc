@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.2.0] - 2024-10-07
+
+### Added
+
+- b7bbde7 feat(git-repo-loc): enhance multi-repo support and error handling
+
 ## [1.1.1] - 2024-10-07
 
 ### Changed
@@ -28,7 +34,7 @@
 
 ### Fixed
 
-- b909682 Refactor code to handle empty dataframes in language and author trend charts
+- b909682 Refactor code to handle empty dataframe in language and author trend charts
 - 84b2097 Fix incorrect code aggregation in loc_trend_by_author by specifying aggfunc='sum'
 - 8880298 refactor:  cloc_exe_filename to handle different operating systems
 
