@@ -4,6 +4,7 @@
         "source.organizeImports": "explicit"
     },
     "cSpell.words": [
+        "aggfunc",
         "astype",
         "automargin",
         "autoremove",
@@ -36,6 +37,7 @@
         "tozero",
         "tqdm",
         "tzdata",
+        "venv",
         "xanchor",
         "xaxes",
         "xaxis",
