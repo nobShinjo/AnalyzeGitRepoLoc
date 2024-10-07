@@ -6,6 +6,10 @@ Analyze Git repositories and visualize code LOC.
 
 ![Analysis Example](./image/example.png)
 
+## Release Notes
+
+[CHANGELOG](./CHANGELOG.md)
+
 ## Requirement
 
 1. Clone to git repository.
@@ -21,6 +25,15 @@ Analyze Git repositories and visualize code LOC.
     python -m venv .venv
     python -m pip install --upgrade pip
     pip install -r requirements.txt
+    ```
+
+    または pip-toolsを使用する場合は、
+
+    ```shell
+    cd ./AnalyzeGitRepoLoc/
+    python -m venv .venv
+    python -m pip install --upgrade pip
+    pip-sync
     ```
 
 1. Install CLOC.
@@ -60,6 +73,12 @@ Analyze Git repositories and visualize code LOC.
   python .\analyze_git_repo_loc.py [repository_path] --interval monthly -o ./out --lang C#,Python,text,Markdown
   ```
 
+### Example : Filter by Author
+
+  ```shell
+  python .\analyze_git_repo_loc.py [repository_path] --interval monthly -o ./out --author-name "Nob Shinjo" 
+  ```
+
 ### Example : Clear old cache files
 
   ```shell
@@ -73,9 +92,10 @@ Analyze Git repositories and visualize code LOC.
   ```
 
   ```text
-  usage: analyze_git_repo_loc [-h] [-o OUTPUT] [-s START_DATE] [-e END_DATE] [-b BRANCH]
-                              [--interval {daily,weekly,monthly}] [--lang LANG] [--clear_cache]
-                              repo_path
+  usage: analyze_git_repo_loc [-h] [-o OUTPUT] [-s START_DATE] [-e END_DATE] [-b BRANCH] 
+                            [--interval {daily,weekly,monthly}] [--lang LANG]
+                            [--author-name AUTHOR_NAME] [--clear_cache]
+                            repo_path
 
   Analyze Git repositories and visualize code LOC.
 
@@ -96,6 +116,8 @@ Analyze Git repositories and visualize code LOC.
                           Interval (default: monthly)
     --lang LANG           Count only the given space separated, case-insensitive languages L1,L2,L3, etc. Use 'cloc
                           --show-lang' to see the list of recognized languages.
+    --author-name AUTHOR_NAME
+                        Author name to filter commits
     --clear_cache         If set, the cache will be cleared before executing the main function.
   ```
 
