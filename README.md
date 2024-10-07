@@ -6,6 +6,10 @@ Analyze Git repositories and visualize code LOC.
 
 ![Analysis Example](./image/example.png)
 
+## Release Notes
+
+[CHANGELOG](./CHANGELOG.md)
+
 ## Requirement
 
 1. Clone to git repository.
