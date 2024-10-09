@@ -4,7 +4,7 @@
 
 Analyze Git repositories and visualize code LOC.
 
-![Analysis Example](./image/example.png)
+![Analysis Example](./docs/images/example.png)
 
 ## Release Notes
 
@@ -46,55 +46,55 @@ Analyze Git repositories and visualize code LOC.
 ### Example : Monthly Analysis
 
   ```shell
-  python .\analyze_git_repo_loc.py [repository_path] --interval monthly -o ./out 
+  python -m analyze_git_repo_loc [repository_path] --interval monthly -o ./out 
   ```
 
 ### Example : Daily Analysis
 
   ```shell
-  python .\analyze_git_repo_loc.py [repository_path] --interval daily -o ./out 
+  python -m analyze_git_repo_loc [repository_path] --interval daily -o ./out 
   ```
 
 ### Example : Specify branch name
 
   ```shell
-  python .\analyze_git_repo_loc.py [repository_path] -b develop --interval daily -o ./out 
+  python -m analyze_git_repo_loc [repository_path] -b develop --interval daily -o ./out 
   ```
 
 ### Example : Filter by date
 
   ```shell
-  python .\analyze_git_repo_loc.py [repository_path] --interval monthly -o ./out -s 2023-01-01 -e 2023-12-31
+  python -m analyze_git_repo_loc [repository_path] --interval monthly -o ./out -s 2023-01-01 -e 2023-12-31
   ```
 
 ### Example : Filter by Language
 
   ```shell
-  python .\analyze_git_repo_loc.py [repository_path] --interval monthly -o ./out --lang C#,Python,text,Markdown
+  python -m analyze_git_repo_loc [repository_path] --interval monthly -o ./out --lang C#,Python,text,Markdown
   ```
 
 ### Example : Filter by Author
 
   ```shell
-  python .\analyze_git_repo_loc.py [repository_path] --interval monthly -o ./out --author-name [auther name] 
+  python -m analyze_git_repo_loc [repository_path] --interval monthly -o ./out --author-name [author name] 
   ```
 
 ### Example : Multi repository
 
   ```shell
-  python .\analyze_git_repo_loc.py [repository_path],[repository_path],[repository_path] --interval monthly -o ./out 
+  python -m analyze_git_repo_loc [repository_path],[repository_path],[repository_path] --interval monthly -o ./out 
   ```
 
 ### Example : Clear old cache files
 
   ```shell
-  python .\analyze_git_repo_loc.py [repository_path] --interval monthly -o ./out --clear_cache
+  python -m analyze_git_repo_loc [repository_path] --interval monthly -o ./out --clear_cache
   ```
 
 ### Help
 
   ```shell
-  python .\analyze_git_repo_loc.py --help
+  python -m analyze_git_repo_loc --help
   ```
 
   ```text
