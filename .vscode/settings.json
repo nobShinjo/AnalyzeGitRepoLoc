@@ -13,6 +13,7 @@
         "dataframe",
         "dateutil",
         "dtick",
+        "ffill",
         "gitdb",
         "gridcolor",
         "gridwidth",
