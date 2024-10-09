@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.3.0] - 2024-10-10
+
+### Added
+
+- d93d32a feat(analyzer): add branch name to chart titles and analysis
+- 4dd19e2 feat(analyze_git_repo_loc): add script for analyzing git repository lines of code
+
+### Changed
+
+- update pip packages
+  - e5e7263 update: third-party library versions in 3rdPartyLicenses.md
+  - d8b3854 Update dev-requirements.txt and requirements.txt
+- 1862d53 feat(analyze_git_repo_loc): add modular architecture and initial implementation
+
 ## [1.2.0] - 2024-10-07
 
 ### Added
