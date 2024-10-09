@@ -13,6 +13,10 @@
   - e5e7263 update: third-party library versions in 3rdPartyLicenses.md
   - d8b3854 Update dev-requirements.txt and requirements.txt
 - 1862d53 feat(analyze_git_repo_loc): add modular architecture and initial implementation
+- 32c1f94 feat(scripts): externalize repository list to file in analyze script
+- eba218c refactor(.vscode): add missing dependency 'ffill' to settings.json
+- f24dcf6 refactor(loc_analysis): enhance LOC data combination logic
+- f9104e3 refactor(utils): rename function for clarity and add sorting
 
 ## [1.2.0] - 2024-10-07
 
