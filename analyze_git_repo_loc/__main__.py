@@ -14,7 +14,7 @@ from colorama import Cursor, Fore, Style
 
 from .colored_console_printer import ColoredConsolePrinter
 from .git_repo_loc_analyzer import GitRepoLOCAnalyzer
-from .utils import parse_arguments, process_loc_data
+from .utils import analyze_and_save_loc_data, parse_arguments
 
 
 def main():
@@ -80,7 +80,7 @@ def main():
         console.print_h1("# Forming dataframe type data.")
 
         # Combine processing into one consistent step to reduce duplication.
-        process_loc_data(
+        analyze_and_save_loc_data(
             loc_data=loc_data,
             output_path=repo_output_dir,
             analyzer=analyzer,
@@ -97,7 +97,7 @@ def main():
 
         # Forming dataframe type data.
         console.print_h1("# Forming dataframe type data.")
-        process_loc_data(
+        analyze_and_save_loc_data(
             loc_data=combined_loc_data,
             output_path=combined_output_dir,
             analyzer=analyzer,

@@ -12,6 +12,8 @@ from pathlib import Path
 
 import pandas as pd
 
+from .git_repo_loc_analyzer import GitRepoLOCAnalyzer
+
 
 def parse_arguments(parser: argparse.ArgumentParser) -> argparse.Namespace:
     """
@@ -66,18 +68,26 @@ def parse_arguments(parser: argparse.ArgumentParser) -> argparse.Namespace:
     return parser.parse_args()
 
 
-def process_loc_data(
-    loc_data: pd.DataFrame, output_path: Path, analyzer, interval: str
+def analyze_and_save_loc_data(
+    loc_data: pd.DataFrame,
+    output_path: Path,
+    analyzer: GitRepoLOCAnalyzer,
+    interval: str,
 ):
     """
-    process_loc_data Process LOC data and save data and charts.
+    analyze_and_save_loc_data Process LOC data and save data and charts.
 
     Args:
         loc_data (pd.DataFrame): Data of LOC by language and author.
         output_path (Path): The path to save the data and charts.
-        analyzer (_type_): analyzer object to save data and create charts.
+        analyzer (GitRepoLOCAnalyzer): analyzer object to save data and create charts.
         interval (str): The interval to use for formatting the x-axis ticks.
     """
+    # loc_data sort by date
+    loc_data.sort_values(
+        by="Date",
+        inplace=True,
+    )
 
     # Pivot table by language
     loc_trend_by_language = loc_data.pivot_table(
