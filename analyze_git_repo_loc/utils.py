@@ -33,12 +33,8 @@ def parse_arguments(parser: argparse.ArgumentParser) -> argparse.Namespace:
     parser.add_argument(
         "-o", "--output", type=Path, default="./out", help="Output path"
     )
-    parser.add_argument(
-        "-s", "--start_date", type=str, default=None, help="Start Date yyyy-mm-dd"
-    )
-    parser.add_argument(
-        "-e", "--end_date", type=str, default=None, help="End Date yyyy-mm-dd"
-    )
+    parser.add_argument("--since", type=str, default=None, help="Start Date yyyy-mm-dd")
+    parser.add_argument("--until", type=str, default=None, help="End Date yyyy-mm-dd")
     parser.add_argument(
         "-b", "--branch", type=str, default="main", help="Branch name (default: main)"
     )

@@ -63,8 +63,8 @@ def main():
         console.print_h1(f"# Analyze LOC against the git repository: {repo_path}")
         loc_data = analyzer.analyze_git_repo_loc(
             branch=args.branch,
-            start_date_str=args.start_date,
-            end_date_str=args.end_date,
+            since_str=args.since,
+            until_str=args.until,
             interval=args.interval,
             lang=args.lang,
             author=args.author_name,

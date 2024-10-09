@@ -223,8 +223,8 @@ class GitRepoLOCAnalyzer:
     def get_commits(
         self,
         branch: str,
-        start_date: datetime,
-        end_date: datetime,
+        since: datetime,
+        until: datetime,
         interval="daily",
         author: str = None,
     ) -> list[tuple[Commit, str]]:
@@ -236,8 +236,8 @@ class GitRepoLOCAnalyzer:
 
         Args:
             branch (str): The name of the branch to retrieve commits from.
-            start_date (datetime): The start date for filtering commits.
-            end_date (datetime): The end date for filtering commits.
+            since (datetime): The start date for filtering commits.
+            until (datetime): The end date for filtering commits.
             interval (str, optional): The interval to use for filtering commits.
                                       Defaults to 'daily'. ("hourly", "daily", "weekly", etc.).
             author (str, optional): The author name to filter commits. Defaults to 'None'.
@@ -267,14 +267,14 @@ class GitRepoLOCAnalyzer:
             )
 
         # Start and end dates to filter
-        since = f'--since="{start_date.strftime("%Y-%m-%d")}"'
-        until = f'--until="{end_date.strftime("%Y-%m-%d")}"'
+        since_str = f'--since="{since.strftime("%Y-%m-%d")}"'
+        until_str = f'--until="{until.strftime("%Y-%m-%d")}"'
 
         # Search and filter commits in order and add them to the list
         # NOTE: Commit dates are ordered by newest to oldest, so filter by end date
-        last_added_commit_date = end_date
+        last_added_commit_date = until
         commits: list[tuple[Commit, str]] = []
-        for commit in self._repo.iter_commits(branch, since=since, until=until):
+        for commit in self._repo.iter_commits(branch, since=since_str, until=until_str):
             commit_date = datetime.fromtimestamp(commit.committed_date)
             if commit_date <= last_added_commit_date - delta:
                 # commits.append((commit.hexsha, commit_date.strftime("%Y-%m-%d %H:%M:%S")))
@@ -371,8 +371,8 @@ class GitRepoLOCAnalyzer:
     def analyze_git_repo_loc(
         self,
         branch: str,
-        start_date_str: str,
-        end_date_str: str,
+        since_str: str,
+        until_str: str,
         interval: str = "daily",
         lang: list[str] = None,
         author: str = None,
@@ -387,8 +387,8 @@ class GitRepoLOCAnalyzer:
 
         Args:
             branch (str): The name of the branch to retrieve commits from.
-            start_date_str (str): The start date for filtering commits in 'YYYY-MM-DD' format.
-            end_date_str (str): The end date for filtering commits in 'YYYY-MM-DD' format.
+            since_str (str): The start date for filtering commits in 'YYYY-MM-DD' format.
+            until_str (str): The end date for filtering commits in 'YYYY-MM-DD' format.
             interval (str, optional): The interval to use for filtering commits.
                                       Defaults to 'daily'. ("hourly", "daily", "weekly", etc.).
             lang (list[str], optional): List of languages to search. Defaults to 'None'
@@ -406,15 +406,15 @@ class GitRepoLOCAnalyzer:
 
         # Define start and end dates as datetime type.
         try:
-            if start_date_str is None:
-                start_date: datetime = datetime.strptime("1970-01-01", "%Y-%m-%d")
+            if since_str is None:
+                since: datetime = datetime.strptime("1970-01-01", "%Y-%m-%d")
             else:
-                start_date: datetime = datetime.strptime(start_date_str, "%Y-%m-%d")
+                since: datetime = datetime.strptime(since_str, "%Y-%m-%d")
 
-            if end_date_str is None:
-                end_date: datetime = datetime.now()
+            if until_str is None:
+                until: datetime = datetime.now()
             else:
-                end_date: datetime = datetime.strptime(end_date_str, "%Y-%m-%d")
+                until: datetime = datetime.strptime(until_str, "%Y-%m-%d")
         except ValueError as e:
             print(f"Error: {str(e)}", file=sys.stderr)
             sys.exit(1)
@@ -423,8 +423,8 @@ class GitRepoLOCAnalyzer:
         analysis_config: list[str] = []
         analysis_config.append(f"- repository:\t{self._repo_path.resolve()}")
         analysis_config.append(f"- branch:\t{branch}")
-        analysis_config.append(f"- since:\t{start_date:%Y-%m-%d %H:%M:%S}")
-        analysis_config.append(f"- until:\t{end_date:%Y-%m-%d %H:%M:%S}")
+        analysis_config.append(f"- since:\t{since:%Y-%m-%d %H:%M:%S}")
+        analysis_config.append(f"- until:\t{until:%Y-%m-%d %H:%M:%S}")
         analysis_config.append(f"- interval:\t{interval}")
         analysis_config.append(f"- language:\t{lang if lang else 'All'}")
         analysis_config.append(f"- author:\t{author if author else 'All'}")
@@ -434,8 +434,8 @@ class GitRepoLOCAnalyzer:
         try:
             commits = self.get_commits(
                 branch=branch,
-                start_date=start_date,
-                end_date=end_date,
+                since=since,
+                until=until,
                 interval=interval,
                 author=author,
             )
