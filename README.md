@@ -33,7 +33,7 @@ Analyze Git repositories and visualize code LOC.
     cd ./AnalyzeGitRepoLoc/
     python -m venv .venv
     python -m pip install --upgrade pip
-    pip-sync
+    pip-sync --python-executable .venv/Scripts/python.exe
     ```
 
 1. Install CLOC.
