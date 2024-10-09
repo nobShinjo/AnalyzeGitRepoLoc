@@ -3,3 +3,4 @@ pip-tools
 pip-autoremove
 pipdeptree
 pip-licenses
+pip-review

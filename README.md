@@ -4,7 +4,7 @@
 
 Analyze Git repositories and visualize code LOC.
 
-![Analysis Example](./image/example.png)
+![Analysis Example](./docs/images/example.png)
 
 ## Release Notes
 
@@ -33,7 +33,7 @@ Analyze Git repositories and visualize code LOC.
     cd ./AnalyzeGitRepoLoc/
     python -m venv .venv
     python -m pip install --upgrade pip
-    pip-sync
+    pip-sync --python-executable .venv/Scripts/python.exe
     ```
 
 1. Install CLOC.
@@ -46,61 +46,61 @@ Analyze Git repositories and visualize code LOC.
 ### Example : Monthly Analysis
 
   ```shell
-  python .\analyze_git_repo_loc.py [repository_path] --interval monthly -o ./out 
+  python -m analyze_git_repo_loc [repository_path] --interval monthly -o ./out 
   ```
 
 ### Example : Daily Analysis
 
   ```shell
-  python .\analyze_git_repo_loc.py [repository_path] --interval daily -o ./out 
+  python -m analyze_git_repo_loc [repository_path] --interval daily -o ./out 
   ```
 
 ### Example : Specify branch name
 
   ```shell
-  python .\analyze_git_repo_loc.py [repository_path] -b develop --interval daily -o ./out 
+  python -m analyze_git_repo_loc [repository_path] -b develop --interval daily -o ./out 
   ```
 
 ### Example : Filter by date
 
   ```shell
-  python .\analyze_git_repo_loc.py [repository_path] --interval monthly -o ./out -s 2023-01-01 -e 2023-12-31
+  python -m analyze_git_repo_loc [repository_path] --interval monthly -o ./out --since 2023-01-01 --until 2023-12-31
   ```
 
 ### Example : Filter by Language
 
   ```shell
-  python .\analyze_git_repo_loc.py [repository_path] --interval monthly -o ./out --lang C#,Python,text,Markdown
+  python -m analyze_git_repo_loc [repository_path] --interval monthly -o ./out --lang C#,Python,text,Markdown
   ```
 
 ### Example : Filter by Author
 
   ```shell
-  python .\analyze_git_repo_loc.py [repository_path] --interval monthly -o ./out --author-name [auther name] 
+  python -m analyze_git_repo_loc [repository_path] --interval monthly -o ./out --author-name [author name] 
   ```
 
 ### Example : Multi repository
 
   ```shell
-  python .\analyze_git_repo_loc.py [repository_path],[repository_path],[repository_path] --interval monthly -o ./out 
+  python -m analyze_git_repo_loc [repository_path],[repository_path],[repository_path] --interval monthly -o ./out 
   ```
 
 ### Example : Clear old cache files
 
   ```shell
-  python .\analyze_git_repo_loc.py [repository_path] --interval monthly -o ./out --clear_cache
+  python -m analyze_git_repo_loc [repository_path] --interval monthly -o ./out --clear_cache
   ```
 
 ### Help
 
   ```shell
-  python .\analyze_git_repo_loc.py --help
+  python -m analyze_git_repo_loc --help
   ```
 
   ```text
-  usage: analyze_git_repo_loc [-h] [-o OUTPUT] [-s START_DATE] [-e END_DATE] [-b BRANCH] 
-                            [--interval {daily,weekly,monthly}] [--lang LANG]
-                            [--author-name AUTHOR_NAME] [--clear_cache]
+  usage: analyze_git_repo_loc [-h] [-o OUTPUT] [--since SINCE] [--until UNTIL] [-b BRANCH]
+                            [--interval {daily,weekly,monthly}] [--lang LANG] [--author-name AUTHOR_NAME]        
+                            [--clear_cache]
                             repo_paths
 
   Analyze Git repositories and visualize code LOC.
@@ -112,18 +112,16 @@ Analyze Git repositories and visualize code LOC.
     -h, --help            show this help message and exit
     -o OUTPUT, --output OUTPUT
                           Output path
-    -s START_DATE, --start_date START_DATE
-                          Start Date yyyy-mm-dd
-    -e END_DATE, --end_date END_DATE
-                          End Date yyyy-mm-dd
+    --since SINCE         Start Date yyyy-mm-dd
+    --until UNTIL         End Date yyyy-mm-dd
     -b BRANCH, --branch BRANCH
                           Branch name (default: main)
     --interval {daily,weekly,monthly}
                           Interval (default: monthly)
-    --lang LANG           Count only the given space separated, case-insensitive languages L1,L2,L3, etc. Use 'cloc
-                          --show-lang' to see the list of recognized languages.
+    --lang LANG           Count only the given space separated, case-insensitive languages L1,L2,L3, etc. Use      
+                          'cloc --show-lang' to see the list of recognized languages.
     --author-name AUTHOR_NAME
-                        Author name to filter commits
+                          Author name to filter commits
     --clear_cache         If set, the cache will be cleared before executing the main function.
   ```
 
