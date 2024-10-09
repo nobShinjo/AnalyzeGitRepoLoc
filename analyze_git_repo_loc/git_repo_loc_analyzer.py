@@ -45,12 +45,15 @@ class GitRepoLOCAnalyzer:
     A class analyzing LOC for git repository.
     """
 
-    def __init__(self, repo_path: Path, cache_dir: Path, output_dir: Path):
+    def __init__(
+        self, repo_path: Path, branch_name: str, cache_dir: Path, output_dir: Path
+    ):
         """
         Initialize the Git repository Lines of Code (LOC) Analyzer.
 
         Args:
             repo_path (Path): The path to the git repository.
+            branch_name (str): The name of the branch to analyze.
             cache_dir (Path): The directory where intermediate results can be cached.
             output_dir (Path): The directory where final outputs will be saved.
         """
@@ -59,7 +62,8 @@ class GitRepoLOCAnalyzer:
         """ Git repository path """
         self._repo = self.init_repository()
         """ Git repository object """
-
+        self._branch_name = branch_name
+        """ Active branch name """
         # Make output directory.
         self._cache_path = self.make_output_dir(cache_dir / repo_path.name).resolve()
         """ Path to cache directory """
@@ -572,6 +576,8 @@ class GitRepoLOCAnalyzer:
             sum_data=sum_data,
             color_data="Language",
             interval=interval,
+            repo_name=self._repo_path.name,
+            branch_name=self._repo.active_branch.name,
         )
         language_trend_chart.write_html(output_path / "language_trend_chart.html")
 
@@ -580,6 +586,8 @@ class GitRepoLOCAnalyzer:
             sum_data=sum_data,
             color_data="Author",
             interval=interval,
+            repo_name=self._repo_path.name,
+            branch_name=self._repo.active_branch.name,
         )
         author_trend_chart.write_html(output_path / "author_trend_chart.html")
 
@@ -654,11 +662,12 @@ class GitRepoLOCAnalyzer:
             overlaying="y",
             side="right",
         )
+        chat_title = f"LOC trend by Language and Author - {self._repo_path.name} ({self._branch_name})"
         self._chart.update_layout(
             font_family="Open Sans",
             plot_bgcolor="white",
             title={
-                "text": "LOC trend by Language and Author",
+                "text": chat_title,
                 "x": 0.5,
                 "xanchor": "center",
                 "font_size": 20,

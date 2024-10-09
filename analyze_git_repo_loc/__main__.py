@@ -42,6 +42,7 @@ def main():
         try:
             analyzer = GitRepoLOCAnalyzer(
                 repo_path=repo_path,
+                branch_name=args.branch,
                 cache_dir=args.output / ".cache",
                 output_dir=args.output,
             )

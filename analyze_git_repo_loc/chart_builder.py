@@ -224,7 +224,7 @@ class ChartBuilder:
             self._fig.add_trace(trace, row=1, col=1, secondary_y=True)
         return self
 
-    def update_fig(self) -> ChartBuilderSelf:
+    def update_fig(self, repo_name: str, branch_name: str) -> ChartBuilderSelf:
         """
         Updates the axes and layout of the `_fig` attribute with a specific style.
 
@@ -232,6 +232,10 @@ class ChartBuilder:
         visibility of grid lines, color and width of lines, angle and format of ticks,
         as well as updating the layout of the figure to adjust background color, title,
         and legend styling.
+
+        Args:
+            repo_name (str): The name of the repository to be displayed in the chart title.
+            branch_name (str): The name of the branch to be displayed in the chart title.
 
         Returns:
             ChartBuilderSelf: The instance itself, enabling method chaining.
@@ -296,7 +300,7 @@ class ChartBuilder:
             font_family="Open Sans",
             plot_bgcolor="white",
             title={
-                "text": "LOC trend by Language",
+                "text": f"LOC trend by Language - {repo_name} ({branch_name})",
                 "x": 0.5,
                 "xanchor": "center",
                 "font_size": 20,
@@ -333,6 +337,8 @@ class ChartBuilder:
         sum_data: pd.DataFrame,
         color_data: str,
         interval: str,
+        repo_name: str,
+        branch_name: str,
     ) -> go.Figure:
         """
         Constructs the chart by setting data and creating figure and traces.
@@ -350,6 +356,8 @@ class ChartBuilder:
             color_data (str): The name of the column in the trend data frame that contains
                                 the color data for the area plot.
             interval (str): The interval to use for formatting the x-axis ticks.
+            repo_name (str): The name of the repository to be displayed in the chart title.
+            branch_name (str): The name of the branch to be displayed in the chart
         Returns:
             ChartBuilderSelf: The Plotly figure object configured with the trend and summary
                               traces, ready for display or further modification.
@@ -360,7 +368,7 @@ class ChartBuilder:
         self.create_trend_trace(color_data)
         self.create_sum_trace()
         self.create_diff_trace()
-        self.update_fig()
+        self.update_fig(repo_name, branch_name)
         self.update_xaxis_tickformat(interval)
         return self._fig
 
