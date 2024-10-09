@@ -89,7 +89,34 @@ def main():
 
     if len(args.repo_paths) > 1:
         # Combine all LOC data
-        combined_loc_data = pd.concat(all_loc_data)
+        console.print_h1("# Combine all LOC data.")
+        # add Repo column to each dataframe
+        for repo_index, df in enumerate(all_loc_data):
+            df["Repo"] = args.repo_paths[repo_index].name
+        combined_loc_data = pd.concat(all_loc_data, ignore_index=True)
+        combined_loc_data.reset_index(drop=True, inplace=True)
+
+        # Add new Code_repo* columns for each Repo and copy to Code column
+        for repo in combined_loc_data["Repo"].unique():
+            repo_col = f"Code_repo{repo[-1]}"
+            combined_loc_data[repo_col] = combined_loc_data.apply(
+                lambda row, repo=repo: row["code"] if row["Repo"] == repo else None,
+                axis=1,
+            )
+        # Drop the temporary Repo column
+        combined_loc_data.drop(columns=["code"], inplace=True)
+
+        # Sort the combined data by Language, Author, and Date
+        combined_loc_data.sort_values(by=["Language", "Author", "Date"], inplace=True)
+
+        # Forward fill the empty entries per repository
+        repos_columns = [
+            col for col in combined_loc_data.columns if col.startswith("Code_repo")
+        ]
+        combined_loc_data[repos_columns] = combined_loc_data[repos_columns].ffill()
+
+        # Sum the Code_repo* columns to create a Code column
+        combined_loc_data["code"] = combined_loc_data[repos_columns].sum(axis=1)
 
         # Create output directory for the combined data
         combined_output_dir = args.output / datetime.now().strftime("%Y%m%d%H%M%S")
