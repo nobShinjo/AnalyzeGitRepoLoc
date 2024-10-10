@@ -5,18 +5,13 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Python: 現在のファイル",
-            "type": "python",
+            "name": "Python デバッガー: モジュール",
+            "type": "debugpy",
             "request": "launch",
-            "program": "${file}",
+            "module": "analyze_git_repo_loc",
             "args": [
-                "..\\SoFiRA",
-                "-o=./out",
-                "-s=2023-01-01",
-                "-e=2023-12-31",
+                "-h"
             ],
-            "console": "integratedTerminal",
-            "justMyCode": true
-        },
+        }
     ]
 }
