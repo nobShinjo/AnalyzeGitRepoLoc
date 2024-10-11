@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from .git_repo_loc_analyzer import GitRepoLOCAnalyzer
+from analyze_git_repo_loc.git_repo_loc_analyzer import GitRepoLOCAnalyzer
 
 
 def parse_arguments(parser: argparse.ArgumentParser) -> argparse.Namespace:
@@ -29,17 +29,25 @@ def parse_arguments(parser: argparse.ArgumentParser) -> argparse.Namespace:
     # pylint: enable=line-too-long
     parser.add_argument(
         "repo_paths",
-        type=lambda s: [Path(item) for item in s.split(",")],
-        help="Comma-separated list of Git repository paths",
+        type=lambda s: [
+            (Path(item.split("#")[0]), item.split("#")[1] if "#" in item else "main")
+            for item in s.split(",")
+        ],
+        help=(
+            "A text file containing a list of repositories, "
+            "or a comma-separated list of Git repository paths or URLs,\n"
+            "optionally followed by a branch name separated with '#'.\n"
+            "Examples: /path/to/repo1#branch-name or"
+            "http://github.com/user/repo2.git#branch-name.\n"
+            "If no branch is specified, 'main' will be used as the default."
+        ),
     )
+
     parser.add_argument(
         "-o", "--output", type=Path, default="./out", help="Output path"
     )
     parser.add_argument("--since", type=str, default=None, help="Start Date yyyy-mm-dd")
     parser.add_argument("--until", type=str, default=None, help="End Date yyyy-mm-dd")
-    parser.add_argument(
-        "-b", "--branch", type=str, default="main", help="Branch name (default: main)"
-    )
     parser.add_argument(
         "--interval",
         choices=["daily", "weekly", "monthly"],
@@ -55,9 +63,9 @@ def parse_arguments(parser: argparse.ArgumentParser) -> argparse.Namespace:
     )
     parser.add_argument(
         "--author-name",
-        type=str,
+        type=lambda s: [item.strip() for item in s.split(",")],
         default=None,
-        help="Author name to filter commits",
+        help="Author name or comma-separated list of author names to filter commits",
     )
     parser.add_argument(
         "--clear_cache",
