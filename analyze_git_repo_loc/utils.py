@@ -9,6 +9,7 @@ Functions:
 
 import argparse
 from pathlib import Path
+from typing import Union
 
 import pandas as pd
 
@@ -81,6 +82,7 @@ def analyze_and_save_loc_data(
     output_path: Path,
     analyzer: GitRepoLOCAnalyzer,
     interval: str,
+    sub_title: str,
 ):
     """
     analyze_and_save_loc_data Process LOC data and save data and charts.
@@ -145,5 +147,6 @@ def analyze_and_save_loc_data(
         sum_data=trend_of_total_loc,
         output_path=output_path,
         interval=interval,
+        sub_title=sub_title,
     )
     analyzer.save_charts(output_path)

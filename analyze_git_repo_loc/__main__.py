@@ -61,19 +61,13 @@ def main():
                 sys.exit(1)
 
         # Analyze LOC against the git repository.
-        console.print_h1(f"# Analyze LOC against the git repository: {repo_path}")
-        loc_data = analyzer.analyze_git_repo_loc(
-            branch=args.branch,
-            since_str=args.since,
-            until_str=args.until,
-            interval=args.interval,
-            lang=args.lang,
-            author=args.author_name,
-        )
+        repository_name = GitRepoLOCAnalyzer.get_repository_name(repo_path)
+        console.print_h1(f"# Analyze LOC against the git repository: {repository_name}")
+        loc_data = analyzer.get_commit_analysis()
         all_loc_data.append(loc_data)
 
         # Create output directory for the repository
-        repo_output_dir = args.output / repo_path.name
+        repo_output_dir = args.output / repository_name
         repo_output_dir.mkdir(parents=True, exist_ok=True)
 
         # Forming dataframe type data.
@@ -85,6 +79,7 @@ def main():
             output_path=repo_output_dir,
             analyzer=analyzer,
             interval=args.interval,
+            sub_title=f"{repository_name} ({branch_name})",
         )
 
     if len(args.repo_paths) > 1:
@@ -119,7 +114,8 @@ def main():
         combined_loc_data["code"] = combined_loc_data[repos_columns].sum(axis=1)
 
         # Create output directory for the combined data
-        combined_output_dir = args.output / datetime.now().strftime("%Y%m%d%H%M%S")
+        current_date = datetime.now()
+        combined_output_dir = args.output / current_date.strftime("%Y%m%d%H%M%S")
         combined_output_dir.mkdir(parents=True, exist_ok=True)
 
         # Forming dataframe type data.
@@ -129,6 +125,7 @@ def main():
             output_path=combined_output_dir,
             analyzer=analyzer,
             interval=args.interval,
+            sub_title=f"All ({current_date.strftime('%Y.%m.%d - %H:%M:%S')})",
         )
 
         # Save the list of repositories

@@ -309,71 +309,7 @@ class GitRepoLOCAnalyzer:
             return False
 
     def run_cloc(self, commit: Commit, lang: list[str] = None) -> str:
-        """
-        Run the `cloc` to analyze LOC for a specific commit in a Git repository.
-
-        This function executes the `cloc` program with JSON output format, targeting
-        the provided commit. `cloc` is a command line tool used to count blank lines,
-        comment lines, and physical lines of source code in many programming languages.
-
-        Args:
-            commit (Commit): A GitPython `Commit` object representing the commit to analyze.
-            lang (list[str], optional): List of languages to search. Defaults to 'None'.
-
-        Returns:
-            str: A JSON-formatted string containing the `cloc` analysis result.
-
-        Remarks:
-            The command executed is equivalent to:
-                cloc --json --quiet --git --include-lang=L1, L2, L3 <commit hash>
-            and produces output in the following format:
-                {
-                    "Language": {
-                        "nfiles": count,
-                        "blank": count,
-                        "comment": count,
-                        "code": count
-                    },
-                    ...
-                }
-
-        Raises:
-            subprocess.CalledProcessError: If the `cloc` command fails to execute properly.
-            SystemExit: If there is an error during the execution of the `cloc` command.
-        """
-
-        # Generate argument options for the language list to be searched
-        if lang is None:
-            include_lang: str = ""
-        else:
-            include_lang: str = "--include-lang=" + ",".join(lang)
-
-        try:
-            # Run cloc.exe and analyze LOC
-            result = subprocess.run(
-                [
-                    str(self._cloc_path.resolve()),
-                    "--json",
-                    "--quiet",
-                    "--git",
-                    include_lang,
-                    commit.hexsha,
-                ],
-                check=True,
-                capture_output=True,
-                text=True,
-            )
-        except subprocess.CalledProcessError as e:
-            print(f"Error: {str(e)}", file=sys.stderr)
-            sys.exit(1)
-        except FileNotFoundError as e:
-            print(
-                f"Error: Not found cloc.exe. {str(e)}",
-                file=sys.stderr,
-            )
-            sys.exit(1)
-        return result.stdout
-
+        pass
     def analyze_git_repo_loc(
         self,
         branch: str,
@@ -383,158 +319,9 @@ class GitRepoLOCAnalyzer:
         lang: list[str] = None,
         author: str = None,
     ) -> pd.DataFrame:
-        """
-        analyze_git_repo_loc Analyze and extract LOC statistics from a Git repository.
-
-        Specified repository path, branch name, date range, and an optional interval, this function
-        extracts the counts of lines of code, including the number of files, comments, blank,
-        and lines of code per language. It runs `cloc` for each commit within the specified range
-        and compiles the results into a single DataFrame.
-
-        Args:
-            branch (str): The name of the branch to retrieve commits from.
-            since_str (str): The start date for filtering commits in 'YYYY-MM-DD' format.
-            until_str (str): The end date for filtering commits in 'YYYY-MM-DD' format.
-            interval (str, optional): The interval to use for filtering commits.
-                                      Defaults to 'daily'. ("hourly", "daily", "weekly", etc.).
-            lang (list[str], optional): List of languages to search. Defaults to 'None'
-            author (str, optional): The author name to filter commits. Defaults to 'None'.
-
-        Returns:
-            pd.DataFrame: A DataFrame containing the analysis results with columns for Commit hash,
-                        Date, Language, Number of files, Comments, Blank lines, and Code lines.
-
-        Raises:
-            ValueError: If the provided start or end date strings are not in the correct format
-                        or represent invalid dates.
-            SystemExit: If failing to parse the start or end date strings.
-        """
-
-        # Define start and end dates as datetime type.
-        try:
-            if since_str is None:
-                since: datetime = datetime.strptime("1970-01-01", "%Y-%m-%d")
-            else:
-                since: datetime = datetime.strptime(since_str, "%Y-%m-%d")
-
-            if until_str is None:
-                until: datetime = datetime.now()
-            else:
-                until: datetime = datetime.strptime(until_str, "%Y-%m-%d")
-        except ValueError as e:
-            print(f"Error: {str(e)}", file=sys.stderr)
-            sys.exit(1)
-
-        # Output analysis conditions.
-        analysis_config: list[str] = []
-        analysis_config.append(f"- repository:\t{self._repo_path.resolve()}")
-        analysis_config.append(f"- branch:\t{branch}")
-        analysis_config.append(f"- since:\t{since:%Y-%m-%d %H:%M:%S}")
-        analysis_config.append(f"- until:\t{until:%Y-%m-%d %H:%M:%S}")
-        analysis_config.append(f"- interval:\t{interval}")
-        analysis_config.append(f"- language:\t{lang if lang else 'All'}")
-        analysis_config.append(f"- author:\t{author if author else 'All'}")
-        print(f"{os.linesep}".join(analysis_config))
-
-        # Get a list of Commits filtered by the specified date and interval.
-        try:
-            commits = self.get_commits(
-                branch=branch,
-                since=since,
-                until=until,
-                interval=interval,
-                author=author,
-            )
-        except ValueError as e:
-            print(f"Error: {str(e)}", file=sys.stderr)
-            sys.exit(1)
-
-        if len(commits) == 0:
-            print("Error: Not found commits in the specified branch.", file=sys.stderr)
-            sys.exit(1)
-
-        cloc_df: pd.DataFrame = pd.DataFrame(
-            columns=[
-                "Commit",
-                "Date",
-                "Language",
-                "nFiles",
-                "comment",
-                "blank",
-                "code",
-            ],
-        )
-
-        # Change the directory to the repository path.
-        origin_path: Path = Path.cwd()
-        os.chdir(self._repo_path)
-
-        # Analyse LOC for each commit.
-        print("Analyse LOC for each commit.")
-        for commit, author_name in tqdm(commits, desc="Commits"):
-            # Check for cache files
-            cloc_result_file: Path = self._cache_path / f"{commit.hexsha}.json"
-            cloc_result: str = None
-
-            if cloc_result_file.exists():
-                with cloc_result_file.open(mode="r") as file:
-                    cloc_result = file.read()
-            else:
-                # Run "cloc.exe"
-                cloc_result = self.run_cloc(commit=commit, lang=lang)
-                with cloc_result_file.open(mode="w") as file:
-                    file.write(cloc_result)
-
-            df = self.convert_json_to_dataframe(cloc_result)
-
-            # Insert Commit and Date columns at the head of columns in the dataframe.
-            df.insert(0, "Commit", commit.hexsha)
-            committed_date = datetime.fromtimestamp(commit.committed_date)
-            df.insert(1, "Date", committed_date.strftime("%Y-%m-%d %H:%M:%S"))
-            df.insert(2, "Author", author_name)
-            # Concatenate data frames
-            cloc_df = pd.concat([cloc_df, df])
-
-        cloc_df.reset_index(inplace=True, drop=True)
-
-        # Return to original directory.
-        os.chdir(origin_path)
-
-        return cloc_df
 
     def convert_json_to_dataframe(self, json_str):
-        """
-        Convert a JSON string to a pandas DataFrame after removing specified keys.
-
-        This function takes a JSON string and decodes it into a dictionary, removes
-        the 'header' and 'SUM' elements if they exist, and then converts it into a
-        pandas DataFrame. The index of the DataFrame is reset, and the first column
-        is renamed to 'Language'.
-
-        Args:
-            json_str (str): A JSON string representation of the data to be converted
-                            into a DataFrame.
-
-        Returns:
-        df : pandas.DataFrame
-            The resulting pandas DataFrame with the 'header' and 'SUM' entries removed,
-            and the 'index' column renamed to 'Language'.
-        """
-        try:
-            # Decode json string to dict type
-            json_dict: dict = json.loads(json_str)
-            json_dict.pop("header", None)
-            json_dict.pop("SUM", None)
-
-            # Create a dataframe from the json dict type.
-            df = pd.DataFrame.from_dict(json_dict, orient="index")
-            df.reset_index(inplace=True)
-            df.rename(columns={"index": "Language"}, inplace=True)
-        except (json.JSONDecodeError, TypeError) as e:
-            print(f"Error: {str(e)}", file=sys.stderr)
-            return pd.DataFrame()
-
-        return df
+        pass
 
     def save_dataframe(self, data: pd.DataFrame, csv_file: Path) -> None:
         """
@@ -557,6 +344,7 @@ class GitRepoLOCAnalyzer:
         sum_data: pd.DataFrame,
         output_path: Path,
         interval: str,
+        sub_title: str,
     ):
         """
         Creates charts using the provided trend and summation data.
@@ -572,6 +360,7 @@ class GitRepoLOCAnalyzer:
             output_path (Path): The path to save the chart HTML file.
             interval (str): The interval to use for formatting the x-axis ticks.
                             Should be one of 'daily', 'weekly', or 'monthly'.
+            sub_title (str): The sub-title to include in the chart title.
         """
         language_trend_chart = self._chart_builder.build(
             trend_data=language_trend_data,
@@ -579,7 +368,7 @@ class GitRepoLOCAnalyzer:
             color_data="Language",
             interval=interval,
             repo_name=self._repo_path.name,
-            branch_name=self._repo.active_branch.name,
+            branch_name=self._branch_name,
         )
         language_trend_chart.write_html(output_path / "language_trend_chart.html")
 
@@ -589,7 +378,7 @@ class GitRepoLOCAnalyzer:
             color_data="Author",
             interval=interval,
             repo_name=self._repo_path.name,
-            branch_name=self._repo.active_branch.name,
+            branch_name=self._branch_name,
         )
         author_trend_chart.write_html(output_path / "author_trend_chart.html")
 
@@ -664,7 +453,7 @@ class GitRepoLOCAnalyzer:
             overlaying="y",
             side="right",
         )
-        chat_title = f"LOC trend by Language and Author - {self._repo_path.name} ({self._branch_name})"
+        chat_title = f"LOC trend by Language and Author - {sub_title}"
         self._chart.update_layout(
             font_family="Open Sans",
             plot_bgcolor="white",
