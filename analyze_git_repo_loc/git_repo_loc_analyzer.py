@@ -37,7 +37,9 @@ from git import Commit, InvalidGitRepositoryError, NoSuchPathError, Repo, exc
 from plotly.subplots import make_subplots
 from tqdm import tqdm
 
-from .chart_builder import ChartBuilder
+from analyze_git_repo_loc.chart_builder import ChartBuilder
+from analyze_git_repo_loc.language_comment import LanguageComment
+from analyze_git_repo_loc.language_extensions import LanguageExtensions
 
 
 class GitRepoLOCAnalyzer:

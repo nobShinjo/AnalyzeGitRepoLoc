@@ -12,9 +12,9 @@ from datetime import datetime
 import pandas as pd
 from colorama import Cursor, Fore, Style
 
-from .colored_console_printer import ColoredConsolePrinter
-from .git_repo_loc_analyzer import GitRepoLOCAnalyzer
-from .utils import analyze_and_save_loc_data, parse_arguments
+from analyze_git_repo_loc.colored_console_printer import ColoredConsolePrinter
+from analyze_git_repo_loc.git_repo_loc_analyzer import GitRepoLOCAnalyzer
+from analyze_git_repo_loc.utils import analyze_and_save_loc_data, parse_arguments
 
 
 def main():
