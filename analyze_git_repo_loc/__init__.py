@@ -11,6 +11,7 @@ from . import (
     chart_builder,
     colored_console_printer,
     git_repo_loc_analyzer,
+    language_comment,
     language_extensions,
     utils,
 )
