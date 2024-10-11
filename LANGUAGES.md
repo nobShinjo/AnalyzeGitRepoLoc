@@ -209,7 +209,7 @@
 |Pig Latin                  |(pig)|
 |PL/I                       |(pl1)|
 |PL/M                       |(lit, plm)|
-|PlantUML                   |(puml)|
+|PlantUML                   |(puml, pu, wsd, imul, plantuml)|
 |PO File                    |(po)|
 |Pony                       |(pony)|
 |PowerBuilder               |(pbt, sra, srf, srm, srs, sru, |srw)
