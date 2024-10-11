@@ -1,27 +1,5 @@
 """
-This module provides the GitRepoLOCAnalyzer class, which is used to analyze lines of code (LOC) in a Git repository.
-The class offers functionalities to initialize a Git repository, create output directories, find and verify the 'cloc' executable,
-retrieve commits, run 'cloc' for LOC analysis, and generate charts for visualizing LOC trends.
-Classes:
-    GitRepoLOCAnalyzer: A class for analyzing LOC in a Git repository.
-Functions:
-    __init__(self, repo_path: Path, cache_dir: Path, output_dir: Path):
-    init_repository(self) -> Repo:
-    make_output_dir(self, output_dir: Path) -> Path:
-    clear_cache_files(self):
-    find_cloc_path(self) -> Path:
-    verify_cloc_executable(self, executable_path: Path) -> None:
-    get_commits(self, branch: str, start_date: datetime, end_date: datetime, interval="daily", author: str = None) -> list[tuple[Commit, str]]:
-        Get a list of Commit objects.
-    branch_exists(self, branch: str) -> bool:
-    run_cloc(self, commit: Commit, lang: list[str] = None) -> str:
-    analyze_git_repo_loc(self, branch: str, start_date_str: str, end_date_str: str, interval: str = "daily", lang: list[str] = None, author: str = None) -> pd.DataFrame:
-        Analyze and extract LOC statistics from a Git repository.
-    convert_json_to_dataframe(self, json_str):
-    save_dataframe(self, data: pd.DataFrame, csv_file: Path) -> None:
-        Save dataframe type to csv file.
-    create_charts(self, language_trend_data: pd.DataFrame, author_trend_data: pd.DataFrame, sum_data: pd.DataFrame, output_path: Path, interval: str):
-    save_charts(self, output_path: Path) -> None:
+
 """
 
 import json
@@ -83,33 +61,7 @@ class GitRepoLOCAnalyzer:
         """ The final Plotly figure object that contains the combined area and line plot. """
 
     def init_repository(self) -> Repo:
-        """
-        Initializes and returns a Repo object if the repository is valid.
-
-        This method attempts to create a Repo object using the directory path
-        provided in `self.repo_path`. If the path does not represent a valid Git
-        repository or the path does not exist, it will print an error message to
-        stderr and re-raise the exception.
-
-        Returns:
-            Repo: A Repo object representing the Git repository at `self.repo_path`.
-
-        Raises:
-            InvalidGitRepositoryError: An error is raised if `self.repo_path` is
-                                       not a valid Git repository.
-            NoSuchPathError: An error is raised if `self.repo_path` does not exist.
-        """
-        try:
-            return Repo(self._repo_path)
-        except InvalidGitRepositoryError as e:
-            print(
-                f"InvalidGitRepositoryError: Not a git repository. {str(e)}",
-                file=sys.stderr,
-            )
-            raise
-        except NoSuchPathError as e:
-            print(f"NoSuchPathError: No such path. {str(e)}", file=sys.stderr)
-            raise
+        pass
 
     def make_output_dir(self, output_dir: Path) -> Path:
         """
@@ -152,79 +104,10 @@ class GitRepoLOCAnalyzer:
                     file.unlink()
 
     def find_cloc_path(self) -> Path:
-        """
-        Searches for the 'cloc.exe' executable in the system PATH and current working directory.
-
-        The function searches each directory in the PATH environment variable
-        for a file named 'cloc.exe'. If it is not found, the function then checks
-        the current working directory. If 'cloc.exe' is found and is an executable file,
-        its full path is returned.
-
-        Returns:
-            Path: The full path to the 'cloc.exe'.
-
-        Raises:
-            FileNotFoundError: If 'cloc.exe' is not found.
-
-        Usage example:
-            >>> cloc_path = find_cloc_path()
-            >>> print(cloc_path)
-            WindowsPath('C:/path/to/cloc.exe')
-            # this output can vary depending on the actual found path
-        """
-        cloc_exe_filename: str = "cloc.exe" if os.name == "nt" else "cloc"
-
-        # Find full path of 'cloc.exe' from 'PATH' environment variable.
-        for path in os.environ["PATH"].split(os.pathsep):
-            full_path = Path(path) / cloc_exe_filename
-            if full_path.is_file() and os.access(str(full_path), os.X_OK):
-                print(f"Path: {full_path}")
-                return full_path
-
-        # Find 'cloc.exe' from current directory.
-        current_dir = Path.cwd()
-        full_path = current_dir / cloc_exe_filename
-        if full_path.is_file() and os.access(str(full_path), os.X_OK):
-            print(f"Path: {full_path}")
-            return full_path
-
-        raise FileNotFoundError("Not found cloc.exe.")
+        pass
 
     def verify_cloc_executable(self, executable_path: Path) -> None:
-        """
-        Verifies that the 'cloc' executable is present at the specified path and can be run.
-
-        This function attempts to run `cloc --version` using the given cloc executable path.
-        If successful, it prints out the version of cloc. If the executable is not found,
-        an error message is printed and the program exits with status code 1.
-
-        Args:
-            executable_path (Path): The file system path to the cloc executable.
-
-        Returns:
-            None
-
-        Raises:
-            FileNotFoundError: If the cloc executable is not found at the given path.
-
-        Usage example:
-            >>> from pathlib import Path
-            >>> cloc_path = Path('/usr/bin/cloc')
-            >>> verify_cloc_executable(cloc_path)
-        """
-        try:
-            version_result = subprocess.run(
-                [
-                    str(executable_path.resolve()),
-                    "--version",
-                ],
-                check=True,
-                capture_output=True,
-                text=True,
-            )
-            print(f"- cloc.exe: Ver. {version_result.stdout}")
-        except subprocess.CalledProcessError as e:
-            raise RuntimeError(f"Error executing cloc: {e.stderr}") from e
+        pass
 
     def get_commits(
         self,
@@ -234,65 +117,9 @@ class GitRepoLOCAnalyzer:
         interval="daily",
         author: str = None,
     ) -> list[tuple[Commit, str]]:
-        """
-        get_commits Get a list of Commit object.
+        pass
 
-        This function retrieves a list of commits for a specified repository and branch.
-        It filters for a specified date range and interval.
-
-        Args:
-            branch (str): The name of the branch to retrieve commits from.
-            since (datetime): The start date for filtering commits.
-            until (datetime): The end date for filtering commits.
-            interval (str, optional): The interval to use for filtering commits.
-                                      Defaults to 'daily'. ("hourly", "daily", "weekly", etc.).
-            author (str, optional): The author name to filter commits. Defaults to 'None'.
-
-        Raises:
-            ValueError: If the provided `interval` is not one of 'daily', 'weekly', or 'monthly'.
-
-        Returns:
-            list[tuple[Commit, str]]: A list of tuples containing the Commit object and author name.
-        """
-
-        # Check if the branch exists
-        if not self.branch_exists(branch):
-            raise RuntimeError(f"Branch '{branch}' does not exist.")
-
-        # Set the timedelta object that defines the interval.
-        # NOTE: Approximate average length of month in days
-        intervals = {
-            "daily": timedelta(days=1),
-            "weekly": timedelta(weeks=1),
-            "monthly": timedelta(days=30),
-        }
-        delta = intervals.get(interval)
-        if not delta:
-            raise ValueError(
-                "Invalid interval. Choose 'daily', 'weekly', or 'monthly'."
-            )
-
-        # Start and end dates to filter
-        since_str = f'--since="{since.strftime("%Y-%m-%d")}"'
-        until_str = f'--until="{until.strftime("%Y-%m-%d")}"'
-
-        # Search and filter commits in order and add them to the list
-        # NOTE: Commit dates are ordered by newest to oldest, so filter by end date
-        last_added_commit_date = until
-        commits: list[tuple[Commit, str]] = []
-        for commit in self._repo.iter_commits(branch, since=since_str, until=until_str):
-            commit_date = datetime.fromtimestamp(commit.committed_date)
-            if commit_date <= last_added_commit_date - delta:
-                # commits.append((commit.hexsha, commit_date.strftime("%Y-%m-%d %H:%M:%S")))
-                author_name = commit.author.name
-                if author is None or author_name == author:
-                    commits.append((commit, author_name))
-                    last_added_commit_date = commit_date
-
-        print(f"-> {len(commits)} commits found.", end=os.linesep + os.linesep)
-        return commits
-
-    def branch_exists(self, branch: str) -> bool:
+    def is_branch_exists(self, repo_path: PathLike, branch_name: str) -> bool:
         """
         Check if a branch exists in the repository.
 
