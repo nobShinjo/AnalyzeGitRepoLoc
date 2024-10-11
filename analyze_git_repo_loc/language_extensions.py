@@ -12,7 +12,7 @@ class LanguageExtensions:
     Class to get the extensions for a given language.
     """
 
-    extensions = {
+    language_to_extensions: dict[str, list[str]] = {
         "ABAP": [".abap"],
         "ActionScript": [".as"],
         "Ada": [".ada", ".adb", ".ads", ".pad"],
@@ -100,7 +100,7 @@ class LanguageExtensions:
             ".cljx",
             ".hic",
             ".riemann.confi",
-        ],.
+        ],
         "ClojureC": [".cljc"],
         "ClojureScript": [".cljs"],
         "CMake": [".cmake", ".cmake.in", ".CMakeLists.txt"],
@@ -751,6 +751,13 @@ class LanguageExtensions:
     }
     """ dict: A dictionary of languages and their extensions. """
 
+    extension_to_language: dict[str, str] = {}
+    """ dict: A dictionary of extensions and their languages. """
+
+    for language, extstensions in language_to_extensions.items():
+        for extension in extstensions:
+            extension_to_language[extension] = language
+
     @classmethod
     def get_extensions(cls, language: str) -> list[str]:
         """
@@ -762,4 +769,17 @@ class LanguageExtensions:
         Returns:
             list[str]: A list of extensions for the given language.
         """
-        return cls.extensions.get(language, [])
+        return cls.language_to_extensions.get(language, [])
+
+    @classmethod
+    def get_language(cls, extension: str) -> str:
+        """
+        get_language Get the language for a given extension.
+
+        Args:
+            extension (str): The extension for which to get the language.
+
+        Returns:
+            str: The language for the given extension.
+        """
+        return cls.extension_to_language.get(extension, "")
