@@ -407,7 +407,7 @@ class LanguageExtensions:
         "Pig Latin": [".pig"],
         "PL/I": [".pl1"],
         "PL/M": [".lit", ".plm"],
-        "PlantUML": [".puml"],
+        "PlantUML": [".puml", ".pu", ".wsd", ".iuml", ".plantuml"],
         "PO File": [".po"],
         "Pony": [".pony"],
         "PowerBuilder": [".pbt", ".sra", ".srf", ".srm", ".srs", ".sru", ".sr"],
@@ -781,5 +781,6 @@ class LanguageExtensions:
 
         Returns:
             str: The language for the given extension.
+            If the language is unknown, "Unknown" is returned.
         """
-        return cls.extension_to_language.get(extension, "")
+        return cls.extension_to_language.get(extension, "Unknown")
