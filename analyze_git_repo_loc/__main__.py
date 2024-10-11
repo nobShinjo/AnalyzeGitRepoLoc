@@ -37,14 +37,18 @@ def main():
 
     all_loc_data = []
 
-    for repo_path in args.repo_paths:
+    for repo_path, branch_name in args.repo_paths:
         # Create GitRepoLOCAnalyzer
         try:
             analyzer = GitRepoLOCAnalyzer(
                 repo_path=repo_path,
-                branch_name=args.branch,
+                branch_name=branch_name,
                 cache_dir=args.output / ".cache",
                 output_dir=args.output,
+                since=args.since,
+                to=args.until,
+                authors=args.author_name,
+                languages=args.lang,
             )
         except FileNotFoundError as ex:
             print(f"Error: {str(ex)}", file=sys.stderr)
