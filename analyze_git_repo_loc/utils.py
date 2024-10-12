@@ -103,6 +103,9 @@ def parse_arguments(parser: argparse.ArgumentParser) -> argparse.Namespace:
 
 
 def handle_exception(ex: Exception) -> None:
+    """
+    Handle exceptions by printing the error message and exiting the program.
+    """
     print(f"Error: {str(ex)}", file=sys.stderr)
     sys.exit(1)
 
