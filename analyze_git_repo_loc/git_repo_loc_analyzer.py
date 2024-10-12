@@ -155,6 +155,8 @@ class GitRepoLOCAnalyzer:
         """
         stripped_line = line.strip()
         comment_syntax = LanguageComment.get_comment_syntax(language)
+        if not comment_syntax:
+            return not stripped_line
         return not stripped_line or any(
             stripped_line.startswith(syntax) for syntax in comment_syntax
         )
@@ -240,16 +242,20 @@ class GitRepoLOCAnalyzer:
                 if language == "Unknown":
                     continue
 
+                # Skip if the file is not in the specified language
+                if self._languages and language not in self._languages:
+                    continue
+
                 # Calculate add LOC, delete LOC, net LOC
-                # Calculate add LOC, delete LOC, net LOC
+                # NOTE: diff_parsed is a list of tuples (line_number, line)
                 nloc_added = sum(
                     1
-                    for diff in mod.diff_parsed.get("added", [])
+                    for _, diff in mod.diff_parsed.get("added", [])
                     if not self.is_comment_or_empty_line(diff, language)
                 )
                 nloc_removed = sum(
                     1
-                    for diff in mod.diff_parsed.get("removed", [])
+                    for _, diff in mod.diff_parsed.get("removed", [])
                     if not self.is_comment_or_empty_line(diff, language)
                 )
                 nloc = nloc_added - nloc_removed
