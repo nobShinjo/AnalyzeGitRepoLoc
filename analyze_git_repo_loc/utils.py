@@ -19,6 +19,31 @@ from analyze_git_repo_loc.colored_console_printer import ColoredConsolePrinter
 from analyze_git_repo_loc.git_repo_loc_analyzer import GitRepoLOCAnalyzer
 
 
+def parse_repos_paths(input_string: str) -> list[tuple[Path, str]]:
+    """
+    Parse repository paths and branches from a string or file.
+    """
+    path = Path(input_string)
+    if path.is_file():
+        try:
+            # If the input string is a file, read its contents
+            with open(path, "r", encoding="utf-8") as f:
+                lines = f.read().strip().splitlines()
+        except OSError as ex:
+            handle_exception(ex)
+    else:
+        # Otherwise, treat the string as a list of repo paths
+        lines = input_string.split(",")
+
+    return [
+        (
+            Path(item.split("#")[0].strip()),
+            item.split("#")[1].strip() if "#" in item else "main",
+        )
+        for item in lines
+    ]
+
+
 def parse_arguments(parser: argparse.ArgumentParser) -> argparse.Namespace:
     """
     parse_arguments Parse command line arguments.
@@ -33,10 +58,7 @@ def parse_arguments(parser: argparse.ArgumentParser) -> argparse.Namespace:
     # pylint: enable=line-too-long
     parser.add_argument(
         "repo_paths",
-        type=lambda s: [
-            (Path(item.split("#")[0]), item.split("#")[1] if "#" in item else "main")
-            for item in s.split(",")
-        ],
+        type=parse_repos_paths,
         help=(
             "A text file containing a list of repositories, "
             "or a comma-separated list of Git repository paths or URLs,\n"
@@ -173,9 +195,10 @@ def analyze_git_repositories(args: argparse.Namespace) -> list[pd.DataFrame]:
 
     # Analyze the LOC in the Git repositories
     loc_data_repositories: list[pd.DataFrame] = []
-    for repo_path, branch_name in tqdm(args.repo_paths):
+    pbar = tqdm(args.repo_paths, desc="Analyzing repositories")
+    for repo_path, branch_name in pbar:
         repository_name = GitRepoLOCAnalyzer.get_repository_name(repo_path)
-        console.print_h1(f"# Analysis of LOC in git repository: {repository_name}")
+        pbar.write(f"# Analysis of LOC in git repository: {repository_name}")
 
         # Create GitRepoLOCAnalyzer
         try:
