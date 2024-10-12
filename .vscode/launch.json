@@ -5,13 +5,29 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Python デバッガー: モジュール",
+            "name": "Python デバッガー: モジュール(--help)",
             "type": "debugpy",
             "request": "launch",
             "module": "analyze_git_repo_loc",
             "args": [
                 "-h"
             ],
+        },
+        {
+            "name": "Python: モジュールをデバッグ",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "analyze_git_repo_loc",
+            "args": [
+                "-o",
+                ".\\out",
+                "--interval",
+                "weekly",
+                "--lang",
+                "C#,Python,Markdown,txt",
+                ".\\Scripts\\repo_list.txt"
+            ],
+            "console": "integratedTerminal"
         }
     ]
 }
