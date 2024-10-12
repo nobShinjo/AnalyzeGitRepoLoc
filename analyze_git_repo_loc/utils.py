@@ -176,7 +176,26 @@ def analyze_trends(
         pd.DataFrame: A DataFrame with aggregated trend data, including cumulative sum ('SUM'),
                       difference ('Diff'), and mean ('Mean') of 'NLOC' for each group.
     """
-    trends_data = loc_data.groupby([category_column, interval]).sum().reset_index()
+    aggregate_functions = {
+        "Datetime": "min",
+        "Repository": "first",
+        "Branch": "first",
+        "Commit_hash": "first",
+        "Author": "first",
+        "Language": "first",
+        "NLOC_Added": "sum",
+        "NLOC_Deleted": "sum",
+        "NLOC": "sum",
+    }
+    # Remove the category column from the aggregate functions.
+    # It will be used as the index in the groupby operation.
+    aggregate_functions.pop(category_column, None)
+    trends_data = (
+        loc_data.groupby([interval, category_column])
+        .agg(aggregate_functions)
+        .reset_index()
+    )
+    trends_data.drop(columns=["Datetime", "Commit_hash"], inplace=True)
     trends_data["SUM"] = trends_data.groupby(category_column)["NLOC"].cumsum()
     trends_data["Diff"] = trends_data.groupby(category_column)["NLOC"].diff()
     trends_data["Mean"] = trends_data.groupby(category_column)["NLOC"].transform("mean")

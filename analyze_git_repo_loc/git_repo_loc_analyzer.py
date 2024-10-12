@@ -186,8 +186,8 @@ class GitRepoLOCAnalyzer:
         - Author: The author of the commit.
         - Language: The programming language of the modified file.
         - NLOC_Added: The number of net lines of code added.
-        - NLOC_Removed: The number of net lines of code removed.
-        - NLOC: The net lines of code (NLOC_Added - NLOC_Removed).
+        - NLOC_Deleted: The number of net lines of code deleted.
+        - NLOC: The net lines of code (NLOC_Added - NLOC_Deleted).
 
         Returns:
             pd.DataFrame: A DataFrame containing the analyzed commit data.
@@ -256,12 +256,12 @@ class GitRepoLOCAnalyzer:
                     for _, diff in mod.diff_parsed.get("added", [])
                     if not self.is_comment_or_empty_line(diff, language)
                 )
-                nloc_removed = sum(
+                nloc_deleted = sum(
                     1
-                    for _, diff in mod.diff_parsed.get("removed", [])
+                    for _, diff in mod.diff_parsed.get("deleted", [])
                     if not self.is_comment_or_empty_line(diff, language)
                 )
-                nloc = nloc_added - nloc_removed
+                nloc = nloc_added - nloc_deleted
 
                 commit_data_list.append(
                     {
@@ -272,7 +272,7 @@ class GitRepoLOCAnalyzer:
                         "Author": commit_author,
                         "Language": language,
                         "NLOC_Added": nloc_added,
-                        "NLOC_Removed": nloc_removed,
+                        "NLOC_Deleted": nloc_deleted,
                         "NLOC": nloc,
                     }
                 )
@@ -287,7 +287,7 @@ class GitRepoLOCAnalyzer:
                 "Author",
                 "Language",
                 "NLOC_Added",
-                "NLOC_Removed",
+                "NLOC_Deleted",
                 "NLOC",
             ],
         )
@@ -299,9 +299,9 @@ class GitRepoLOCAnalyzer:
         commit_data["Author"] = commit_data["Author"].astype("string")
         commit_data["Language"] = commit_data["Language"].astype("string")
         commit_data["NLOC_Added"] = commit_data["NLOC_Added"].astype("int")
-        commit_data["NLOC_Removed"] = commit_data["NLOC_Removed"].astype("int")
+        commit_data["NLOC_Deleted"] = commit_data["NLOC_Deleted"].astype("int")
         commit_data["NLOC"] = commit_data["NLOC"].astype("int")
-
+        self._commit_data = commit_data
         return commit_data
 
     def save_cache(self) -> None:

@@ -141,8 +141,8 @@ def main() -> None:
 
             # Summary data
             summary_data = loc_data[
-                ["Datetime", "SUM", "NLOC_Added", "NLOC_Removed", "Diff", "Mean"]
-            ].rename(columns={"NLOC_Added": "Added", "NLOC_Removed": "Removed"})
+                [time_interval, "SUM", "NLOC_Added", "NLOC_Deleted", "Diff", "Mean"]
+            ].rename(columns={"NLOC_Added": "Added", "NLOC_Deleted": "Deleted"})
 
             # 1. Stacked area trend chart of code volume by programming language per repository,
             language_trend_data = loc_data.pivot_table(
@@ -167,8 +167,8 @@ def main() -> None:
             branch_name = next(iter(loc_data["Branch"].unique()), "Unknown")
             # Summary data
             summary_data = loc_data[
-                ["Datetime", "SUM", "NLOC_Added", "NLOC_Removed", "Diff", "Mean"]
-            ].rename(columns={"NLOC_Added": "Added", "NLOC_Removed": "Removed"})
+                ["Datetime", "SUM", "NLOC_Added", "NLOC_Deleted", "Diff", "Mean"]
+            ].rename(columns={"NLOC_Added": "Added", "NLOC_Deleted": "Deleted"})
 
             # 2. Stacked area trend chart by author per repository
             author_trend_data = loc_data.pivot_table(
@@ -190,8 +190,8 @@ def main() -> None:
         index=time_interval, columns="Repository", values="SUM", aggfunc="sum"
     ).reset_index()
     summary_data = repository_analysis[
-        ["Datetime", "SUM", "NLOC_Added", "NLOC_Removed", "Diff", "Mean"]
-    ].rename(columns={"NLOC_Added": "Added", "NLOC_Removed": "Removed"})
+        ["Datetime", "SUM", "NLOC_Added", "NLOC_Deleted", "Diff", "Mean"]
+    ].rename(columns={"NLOC_Added": "Added", "NLOC_Deleted": "Deleted"})
 
     repository_trend_chart = chart_builder.build(
         trend_data=repository_trend_data,
