@@ -6,6 +6,8 @@ Methods:
         Get the extensions for a given language.
 """
 
+from typing import Union
+
 
 class LanguageExtensions:
     """
@@ -754,33 +756,85 @@ class LanguageExtensions:
     extension_to_language: dict[str, str] = {}
     """ dict: A dictionary of extensions and their languages. """
 
-    for language, extstensions in language_to_extensions.items():
-        for extension in extstensions:
-            extension_to_language[extension] = language
+    sorted_extensions: list[str] = []
+    """ list: A list of extensions sorted by length in descending order. 
+        Remark: This is used to find the longest extension that matches a filename.
+    """
+
+    is_initialized: bool = False
+    """ bool: A flag to check if the extension_to_language dictionary is initialized. """
 
     @classmethod
-    def get_extensions(cls, language: str) -> list[str]:
+    def generate_extension_to_language(cls) -> dict[str, str]:
+        """
+        Generate the extension_to_language dictionary.
+        """
+        extension_to_language = {}
+        for language, extstensions in cls.language_to_extensions.items():
+            for extension in extstensions:
+                extension_to_language[extension] = language
+        return extension_to_language
+
+    @classmethod
+    def initialize_extension_to_language(cls) -> None:
+        """
+        Initialize the extension_to_language dictionary.
+        """
+        if cls.is_initialized:
+            return
+        cls.extension_to_language = cls.generate_extension_to_language()
+        cls.sorted_extensions = sorted(
+            cls.extension_to_language.keys(), key=len, reverse=True
+        )
+        cls.is_initialized = True
+
+    @classmethod
+    def get_extensions(cls, language: Union[list[str], str]) -> list[str]:
         """
         get_extensions Get the extensions for a given language.
 
         Args:
-            language (str): The language for which to get the extensions.
+            language (Union[list[str], str]): The language for which to get the extensions.
 
         Returns:
             list[str]: A list of extensions for the given language.
         """
+        if isinstance(language, list):
+            return [
+                ext
+                for lang in language
+                for ext in cls.language_to_extensions.get(lang, [])
+            ]
         return cls.language_to_extensions.get(language, [])
 
     @classmethod
-    def get_language(cls, extension: str) -> str:
+    def get_extension(cls, filename: str) -> str:
+        """
+        Get the extension for a given filename, considering multiple dots.
+
+        Args:
+            filename (str): The filename for which to get the extension.
+
+        Returns:
+            str: The extension for the given filename.
+        """
+        for ext in cls.sorted_extensions:
+            if filename.endswith(ext):
+                return ext
+        return ""
+
+    @classmethod
+    def get_language(cls, filename: str) -> str:
         """
         get_language Get the language for a given extension.
 
         Args:
-            extension (str): The extension for which to get the language.
+            filename (str): The filename for which to get the language.
 
         Returns:
             str: The language for the given extension.
             If the language is unknown, "Unknown" is returned.
         """
-        return cls.extension_to_language.get(extension, "Unknown")
+        if not cls.is_initialized:
+            cls.initialize_extension_to_language()
+        return cls.extension_to_language.get(cls.get_extension(filename), "Unknown")
