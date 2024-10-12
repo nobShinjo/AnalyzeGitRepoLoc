@@ -317,7 +317,7 @@ class ChartBuilder:
             font_family="Open Sans",
             plot_bgcolor="white",
             title={
-                "text": f"LOC trend by Language - {sub_title})",
+                "text": f"LOC trend by Language - {sub_title}",
                 "x": 0.5,
                 "xanchor": "center",
                 "font_size": 20,
