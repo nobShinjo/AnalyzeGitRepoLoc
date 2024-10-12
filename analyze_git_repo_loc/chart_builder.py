@@ -113,9 +113,7 @@ class ChartBuilder:
         )
         return self
 
-    def create_trend_trace(
-        self, xaxis_column: str, color_data: str
-    ) -> ChartBuilderSelf:
+    def create_trend_trace(self, xaxis_column: str) -> ChartBuilderSelf:
         """
         Generates a trend trace from the trend data and appends it to the chart figure.
 
@@ -130,8 +128,6 @@ class ChartBuilder:
         Args:
             xaxis_column (str): The name of the column in the trend data frame that contains
                                 the x-axis data for the area plot.
-            color_data (str): The name of the column in the trend data frame that contains
-                              the color data for the area plot.
 
         Returns:
             ChartBuilderSelf: The instance of the chart builder with the new trend trace
@@ -157,7 +153,7 @@ class ChartBuilder:
         fig_lang = px.area(
             data_frame=self._trend_data,
             x=xaxis_column,
-            color=color_data,
+            y=self._trend_data.columns[1:],
             line_shape=None,
         )
         fig_lang_traces = []
@@ -352,7 +348,6 @@ class ChartBuilder:
         self,
         trend_data: pd.DataFrame,
         summary_data: pd.DataFrame,
-        color_data: str,
         interval: str,
         sub_title: str,
     ) -> go.Figure:
@@ -369,8 +364,6 @@ class ChartBuilder:
                                        trend trace creation.
             summary_data (pd.DataFrame): A pandas DataFrame containing the data to be used for
                                      summary trace creation.
-            color_data (str): The name of the column in the trend data frame that contains
-                                the color data for the area plot.
             interval (str): The interval to use for formatting the x-axis ticks.
             sub_title (str): The subtitle to be displayed in the chart title.
         Returns:
@@ -380,7 +373,7 @@ class ChartBuilder:
         self.set_trend_data(trend_data)
         self.set_summary_data(summary_data)
         self.create_fig()
-        self.create_trend_trace(xaxis_column=interval, color_data=color_data)
+        self.create_trend_trace(xaxis_column=interval)
         self.create_sum_trace(xaxis_column=interval)
         self.create_diff_trace(xaxis_column=interval)
         self.update_fig(sub_title)
