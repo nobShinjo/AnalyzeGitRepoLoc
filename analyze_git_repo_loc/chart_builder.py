@@ -36,9 +36,9 @@ class ChartBuilder:
         objects containing chart data, while _fig is intended to hold a Plotly figure object.
         """
         self._trend_data: pd.DataFrame
-        """ A DataFrame containing the trend data of LOC by language. """
-        self._sum_data: pd.DataFrame
-        """ A DataFrame containing the summarized trend data of total LOC. """
+        """ A DataFrame containing the trend data of LOC. """
+        self._summary_data: pd.DataFrame
+        """ A DataFrame containing the summary data of LOC and the difference of LOC. """
         self._fig: go.Figure = None
         """ The final Plotly figure object that contains the combined area and line plot. """
 
@@ -62,7 +62,7 @@ class ChartBuilder:
         self._trend_data = trend_data
         return self
 
-    def set_sum_data(self, sum_data: pd.DataFrame) -> ChartBuilderSelf:
+    def set_summary_data(self, summary_data: pd.DataFrame) -> ChartBuilderSelf:
         """
         Sets the summary data for the chart builder.
 
@@ -70,8 +70,7 @@ class ChartBuilder:
         which is likely used for representing aggregate or summary statistics in a chart.
 
         Args:
-            sum_data (pd.DataFrame): A data frame containing summary statistics or aggregated
-                                     data to be used in the chart.
+            summary_data (pd.DataFrame): A DataFrame containing the summary data.
 
         Returns:
             ChartBuilderSelf: The instance of the chart builder. This allows for chaining
@@ -82,7 +81,7 @@ class ChartBuilder:
         chart_builder = (
             ChartBuilder()
             .set_trend_data(trend_frame)
-            .set_sum_data(summary_frame)
+            .set_summary_data(summary_frame)
             ...
         )
         ```
@@ -90,7 +89,7 @@ class ChartBuilder:
         By enabling this fluid interface pattern, the chart builder can progressively be
         configured with different data components for a final visualization.
         """
-        self._sum_data = sum_data
+        self._summary_data = summary_data
         return self
 
     def create_fig(self) -> ChartBuilderSelf:
@@ -193,7 +192,7 @@ class ChartBuilder:
         traces to it.
         """
         # Line plots of total LOC trend
-        fig_sum = px.line(data_frame=self._sum_data, y="SUM", markers=True)
+        fig_sum = px.line(data_frame=self._summary_data, y="SUM", markers=True)
         for trace in fig_sum["data"]:
             trace["showlegend"] = False
             trace["name"] = "SUM"
@@ -215,7 +214,7 @@ class ChartBuilder:
         Returns:
             self (ChartBuilder): Returns the instance itself for method chaining purposes.
         """
-        fig_diff = px.line(data_frame=self._sum_data, y="Diff", markers=True)
+        fig_diff = px.line(data_frame=self._summary_data, y="Diff", markers=True)
         for trace in fig_diff["data"]:
             trace["showlegend"] = False
             trace["name"] = "Diff"
@@ -224,7 +223,7 @@ class ChartBuilder:
             self._fig.add_trace(trace, row=1, col=1, secondary_y=True)
         return self
 
-    def update_fig(self, repo_name: str, branch_name: str) -> ChartBuilderSelf:
+    def update_fig(self, sub_title: str) -> ChartBuilderSelf:
         """
         Updates the axes and layout of the `_fig` attribute with a specific style.
 
@@ -234,8 +233,7 @@ class ChartBuilder:
         and legend styling.
 
         Args:
-            repo_name (str): The name of the repository to be displayed in the chart title.
-            branch_name (str): The name of the branch to be displayed in the chart title.
+            sub_title (str): The subtitle to be displayed in the chart title.
 
         Returns:
             ChartBuilderSelf: The instance itself, enabling method chaining.
@@ -300,7 +298,7 @@ class ChartBuilder:
             font_family="Open Sans",
             plot_bgcolor="white",
             title={
-                "text": f"LOC trend by Language - {repo_name} ({branch_name})",
+                "text": f"LOC trend by Language - {sub_title})",
                 "x": 0.5,
                 "xanchor": "center",
                 "font_size": 20,
@@ -334,11 +332,10 @@ class ChartBuilder:
     def build(
         self,
         trend_data: pd.DataFrame,
-        sum_data: pd.DataFrame,
+        summary_data: pd.DataFrame,
         color_data: str,
         interval: str,
-        repo_name: str,
-        branch_name: str,
+        sub_title: str,
     ) -> go.Figure:
         """
         Constructs the chart by setting data and creating figure and traces.
@@ -351,24 +348,23 @@ class ChartBuilder:
         Parameters:
             trend_data (pd.DataFrame): A pandas DataFrame containing the data to be used for
                                        trend trace creation.
-            sum_data (pd.DataFrame): A pandas DataFrame containing the data to be used for
+            summary_data (pd.DataFrame): A pandas DataFrame containing the data to be used for
                                      summary trace creation.
             color_data (str): The name of the column in the trend data frame that contains
                                 the color data for the area plot.
             interval (str): The interval to use for formatting the x-axis ticks.
-            repo_name (str): The name of the repository to be displayed in the chart title.
-            branch_name (str): The name of the branch to be displayed in the chart
+            sub_title (str): The subtitle to be displayed in the chart title.
         Returns:
             ChartBuilderSelf: The Plotly figure object configured with the trend and summary
                               traces, ready for display or further modification.
         """
         self.set_trend_data(trend_data)
-        self.set_sum_data(sum_data)
+        self.set_summary_data(summary_data)
         self.create_fig()
         self.create_trend_trace(color_data)
         self.create_sum_trace()
         self.create_diff_trace()
-        self.update_fig(repo_name, branch_name)
+        self.update_fig(sub_title)
         self.update_xaxis_tickformat(interval)
         return self._fig
 

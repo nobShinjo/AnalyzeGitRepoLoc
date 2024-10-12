@@ -8,16 +8,25 @@ import argparse
 import os
 import sys
 from datetime import datetime
+from pathlib import Path
 
 import pandas as pd
 from colorama import Cursor, Fore, Style
+from tqdm import tqdm
 
+from analyze_git_repo_loc.chart_builder import ChartBuilder
 from analyze_git_repo_loc.colored_console_printer import ColoredConsolePrinter
-from analyze_git_repo_loc.git_repo_loc_analyzer import GitRepoLOCAnalyzer
-from analyze_git_repo_loc.utils import analyze_and_save_loc_data, parse_arguments
+from analyze_git_repo_loc.utils import (
+    analyze_git_repositories,
+    analyze_trends,
+    get_time_interval_and_period,
+    handle_exception,
+    parse_arguments,
+    save_repository_branch_info,
+)
 
 
-def main():
+def main() -> None:
     """
     main function to execute the program.
     """
@@ -35,106 +44,163 @@ def main():
     console.print_h1(f"# Start {parser.prog}.")
     print(Style.DIM + f"- {parser.description}", end=os.linesep + os.linesep)
 
-    all_loc_data = []
+    # Analyze the LOC in the Git repositories
+    loc_data_repositories = analyze_git_repositories(args)
 
-    for repo_path, branch_name in args.repo_paths:
-        # Create GitRepoLOCAnalyzer
-        try:
-            analyzer = GitRepoLOCAnalyzer(
-                repo_path=repo_path,
-                branch_name=branch_name,
-                cache_dir=args.output / ".cache",
-                output_dir=args.output,
-                since=args.since,
-                to=args.until,
-                authors=args.author_name,
-                languages=args.lang,
+    # Convert analyzed data for visualization
+    # 1. Stacked area trend chart of code volume by programming language per repository,
+    #    bar graph of added/deleted code volume, and line graph of average code volume
+    # 2. Stacked area trend chart by author per repository
+    # 3. Stacked trend chart of code volume per repository, bar graph of added/deleted code volume,
+    #    and line graph of average code volume
+    # 4. Aggregate each data daily, weekly, and monthly
+    console.print_h1("# Forming dataframe type data.")
+    # Dataframe declaration
+    language_analysis = pd.DataFrame()
+    author_analysis = pd.DataFrame()
+    repository_analysis = pd.DataFrame()
+    time_interval, time_period = get_time_interval_and_period(args.interval)
+    for loc_data in tqdm(loc_data_repositories, desc="Forming dataframe"):
+        if "Datetime" not in loc_data.columns:
+            console.print_colored(
+                "Error: 'Datetime' column is not found in the dataframe.", Fore.RED
             )
-        except FileNotFoundError as ex:
-            print(f"Error: {str(ex)}", file=sys.stderr)
             sys.exit(1)
-
-        # Remove cache files
-        if args.clear_cache:
-            try:
-                console.print_h1("# Remove cache files.")
-                analyzer.clear_cache_files()
-                console.print_ok(up=2, forward=50)
-            except FileNotFoundError as ex:
-                print(f"Error: {str(ex)}", file=sys.stderr)
-                sys.exit(1)
-
-        # Analyze LOC against the git repository.
-        repository_name = GitRepoLOCAnalyzer.get_repository_name(repo_path)
-        console.print_h1(f"# Analyze LOC against the git repository: {repository_name}")
-        loc_data = analyzer.get_commit_analysis()
-        all_loc_data.append(loc_data)
-
+        loc_data[time_interval] = (
+            loc_data["Datetime"].dt.to_period(time_period).dt.to_timestamp()
+        )
         # Create output directory for the repository
-        repo_output_dir = args.output / repository_name
-        repo_output_dir.mkdir(parents=True, exist_ok=True)
-
-        # Forming dataframe type data.
-        console.print_h1("# Forming dataframe type data.")
-
-        # Combine processing into one consistent step to reduce duplication.
-        analyze_and_save_loc_data(
-            loc_data=loc_data,
-            output_path=repo_output_dir,
-            analyzer=analyzer,
-            interval=args.interval,
-            sub_title=f"{repository_name} ({branch_name})",
-        )
-
-    if len(args.repo_paths) > 1:
-        # Combine all LOC data
-        console.print_h1("# Combine all LOC data.")
-        # add Repo column to each dataframe
-        for repo_index, df in enumerate(all_loc_data):
-            df["Repo"] = args.repo_paths[repo_index].name
-        combined_loc_data = pd.concat(all_loc_data, ignore_index=True)
-        combined_loc_data.reset_index(drop=True, inplace=True)
-
-        # Add new Code_repo* columns for each Repo and copy to Code column
-        for repo in combined_loc_data["Repo"].unique():
-            repo_col = f"Code_repo{repo[-1]}"
-            combined_loc_data[repo_col] = combined_loc_data.apply(
-                lambda row, repo=repo: row["code"] if row["Repo"] == repo else None,
-                axis=1,
+        if "Repository" not in loc_data.columns:
+            console.print_colored(
+                "Error: 'Repository' column is not found in the dataframe.", Fore.RED
             )
-        # Drop the temporary Repo column
-        combined_loc_data.drop(columns=["code"], inplace=True)
+            sys.exit(1)
+        repository_name = next(iter(loc_data["Repository"].unique()), "Unknown")
+        output_dir_for_repo: Path = Path(args.output) / repository_name
+        try:
+            output_dir_for_repo.mkdir(parents=True, exist_ok=True)
+        except OSError as ex:
+            handle_exception(ex)
 
-        # Sort the combined data by Language, Author, and Date
-        combined_loc_data.sort_values(by=["Language", "Author", "Date"], inplace=True)
-
-        # Forward fill the empty entries per repository
-        repos_columns = [
-            col for col in combined_loc_data.columns if col.startswith("Code_repo")
-        ]
-        combined_loc_data[repos_columns] = combined_loc_data[repos_columns].ffill()
-
-        # Sum the Code_repo* columns to create a Code column
-        combined_loc_data["code"] = combined_loc_data[repos_columns].sum(axis=1)
-
-        # Create output directory for the combined data
-        current_date = datetime.now()
-        combined_output_dir = args.output / current_date.strftime("%Y%m%d%H%M%S")
-        combined_output_dir.mkdir(parents=True, exist_ok=True)
-
-        # Forming dataframe type data.
-        console.print_h1("# Forming dataframe type data.")
-        analyze_and_save_loc_data(
-            loc_data=combined_loc_data,
-            output_path=combined_output_dir,
-            analyzer=analyzer,
-            interval=args.interval,
-            sub_title=f"All ({current_date.strftime('%Y.%m.%d - %H:%M:%S')})",
+        # 1. Stacked area trend chart of code volume by programming language per repository,
+        #    bar graph of added/deleted code volume, and line graph of average code volume
+        language_trends = analyze_trends(
+            category_column="Language", interval=time_interval, loc_data=loc_data
+        )
+        language_trends.to_csv(output_dir_for_repo / "language_trends.csv", index=False)
+        language_analysis = pd.concat(
+            [language_analysis, language_trends], ignore_index=True
         )
 
-        # Save the list of repositories
-        with open(combined_output_dir / "repo_list.txt", "w", encoding="utf-8") as f:
-            f.write("\n".join([str(repo) for repo in args.repo_paths]))
+        # 2. Stacked area trend chart by author per repository
+        author_trends = analyze_trends(
+            category_column="Author", interval=time_interval, loc_data=loc_data
+        )
+        author_trends.to_csv(output_dir_for_repo / "author_trends.csv", index=False)
+        author_analysis = pd.concat([author_analysis, author_trends], ignore_index=True)
+
+        # 3. Stacked trend chart of code volume per repository,
+        #    bar graph of added/deleted code volume, and line graph of average code volume
+        repository_trends = analyze_trends(
+            category_column="Repository", interval=time_interval, loc_data=loc_data
+        )
+        repository_analysis = pd.concat(
+            [repository_analysis, repository_trends], ignore_index=True
+        )
+
+    # Save the analyzed data
+    console.print_h1("# Save the analyzed data.")
+    current_date = datetime.now()
+    output_dir = Path(args.output) / current_date.strftime("%Y%m%d%H%M%S")
+    try:
+        output_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as ex:
+        handle_exception(ex)
+    language_analysis.to_csv(output_dir / "language_analysis.csv", index=False)
+    author_analysis.to_csv(output_dir / "author_analysis.csv", index=False)
+    repository_analysis.to_csv(output_dir / "repository_analysis.csv", index=False)
+    # Save the list of repositories and branch name
+    save_repository_branch_info(args.repo_paths, output_dir / "repo_list.txt")
+
+    # Generate charts
+    console.print_h1("# Generate charts.")
+    # 1. Stacked area trend chart of code volume by programming language per repository,
+    #    bar graph of added/deleted code volume, and line graph of average code volume
+    # 2. Stacked area trend chart by author per repository
+    # 3. Stacked trend chart of code volume per repository,
+    #    bar graph of added/deleted code volume, and line graph of average code volume
+    # 4. Aggregate each data daily, weekly, and monthly
+
+    # Initialize ChartBuilder
+    chart_builder: ChartBuilder = ChartBuilder()
+    # chart: go.Figure = None
+    if not language_analysis.empty:
+        for repository in language_analysis["Repository"].unique():
+            loc_data = language_analysis[language_analysis["Repository"] == repository]
+            branch_name = next(iter(loc_data["Branch"].unique()), "Unknown")
+
+            # Summary data
+            summary_data = loc_data[
+                ["Datetime", "SUM", "NLOC_Added", "NLOC_Removed", "Diff", "Mean"]
+            ].rename(columns={"NLOC_Added": "Added", "NLOC_Removed": "Removed"})
+
+            # 1. Stacked area trend chart of code volume by programming language per repository,
+            language_trend_data = loc_data.pivot_table(
+                index=time_interval, columns="Language", values="SUM", aggfunc="sum"
+            ).reset_index()
+
+            language_trend_chart = chart_builder.build(
+                trend_data=language_trend_data,
+                summary_data=summary_data,
+                color_data="Language",
+                interval=time_interval,
+                sub_title=f"{repository} ({branch_name})",
+            )
+            chart_output_dir = Path(args.output) / repository
+            language_trend_chart.write_html(
+                chart_output_dir / "language_trend_chart.html"
+            )
+
+    if not author_analysis.empty:
+        for repository in author_analysis["Repository"].unique():
+            loc_data = author_analysis[author_analysis["Repository"] == repository]
+            branch_name = next(iter(loc_data["Branch"].unique()), "Unknown")
+            # Summary data
+            summary_data = loc_data[
+                ["Datetime", "SUM", "NLOC_Added", "NLOC_Removed", "Diff", "Mean"]
+            ].rename(columns={"NLOC_Added": "Added", "NLOC_Removed": "Removed"})
+
+            # 2. Stacked area trend chart by author per repository
+            author_trend_data = loc_data.pivot_table(
+                index=time_interval, columns="Author", values="SUM", aggfunc="sum"
+            ).reset_index()
+
+            author_trend_chart = chart_builder.build(
+                trend_data=author_trend_data,
+                summary_data=summary_data,
+                color_data="Author",
+                interval=time_interval,
+                sub_title=f"{repository} ({branch_name})",
+            )
+            chart_output_dir = Path(args.output) / repository
+            author_trend_chart.write_html(chart_output_dir / "author_trend_chart.html")
+
+    # 3. Stacked trend chart of code volume per repository,
+    repository_trend_data = repository_analysis.pivot_table(
+        index=time_interval, columns="Repository", values="SUM", aggfunc="sum"
+    ).reset_index()
+    summary_data = repository_analysis[
+        ["Datetime", "SUM", "NLOC_Added", "NLOC_Removed", "Diff", "Mean"]
+    ].rename(columns={"NLOC_Added": "Added", "NLOC_Removed": "Removed"})
+
+    repository_trend_chart = chart_builder.build(
+        trend_data=repository_trend_data,
+        summary_data=summary_data,
+        color_data="Repository",
+        interval=time_interval,
+        sub_title="All repositories",
+    )
+    repository_trend_chart.write_html(output_dir / "repository_trend_chart.html")
 
     console.print_h1("# LOC Analyze")
     print(Cursor.UP() + Cursor.FORWARD(50) + Fore.GREEN + "FINISH")

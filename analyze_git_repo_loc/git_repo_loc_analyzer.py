@@ -2,18 +2,16 @@
 
 """
 
+import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Union
 
 import pandas as pd
-import plotly.graph_objects as go
 from git import GitCommandError, PathLike, Repo
-from plotly.subplots import make_subplots
 from pydriller import Repository
 from tqdm import tqdm
 
-from analyze_git_repo_loc.chart_builder import ChartBuilder
 from analyze_git_repo_loc.language_comment import LanguageComment
 from analyze_git_repo_loc.language_extensions import LanguageExtensions
 
@@ -50,6 +48,9 @@ class GitRepoLOCAnalyzer:
             to_tag (str): The end tag for filtering commits.
             authors (list[str]): A list of author names to filter commits.
             languages (list[str]): A list of languages to filter commits.
+
+        Raises:
+            OSError: If there is an error creating the cache or output directories.
         """
         # Initialize Git Repo object.
         self._repo_path = repo_path
@@ -82,33 +83,30 @@ class GitRepoLOCAnalyzer:
         )
         """ Language extensions to filter commits """
 
-        # Initialize ChartBuilder
-        self._chart_builder: ChartBuilder = ChartBuilder()
-        self._chart: go.Figure = None
-        """ The final Plotly figure object that contains the combined area and line plot. """
+        # Analyzed data
+        self._commit_data = None
+        """ DataFrame containing the analyzed commit data """
+        self._cache_commit_data = self.load_cache()
+        """ DataFrame containing the cached commit data """
 
     def make_output_dir(self, output_dir: Path) -> Path:
         """
-        Attempts to create the directory specified by `output_dir`, if it does not already exist.
+        Creates the specified output directory, including any necessary parent directories.
 
         Args:
-            output_dir (Path): The path of the output directory to be created.
+            output_dir (Path): The path of the directory to create.
 
         Returns:
-            Path: The resolved path of the output directory which may have been created.
+            Path: The path of the created directory.
 
-        This method will resolve the provided `output_dir` and check its existence.
-        If the directory does not exist, it will create the directory and all its
-        required parents, then print a confirmation message. If the directory already exists,
-        it will simply print an informational message stating that the directory exists.
-        In both cases, the resolved output directory path is returned.
+        Raises:
+            OSError: If the directory cannot be created.
         """
-        output_dir.resolve()
-        if not output_dir.exists():
-            print(f"Make directory. ({output_dir})")
-            output_dir.mkdir(parents=True)
-        else:
-            print(f"Directory exists. ({output_dir.resolve()})")
+        try:
+            output_dir.mkdir(parents=True, exports=True)
+        except OSError as ex:
+            print(f"Error creating directory: {str(ex)})", file=sys.stderr)
+            raise
         return output_dir
 
     def clear_cache_files(self):
@@ -120,12 +118,15 @@ class GitRepoLOCAnalyzer:
         subdirectories) and deletes each file.
 
         Raises:
-            AttributeError: If `_cache_path` does not exist or is not a directory.
+            FileNotFoundError: If the cache directory does not exist.
         """
-        if self._cache_path.exists() and self._cache_path.is_dir():
-            for file in tqdm(self._cache_path.glob("**/*")):
-                if file.is_file():
-                    file.unlink()
+        try:
+            if self._cache_path.exists() and self._cache_path.is_dir():
+                for file in tqdm(self._cache_path.glob("**/*")):
+                    if file.is_file():
+                        file.unlink()
+        except FileNotFoundError as ex:
+            raise
 
     def is_branch_exists(self, repo_path: PathLike, branch_name: str) -> bool:
         """
@@ -137,11 +138,6 @@ class GitRepoLOCAnalyzer:
 
         Returns:
             bool: True if the branch exists, False otherwise.
-
-        Raises:
-            GitCommandError: If there is an error executing Git commands.
-            AttributeError: If there is an attribute error while accessing the repository.
-
         """
         try:
             repo = Repo(repo_path)
@@ -166,17 +162,33 @@ class GitRepoLOCAnalyzer:
             stripped_line.startswith(syntax) for syntax in comment_syntax
         )
 
+    def load_cache(self) -> pd.DataFrame:
+        """
+        Load the cached commit data from the cache directory.
+
+        This method reads the cached commit data from the pickle file located
+        at the specified cache path. If the file does not exist, it does nothing.
+
+        Returns:
+            pd.DataFrame: The cached commit data, if available, otherwise an empty DataFrame.
+        """
+        try:
+            return pd.read_pickle(self._cache_path / "commit_data.pkl")
+        except (FileNotFoundError, pd.errors.EmptyDataError):
+            print("No cache file found. it does nothing, and continue.")
+            return None
+
     def get_commit_analysis(self) -> pd.DataFrame:
         """
         Analyzes the commits in the repository and returns a DataFrame with the following columns:
-        - Date: The date of the commit.
+        - Datetime: The date of the commit.
         - Repository: The name of the repository.
         - Commit_hash: The hash of the commit.
         - Author: The author of the commit.
         - Language: The programming language of the modified file.
-        - LOC_Added: The number of lines of code added.
-        - LOC_Removed: The number of lines of code removed.
-        - Net_LOC: The net lines of code (LOC_Added - LOC_Removed).
+        - NLOC_Added: The number of net lines of code added.
+        - NLOC_Removed: The number of net lines of code removed.
+        - NLOC: The net lines of code (NLOC_Added - NLOC_Removed).
 
         Returns:
             pd.DataFrame: A DataFrame containing the analyzed commit data.
@@ -195,218 +207,233 @@ class GitRepoLOCAnalyzer:
             histogram_diff=True,
             num_workers=1,
         )
-        # Initialize the data frame to store the results
-        data = pd.DataFrame(
+
+        # temporary list to store commit data
+        commit_data_list = []
+        # Traverse commits
+        for commit in tqdm(
+            repository.traverse_commits(),
+            desc="Commits",
+        ):
+            commit_datetime = commit.committer_date
+            repository_name = GitRepoLOCAnalyzer.get_repository_name(self._repo_path)
+            commit_hash = commit.hash
+            commit_author = commit.author.name
+
+            # Skip if the commit is already analyzed
+            if self._cache_commit_data is not None:
+                # Check for the presence of commit_hash in the "Commit_hash" column
+                matching_rows = self._cache_commit_data[
+                    self._cache_commit_data["Commit_hash"] == commit_hash
+                ]
+
+                # Convert matching rows to a list of dictionaries and extend the target list
+                if not matching_rows.empty:
+                    commit_data_list.extend(matching_rows.to_dict("records"))
+                    continue
+
+            # Traverse modified files
+            for mod in tqdm(
+                commit.modified_files,
+                desc=f"Files in {commit_hash[:7]}",
+                leave=False,
+            ):
+                language = LanguageExtensions.get_language(mod.filename)
+                if language == "Unknown":
+                    continue
+
+                # Calculate add LOC, delete LOC, net LOC
+                # Calculate add LOC, delete LOC, net LOC
+                nloc_added = sum(
+                    1
+                    for diff in mod.diff_parsed.get("added", [])
+                    if not self.is_comment_or_empty_line(diff, language)
+                )
+                nloc_removed = sum(
+                    1
+                    for diff in mod.diff_parsed.get("removed", [])
+                    if not self.is_comment_or_empty_line(diff, language)
+                )
+                nloc = nloc_added - nloc_removed
+
+                commit_data_list.append(
+                    {
+                        "Datetime": commit_datetime,
+                        "Repository": repository_name,
+                        "Branch": self._branch_name,
+                        "Commit_hash": commit_hash,
+                        "Author": commit_author,
+                        "Language": language,
+                        "NLOC_Added": nloc_added,
+                        "NLOC_Removed": nloc_removed,
+                        "NLOC": nloc,
+                    }
+                )
+        # Create DataFrame from list in a single operation
+        commit_data = pd.DataFrame(
+            commit_data_list,
             columns=[
-                "Date",
+                "Datetime",
                 "Repository",
+                "Branch",
                 "Commit_hash",
                 "Author",
                 "Language",
-                "LOC_Added",
-                "LOC_Removed",
-                "Net_LOC",
-            ]
+                "NLOC_Added",
+                "NLOC_Removed",
+                "NLOC",
+            ],
         )
+        # Column type conversion
+        commit_data["Datetime"] = pd.to_datetime(commit_data["Datetime"])
+        commit_data["Repository"] = commit_data["Repository"].astype("string")
+        commit_data["Branch"] = commit_data["Branch"].astype("string")
+        commit_data["Commit_hash"] = commit_data["Commit_hash"].astype("string")
+        commit_data["Author"] = commit_data["Author"].astype("string")
+        commit_data["Language"] = commit_data["Language"].astype("string")
+        commit_data["NLOC_Added"] = commit_data["NLOC_Added"].astype("int")
+        commit_data["NLOC_Removed"] = commit_data["NLOC_Removed"].astype("int")
+        commit_data["NLOC"] = commit_data["NLOC"].astype("int")
 
-        # Traverse commits
-        for commit in tqdm(repository.traverse_commits()):
-            date = commit.committer_date.date()
-            repository_name = GitRepoLOCAnalyzer.get_repository_name(self._repo_path)
-            commit_hash = commit.hash
-            author = commit.author.name
+        return commit_data
 
-            # Traverse modified files
-            for mod in tqdm(commit.modified_files):
-                language = LanguageExtensions.get_language(mod.filename)
-
-                # Calculate add LOC, delete LOC, net LOC
-                # Parse diff, and calculate exclude comment lines and blank lines.
-                loc_added = 0
-                loc_removed = 0
-                net_loc = 0
-                if mod.diff_parsed:
-                    for diff in mod.diff_parsed["added"]:
-                        if not self.is_comment_or_empty_line(diff, language):
-                            loc_added += 1
-                    for diff in mod.diff_parsed["removed"]:
-                        if not self.is_comment_or_empty_line(diff, language):
-                            loc_removed += 1
-                    net_loc = loc_added - loc_removed
-
-                data.append(
-                    {
-                        "Date": date,
-                        "Repository": repository_name,
-                        "Commit_hash": commit_hash,
-                        "Author": author,
-                        "Language": language,
-                        "LOC_Added": loc_added,
-                        "LOC_Removed": loc_removed,
-                        "Net_LOC": net_loc,
-                    }
-                )
-        return data
-
-    def save_dataframe(self, data: pd.DataFrame, csv_file: Path) -> None:
+    def save_cache(self) -> None:
         """
-        save_dataframe Save dataframe type to csv file
+        Saves the commit data to a cache file.
 
-        Args:
-            data (pd.DataFrame): Data of dataframe type to be saved.
-            csv_file (Path): Full path to save csv file
+        This method serializes the commit data and saves it to a pickle file
+        located at the specified cache path. If there is no commit data available,
+        it raises a ValueError.
 
-        Returns:
-            None
+        Raises:
+            ValueError: If there is no commit data to save.
         """
-        print(f"- Save: {csv_file}")
-        data.to_csv(csv_file)
+        if self._commit_data is None:
+            raise ValueError("No data to save. Run get_commit_analysis() first.")
 
-    def create_charts(
-        self,
-        language_trend_data: pd.DataFrame,
-        author_trend_data: pd.DataFrame,
-        sum_data: pd.DataFrame,
-        output_path: Path,
-        interval: str,
-        sub_title: str,
-    ):
-        """
-        Creates charts using the provided trend and summation data.
+        self._commit_data.to_pickle(self._cache_path / "commit_data.pkl")
 
-        This method takes a trend dataframe and a summation dataframe,
-        builds a chart using the internal _chart_builder.
-        Args:
-            language_trend_data (pd.DataFrame):
-                A pandas DataFrame containing the trend data of LOC by language.
-            author_trend_data (pd.DataFrame):
-                A pandas DataFrame containing the trend data of LOC by author.
-            sum_data (pd.DataFrame): A pandas DataFrame that contains the summary data.
-            output_path (Path): The path to save the chart HTML file.
-            interval (str): The interval to use for formatting the x-axis ticks.
-                            Should be one of 'daily', 'weekly', or 'monthly'.
-            sub_title (str): The sub-title to include in the chart title.
-        """
-        language_trend_chart = self._chart_builder.build(
-            trend_data=language_trend_data,
-            sum_data=sum_data,
-            color_data="Language",
-            interval=interval,
-            repo_name=self._repo_path.name,
-            branch_name=self._branch_name,
-        )
-        language_trend_chart.write_html(output_path / "language_trend_chart.html")
+    # def create_charts(
+    #     self,
+    #     sub_title: str,
+    # ):
+    #     """
+    #     Creates charts using the provided trend and summation data.
 
-        author_trend_chart = self._chart_builder.build(
-            trend_data=author_trend_data,
-            sum_data=sum_data,
-            color_data="Author",
-            interval=interval,
-            repo_name=self._repo_path.name,
-            branch_name=self._branch_name,
-        )
-        author_trend_chart.write_html(output_path / "author_trend_chart.html")
+    #     This method takes a trend dataframe and a summation dataframe,
+    #     builds a chart using the internal _chart_builder.
+    #     Args:
+    #         language_trend_data (pd.DataFrame):
+    #             A pandas DataFrame containing the trend data of LOC by language.
+    #         author_trend_data (pd.DataFrame):
+    #             A pandas DataFrame containing the trend data of LOC by author.
+    #         sum_data (pd.DataFrame): A pandas DataFrame that contains the summary data.
+    #         output_path (Path): The path to save the chart HTML file.
+    #         interval (str): The interval to use for formatting the x-axis ticks.
+    #                         Should be one of 'daily', 'weekly', or 'monthly'.
+    #         sub_title (str): The sub-title to include in the chart title.
+    #     """
 
-        # Combine two charts
-        self._chart = make_subplots(
-            rows=2,
-            cols=1,
-            shared_xaxes=True,
-            subplot_titles=("Language Trend", "Author Trend"),
-            vertical_spacing=0.1,
-            specs=[[{"secondary_y": True}], [{"secondary_y": True}]],
-        )
+    #     # Combine two charts
+    #     self._chart = make_subplots(
+    #         rows=2,
+    #         cols=1,
+    #         shared_xaxes=True,
+    #         subplot_titles=("Language Trend", "Author Trend"),
+    #         vertical_spacing=0.1,
+    #         specs=[[{"secondary_y": True}], [{"secondary_y": True}]],
+    #     )
 
-        # Add traces from language_trend_chart
-        for trace in language_trend_chart["data"]:
-            self._chart.add_trace(trace, row=1, col=1)
+    #     # Add traces from language_trend_chart
+    #     for trace in language_trend_chart["data"]:
+    #         self._chart.add_trace(trace, row=1, col=1)
 
-        # Add traces from author_trend_chart
-        for trace in author_trend_chart["data"]:
-            self._chart.add_trace(trace, row=2, col=1)
+    #     # Add traces from author_trend_chart
+    #     for trace in author_trend_chart["data"]:
+    #         self._chart.add_trace(trace, row=2, col=1)
 
-        # Update layout
-        self._chart.update_xaxes(
-            showline=True,
-            linewidth=1,
-            linecolor="grey",
-            color="black",
-            gridcolor="lightgrey",
-            gridwidth=0.5,
-            title_text="Date",
-            title_font_size=18,
-            tickfont_size=14,
-            tickangle=-45,
-            tickformat=language_trend_chart["layout"]["xaxis"]["tickformat"],
-            automargin=True,
-        )
-        self._chart.update_yaxes(
-            secondary_y=False,
-            showline=True,
-            linewidth=1,
-            linecolor="grey",
-            color="black",
-            gridcolor="lightgrey",
-            gridwidth=0.5,
-            title_text="LOC",
-            title_font_size=18,
-            tickfont_size=14,
-            range=[0, None],
-            autorange="max",
-            rangemode="tozero",
-            automargin=True,
-            spikethickness=1,
-            spikemode="toaxis+across",
-        )
-        self._chart.update_yaxes(
-            secondary_y=True,
-            showline=True,
-            linewidth=1,
-            linecolor="grey",
-            color="black",
-            gridcolor="lightgrey",
-            gridwidth=0.5,
-            title_text="Difference of LOC",
-            title_font_size=18,
-            tickfont_size=14,
-            range=[0, None],
-            autorange="max",
-            rangemode="tozero",
-            automargin=True,
-            spikethickness=1,
-            spikemode="toaxis+across",
-            overlaying="y",
-            side="right",
-        )
-        chat_title = f"LOC trend by Language and Author - {sub_title}"
-        self._chart.update_layout(
-            font_family="Open Sans",
-            plot_bgcolor="white",
-            title={
-                "text": chat_title,
-                "x": 0.5,
-                "xanchor": "center",
-                "font_size": 20,
-            },
-            xaxis={"dtick": "M1"},
-            legend_title_font_size=14,
-            legend_font_size=14,
-        )
+    #     # Update layout
+    #     self._chart.update_xaxes(
+    #         showline=True,
+    #         linewidth=1,
+    #         linecolor="grey",
+    #         color="black",
+    #         gridcolor="lightgrey",
+    #         gridwidth=0.5,
+    #         title_text="Date",
+    #         title_font_size=18,
+    #         tickfont_size=14,
+    #         tickangle=-45,
+    #         tickformat=language_trend_chart["layout"]["xaxis"]["tickformat"],
+    #         automargin=True,
+    #     )
+    #     self._chart.update_yaxes(
+    #         secondary_y=False,
+    #         showline=True,
+    #         linewidth=1,
+    #         linecolor="grey",
+    #         color="black",
+    #         gridcolor="lightgrey",
+    #         gridwidth=0.5,
+    #         title_text="LOC",
+    #         title_font_size=18,
+    #         tickfont_size=14,
+    #         range=[0, None],
+    #         autorange="max",
+    #         rangemode="tozero",
+    #         automargin=True,
+    #         spikethickness=1,
+    #         spikemode="toaxis+across",
+    #     )
+    #     self._chart.update_yaxes(
+    #         secondary_y=True,
+    #         showline=True,
+    #         linewidth=1,
+    #         linecolor="grey",
+    #         color="black",
+    #         gridcolor="lightgrey",
+    #         gridwidth=0.5,
+    #         title_text="Difference of LOC",
+    #         title_font_size=18,
+    #         tickfont_size=14,
+    #         range=[0, None],
+    #         autorange="max",
+    #         rangemode="tozero",
+    #         automargin=True,
+    #         spikethickness=1,
+    #         spikemode="toaxis+across",
+    #         overlaying="y",
+    #         side="right",
+    #     )
+    #     chat_title = f"LOC trend by Language and Author - {sub_title}"
+    #     self._chart.update_layout(
+    #         font_family="Open Sans",
+    #         plot_bgcolor="white",
+    #         title={
+    #             "text": chat_title,
+    #             "x": 0.5,
+    #             "xanchor": "center",
+    #             "font_size": 20,
+    #         },
+    #         xaxis={"dtick": "M1"},
+    #         legend_title_font_size=14,
+    #         legend_font_size=14,
+    #     )
 
-        self._chart.show()
+    #     self._chart.show()
 
-    def save_charts(self, output_path: Path) -> None:
-        """
-        Saves the generated charts to HTML format.
+    # def save_charts(self, output_path: Path) -> None:
+    #     """
+    #     Saves the generated charts to HTML format.
 
-        The file is saved to the path specified by _output_path with the filename 'report.html'.
-        It's expected that the _chart attribute is already populated with a chart object.
+    #     The file is saved to the path specified by _output_path with the filename 'report.html'.
+    #     It's expected that the _chart attribute is already populated with a chart object.
 
-        Args:
-            output_path (Path): The path to save the chart HTML file.
-        """
-        if self._chart is not None:
-            self._chart.write_html(output_path / "report.html")
+    #     Args:
+    #         output_path (Path): The path to save the chart HTML file.
+    #     """
+    #     if self._chart is not None:
+    #         self._chart.write_html(output_path / "report.html")
 
     @classmethod
     def get_repository_name(cls, repo_path: Union[Path, str]) -> str:
