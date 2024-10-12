@@ -67,7 +67,10 @@ def main() -> None:
             )
             sys.exit(1)
         loc_data[time_interval] = (
-            loc_data["Datetime"].dt.to_period(time_period).dt.to_timestamp()
+            loc_data["Datetime"]
+            .dt.tz_localize(None)
+            .dt.to_period(time_period)
+            .dt.to_timestamp()
         )
         # Create output directory for the repository
         if "Repository" not in loc_data.columns:
@@ -134,6 +137,8 @@ def main() -> None:
     # Initialize ChartBuilder
     chart_builder: ChartBuilder = ChartBuilder()
     # chart: go.Figure = None
+
+    # 1. Stacked area trend chart of code volume by programming language per repository,
     if not language_analysis.empty:
         for repository in language_analysis["Repository"].unique():
             loc_data = language_analysis[language_analysis["Repository"] == repository]
@@ -144,10 +149,13 @@ def main() -> None:
                 [time_interval, "SUM", "NLOC_Added", "NLOC_Deleted", "Diff", "Mean"]
             ].rename(columns={"NLOC_Added": "Added", "NLOC_Deleted": "Deleted"})
 
-            # 1. Stacked area trend chart of code volume by programming language per repository,
-            language_trend_data = loc_data.pivot_table(
-                index=time_interval, columns="Language", values="SUM", aggfunc="sum"
-            ).reset_index()
+            language_trend_data = (
+                loc_data.pivot_table(
+                    index=time_interval, columns="Language", values="SUM", aggfunc="sum"
+                )
+                .reset_index()
+                .apply(pd.to_numeric, errors="coerce")
+            )
 
             language_trend_chart = chart_builder.build(
                 trend_data=language_trend_data,
@@ -161,19 +169,23 @@ def main() -> None:
                 chart_output_dir / "language_trend_chart.html"
             )
 
+    # 2. Stacked area trend chart by author per repository
     if not author_analysis.empty:
         for repository in author_analysis["Repository"].unique():
             loc_data = author_analysis[author_analysis["Repository"] == repository]
             branch_name = next(iter(loc_data["Branch"].unique()), "Unknown")
             # Summary data
             summary_data = loc_data[
-                ["Datetime", "SUM", "NLOC_Added", "NLOC_Deleted", "Diff", "Mean"]
+                [time_interval, "SUM", "NLOC_Added", "NLOC_Deleted", "Diff", "Mean"]
             ].rename(columns={"NLOC_Added": "Added", "NLOC_Deleted": "Deleted"})
 
-            # 2. Stacked area trend chart by author per repository
-            author_trend_data = loc_data.pivot_table(
-                index=time_interval, columns="Author", values="SUM", aggfunc="sum"
-            ).reset_index()
+            author_trend_data = (
+                loc_data.pivot_table(
+                    index=time_interval, columns="Author", values="SUM", aggfunc="sum"
+                )
+                .reset_index()
+                .apply(pd.to_numeric, errors="coerce")
+            )
 
             author_trend_chart = chart_builder.build(
                 trend_data=author_trend_data,
@@ -186,11 +198,16 @@ def main() -> None:
             author_trend_chart.write_html(chart_output_dir / "author_trend_chart.html")
 
     # 3. Stacked trend chart of code volume per repository,
-    repository_trend_data = repository_analysis.pivot_table(
-        index=time_interval, columns="Repository", values="SUM", aggfunc="sum"
-    ).reset_index()
+
+    repository_trend_data = (
+        repository_analysis.pivot_table(
+            index=time_interval, columns="Repository", values="SUM", aggfunc="sum"
+        )
+        .reset_index()
+        .apply(pd.to_numeric, errors="coerce")
+    )
     summary_data = repository_analysis[
-        ["Datetime", "SUM", "NLOC_Added", "NLOC_Deleted", "Diff", "Mean"]
+        [time_interval, "SUM", "NLOC_Added", "NLOC_Deleted", "Diff", "Mean"]
     ].rename(columns={"NLOC_Added": "Added", "NLOC_Deleted": "Deleted"})
 
     repository_trend_chart = chart_builder.build(
