@@ -60,7 +60,7 @@ def main() -> None:
     author_analysis = pd.DataFrame()
     repository_analysis = pd.DataFrame()
     time_interval, time_period = get_time_interval_and_period(args.interval)
-    for loc_data in tqdm(loc_data_repositories, desc="Forming dataframe"):
+    for loc_data in tqdm(loc_data_repositories, desc="Processing loc data"):
         if "Datetime" not in loc_data.columns:
             console.print_colored(
                 "Error: 'Datetime' column is not found in the dataframe.", Fore.RED
