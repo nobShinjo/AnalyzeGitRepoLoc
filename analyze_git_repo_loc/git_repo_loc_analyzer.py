@@ -209,11 +209,14 @@ class GitRepoLOCAnalyzer:
 
         # temporary list to store commit data
         commit_data_list = []
+        traverse_commits = repository.traverse_commits()
+        total_commits = sum(1 for _ in traverse_commits)
         # Traverse commits
         for commit in tqdm(
             repository.traverse_commits(),
             desc="Analyzing commits",
             leave=False,
+            total=total_commits,
         ):
             commit_datetime = commit.committer_date
             repository_name = GitRepoLOCAnalyzer.get_repository_name(self._repo_path)
@@ -289,7 +292,7 @@ class GitRepoLOCAnalyzer:
             ],
         )
         # Column type conversion
-        commit_data["Datetime"] = pd.to_datetime(commit_data["Datetime"])
+        commit_data["Datetime"] = pd.to_datetime(commit_data["Datetime"], utc=True)
         commit_data["Repository"] = commit_data["Repository"].astype("string")
         commit_data["Branch"] = commit_data["Branch"].astype("string")
         commit_data["Commit_hash"] = commit_data["Commit_hash"].astype("string")
