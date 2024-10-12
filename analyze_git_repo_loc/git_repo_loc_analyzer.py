@@ -103,7 +103,7 @@ class GitRepoLOCAnalyzer:
             OSError: If the directory cannot be created.
         """
         try:
-            output_dir.mkdir(parents=True, exports=True)
+            output_dir.mkdir(parents=True, exist_ok=True)
         except OSError as ex:
             print(f"Error creating directory: {str(ex)})", file=sys.stderr)
             raise
@@ -120,13 +120,10 @@ class GitRepoLOCAnalyzer:
         Raises:
             FileNotFoundError: If the cache directory does not exist.
         """
-        try:
-            if self._cache_path.exists() and self._cache_path.is_dir():
-                for file in tqdm(self._cache_path.glob("**/*")):
-                    if file.is_file():
-                        file.unlink()
-        except FileNotFoundError as ex:
-            raise
+        if self._cache_path.exists() and self._cache_path.is_dir():
+            for file in tqdm(self._cache_path.glob("**/*")):
+                if file.is_file():
+                    file.unlink()
 
     def is_branch_exists(self, repo_path: PathLike, branch_name: str) -> bool:
         """
@@ -195,7 +192,7 @@ class GitRepoLOCAnalyzer:
         """
         # Initialize the repository object for pydriller
         repository = Repository(
-            self._repo_path,
+            str(self._repo_path),
             only_in_branch=self._branch_name,
             since=self._since,
             to=self._to,
@@ -213,7 +210,8 @@ class GitRepoLOCAnalyzer:
         # Traverse commits
         for commit in tqdm(
             repository.traverse_commits(),
-            desc="Commits",
+            desc="Analyzing commits",
+            leave=False,
         ):
             commit_datetime = commit.committer_date
             repository_name = GitRepoLOCAnalyzer.get_repository_name(self._repo_path)
