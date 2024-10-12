@@ -113,7 +113,9 @@ class ChartBuilder:
         )
         return self
 
-    def create_trend_trace(self, color_data: str) -> ChartBuilderSelf:
+    def create_trend_trace(
+        self, xaxis_column: str, color_data: str
+    ) -> ChartBuilderSelf:
         """
         Generates a trend trace from the trend data and appends it to the chart figure.
 
@@ -126,6 +128,8 @@ class ChartBuilder:
         prefix on the `area()` function.
 
         Args:
+            xaxis_column (str): The name of the column in the trend data frame that contains
+                                the x-axis data for the area plot.
             color_data (str): The name of the column in the trend data frame that contains
                               the color data for the area plot.
 
@@ -151,7 +155,10 @@ class ChartBuilder:
         """
         # Field area plot of LOC trend
         fig_lang = px.area(
-            data_frame=self._trend_data, color=color_data, line_shape=None
+            data_frame=self._trend_data,
+            x=xaxis_column,
+            color=color_data,
+            line_shape=None,
         )
         fig_lang_traces = []
         for trace in range(len(fig_lang["data"])):
@@ -162,7 +169,7 @@ class ChartBuilder:
 
         return self
 
-    def create_sum_trace(self) -> ChartBuilderSelf:
+    def create_sum_trace(self, xaxis_column: str) -> ChartBuilderSelf:
         """
         Creates and appends a summary line trace to the chart figure.
 
@@ -171,6 +178,10 @@ class ChartBuilder:
         `fig_sum` is then configured to not show a legend entry by setting the
         'showlegend' property to False. The traces are collected in a list and
         subsequently appended to the main figure's first row and column.
+
+        Args:
+            xaxis_column (str): The name of the column in the summary data frame that contains
+                                the x-axis data for the line plot.
 
         Returns:
             ChartBuilderSelf: The instance itself is returned, enabling method chaining
@@ -192,7 +203,9 @@ class ChartBuilder:
         traces to it.
         """
         # Line plots of total LOC trend
-        fig_sum = px.line(data_frame=self._summary_data, y="SUM", markers=True)
+        fig_sum = px.line(
+            data_frame=self._summary_data, x=xaxis_column, y="SUM", markers=True
+        )
         for trace in fig_sum["data"]:
             trace["showlegend"] = False
             trace["name"] = "SUM"
@@ -202,7 +215,7 @@ class ChartBuilder:
 
         return self
 
-    def create_diff_trace(self) -> ChartBuilderSelf:
+    def create_diff_trace(self, xaxis_column: str) -> ChartBuilderSelf:
         """
         Adds a differential trace to an existing plotly figure within the ChartBuilder instance.
 
@@ -211,10 +224,16 @@ class ChartBuilder:
         It then adds this newly created trace to the main figure without including it in the legend.
         The trace is placed on a secondary y-axis in the first row and column of the subplot grid.
 
+        Args:
+            xaxis_column (str): The name of the column in the summary data frame that contains
+                                the x-axis data for the line plot.
+
         Returns:
             self (ChartBuilder): Returns the instance itself for method chaining purposes.
         """
-        fig_diff = px.line(data_frame=self._summary_data, y="Diff", markers=True)
+        fig_diff = px.line(
+            data_frame=self._summary_data, x=xaxis_column, y="Diff", markers=True
+        )
         for trace in fig_diff["data"]:
             trace["showlegend"] = False
             trace["name"] = "Diff"
@@ -361,9 +380,9 @@ class ChartBuilder:
         self.set_trend_data(trend_data)
         self.set_summary_data(summary_data)
         self.create_fig()
-        self.create_trend_trace(color_data)
-        self.create_sum_trace()
-        self.create_diff_trace()
+        self.create_trend_trace(xaxis_column=interval, color_data=color_data)
+        self.create_sum_trace(xaxis_column=interval)
+        self.create_diff_trace(xaxis_column=interval)
         self.update_fig(sub_title)
         self.update_xaxis_tickformat(interval)
         return self._fig
