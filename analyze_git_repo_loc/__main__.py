@@ -144,23 +144,32 @@ def main() -> None:
             loc_data = language_analysis[language_analysis["Repository"] == repository]
             branch_name = next(iter(loc_data["Branch"].unique()), "Unknown")
 
-            # Summary data
-            summary_data = loc_data[
-                [time_interval, "SUM", "NLOC_Added", "NLOC_Deleted", "Diff", "Mean"]
-            ].rename(columns={"NLOC_Added": "Added", "NLOC_Deleted": "Deleted"})
+            # Language trend data
+            language_trend_data = loc_data.pivot_table(
+                index=time_interval, columns="Language", values="SUM", aggfunc="sum"
+            ).reset_index()
 
-            language_trend_data = (
-                loc_data.pivot_table(
-                    index=time_interval, columns="Language", values="SUM", aggfunc="sum"
+            # Summary data
+            summary_data = (
+                loc_data.groupby(time_interval)
+                .agg(
+                    {
+                        "SUM": "sum",
+                        "NLOC_Added": "sum",
+                        "NLOC_Deleted": "sum",
+                        "Diff": "mean",
+                        "Mean": "mean",
+                    }
                 )
-                .reset_index()
-                .apply(pd.to_numeric, errors="coerce")
+                .reset_index()[
+                    [time_interval, "SUM", "NLOC_Added", "NLOC_Deleted", "Diff", "Mean"]
+                ]
+                .rename(columns={"NLOC_Added": "Added", "NLOC_Deleted": "Deleted"})
             )
 
             language_trend_chart = chart_builder.build(
                 trend_data=language_trend_data,
                 summary_data=summary_data,
-                color_data="Language",
                 interval=time_interval,
                 sub_title=f"{repository} ({branch_name})",
             )
@@ -174,46 +183,66 @@ def main() -> None:
         for repository in author_analysis["Repository"].unique():
             loc_data = author_analysis[author_analysis["Repository"] == repository]
             branch_name = next(iter(loc_data["Branch"].unique()), "Unknown")
-            # Summary data
-            summary_data = loc_data[
-                [time_interval, "SUM", "NLOC_Added", "NLOC_Deleted", "Diff", "Mean"]
-            ].rename(columns={"NLOC_Added": "Added", "NLOC_Deleted": "Deleted"})
 
-            author_trend_data = (
-                loc_data.pivot_table(
-                    index=time_interval, columns="Author", values="SUM", aggfunc="sum"
+            # Author trend data
+            author_trend_data = loc_data.pivot_table(
+                index=time_interval, columns="Author", values="SUM", aggfunc="sum"
+            ).reset_index()
+
+            # Summary data
+            summary_data = (
+                loc_data.groupby(time_interval)
+                .agg(
+                    {
+                        "SUM": "sum",
+                        "NLOC_Added": "sum",
+                        "NLOC_Deleted": "sum",
+                        "Diff": "mean",
+                        "Mean": "mean",
+                    }
                 )
-                .reset_index()
-                .apply(pd.to_numeric, errors="coerce")
+                .reset_index()[
+                    [time_interval, "SUM", "NLOC_Added", "NLOC_Deleted", "Diff", "Mean"]
+                ]
+                .rename(columns={"NLOC_Added": "Added", "NLOC_Deleted": "Deleted"})
             )
 
             author_trend_chart = chart_builder.build(
                 trend_data=author_trend_data,
                 summary_data=summary_data,
-                color_data="Author",
                 interval=time_interval,
                 sub_title=f"{repository} ({branch_name})",
             )
             chart_output_dir = Path(args.output) / repository
             author_trend_chart.write_html(chart_output_dir / "author_trend_chart.html")
 
-    # 3. Stacked trend chart of code volume per repository,
+    # 3. Stacked trend chart of code volume per repository
 
-    repository_trend_data = (
-        repository_analysis.pivot_table(
-            index=time_interval, columns="Repository", values="SUM", aggfunc="sum"
+    # Repository trend data
+    repository_trend_data = repository_analysis.pivot_table(
+        index=time_interval, columns="Repository", values="SUM", aggfunc="sum"
+    ).reset_index()
+    # Summary data
+    summary_data = (
+        loc_data.groupby(time_interval)
+        .agg(
+            {
+                "SUM": "sum",
+                "NLOC_Added": "sum",
+                "NLOC_Deleted": "sum",
+                "Diff": "mean",
+                "Mean": "mean",
+            }
         )
-        .reset_index()
-        .apply(pd.to_numeric, errors="coerce")
+        .reset_index()[
+            [time_interval, "SUM", "NLOC_Added", "NLOC_Deleted", "Diff", "Mean"]
+        ]
+        .rename(columns={"NLOC_Added": "Added", "NLOC_Deleted": "Deleted"})
     )
-    summary_data = repository_analysis[
-        [time_interval, "SUM", "NLOC_Added", "NLOC_Deleted", "Diff", "Mean"]
-    ].rename(columns={"NLOC_Added": "Added", "NLOC_Deleted": "Deleted"})
 
     repository_trend_chart = chart_builder.build(
         trend_data=repository_trend_data,
         summary_data=summary_data,
-        color_data="Repository",
         interval=time_interval,
         sub_title="All repositories",
     )
