@@ -2,31 +2,23 @@
 $out_dir = Get-Item -Path "..\out"
 $since = ""
 $until = ""
-$branch_name = "develop"
 $interval = "weekly"
-$languages = "C#,python,markdown,txt"
+$languages = "C#,Python,Markdown,PowerShell"
 $author_name = ""
 $clear_cache = $false
-$repo_list_file = ".\repo_list.txt"
-
-# Repository List file check
-if (-not (Test-Path $repo_list_file)) {
-    Write-Host "Repository list file not found."
-    exit
-}
-# Repository List file read
-$repo_list = Get-Content -Path $repo_list_file
-$repo_paths = $repo_list -join ","
+$repo_paths = ".\repo_list_ps1.txt"
 
 # venv environment activation
 $venv_path = Join-Path -Path (Get-Item -Path "..\").FullName -ChildPath ".venv\Scripts\Activate.ps1"
 & $venv_path
 
+# PYTHONPATH setting
+$env:PYTHONPATH = "../"
+
 # Command options setting
 $command = "python -m analyze_git_repo_loc"
 $command += if ($out_dir) { " -o $out_dir" } else { "" }
 $command += if ($interval) { " --interval $interval" } else { "" }
-$command += if ($branch_name) { " --branch $branch_name" } else { "" }
 $command += if ($languages) { " --lang $languages" } else { "" }
 $command += if ($since) { " --since $since" } else { "" }
 $command += if ($until) { " --until $until" } else { "" }

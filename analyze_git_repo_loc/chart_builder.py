@@ -1,15 +1,22 @@
 """
-A module for building and displaying LOC trend by language and total LOC charts using Plotly.
+A module for building and displaying LOC (Lines of Code) trend charts using Plotly.
+This module defines the `ChartBuilder` class, which provides methods to set data,
+create various types of traces (area, line, bar), and update the layout of a Plotly
+figure. The class supports method chaining for a fluid interface pattern, allowing
+for dynamic updates and modifications of the visualization.
+
 Classes:
-    ChartBuilder: A class responsible for building and displaying LOC trend by language and total LOC charts.
-Usage Example:
+    ChartBuilder: A class responsible for building and displaying LOC trend by language
+                  and total LOC charts.
+
+Usage example:
         .create_fig()
-        .create_trend_trace(color_data="language")
-        .create_diff_trace()
-        .update_fig()
+        .create_trend_trace(xaxis_column="Date")
+        .create_sum_trace(xaxis_column="Date")
+        .create_bar_trace(xaxis_column="Date")
+        .update_fig(sub_title="My Subtitle")
         .update_xaxis_tickformat(interval="monthly")
     chart_builder.show()
-
 """
 
 from typing import TypeVar
@@ -36,9 +43,9 @@ class ChartBuilder:
         objects containing chart data, while _fig is intended to hold a Plotly figure object.
         """
         self._trend_data: pd.DataFrame
-        """ A DataFrame containing the trend data of LOC by language. """
-        self._sum_data: pd.DataFrame
-        """ A DataFrame containing the summarized trend data of total LOC. """
+        """ A DataFrame containing the trend data of LOC. """
+        self._summary_data: pd.DataFrame
+        """ A DataFrame containing the summary data of LOC and the difference of LOC. """
         self._fig: go.Figure = None
         """ The final Plotly figure object that contains the combined area and line plot. """
 
@@ -62,7 +69,7 @@ class ChartBuilder:
         self._trend_data = trend_data
         return self
 
-    def set_sum_data(self, sum_data: pd.DataFrame) -> ChartBuilderSelf:
+    def set_summary_data(self, summary_data: pd.DataFrame) -> ChartBuilderSelf:
         """
         Sets the summary data for the chart builder.
 
@@ -70,8 +77,7 @@ class ChartBuilder:
         which is likely used for representing aggregate or summary statistics in a chart.
 
         Args:
-            sum_data (pd.DataFrame): A data frame containing summary statistics or aggregated
-                                     data to be used in the chart.
+            summary_data (pd.DataFrame): A DataFrame containing the summary data.
 
         Returns:
             ChartBuilderSelf: The instance of the chart builder. This allows for chaining
@@ -82,7 +88,7 @@ class ChartBuilder:
         chart_builder = (
             ChartBuilder()
             .set_trend_data(trend_frame)
-            .set_sum_data(summary_frame)
+            .set_summary_data(summary_frame)
             ...
         )
         ```
@@ -90,7 +96,7 @@ class ChartBuilder:
         By enabling this fluid interface pattern, the chart builder can progressively be
         configured with different data components for a final visualization.
         """
-        self._sum_data = sum_data
+        self._summary_data = summary_data
         return self
 
     def create_fig(self) -> ChartBuilderSelf:
@@ -114,7 +120,7 @@ class ChartBuilder:
         )
         return self
 
-    def create_trend_trace(self, color_data: str) -> ChartBuilderSelf:
+    def create_trend_trace(self, xaxis_column: str) -> ChartBuilderSelf:
         """
         Generates a trend trace from the trend data and appends it to the chart figure.
 
@@ -127,8 +133,8 @@ class ChartBuilder:
         prefix on the `area()` function.
 
         Args:
-            color_data (str): The name of the column in the trend data frame that contains
-                              the color data for the area plot.
+            xaxis_column (str): The name of the column in the trend data frame that contains
+                                the x-axis data for the area plot.
 
         Returns:
             ChartBuilderSelf: The instance of the chart builder with the new trend trace
@@ -152,7 +158,10 @@ class ChartBuilder:
         """
         # Field area plot of LOC trend
         fig_lang = px.area(
-            data_frame=self._trend_data, color=color_data, line_shape=None
+            data_frame=self._trend_data,
+            x=xaxis_column,
+            y=self._trend_data.columns[1:],
+            line_shape=None,
         )
         fig_lang_traces = []
         for trace in range(len(fig_lang["data"])):
@@ -163,7 +172,7 @@ class ChartBuilder:
 
         return self
 
-    def create_sum_trace(self) -> ChartBuilderSelf:
+    def create_sum_trace(self, xaxis_column: str) -> ChartBuilderSelf:
         """
         Creates and appends a summary line trace to the chart figure.
 
@@ -172,6 +181,10 @@ class ChartBuilder:
         `fig_sum` is then configured to not show a legend entry by setting the
         'showlegend' property to False. The traces are collected in a list and
         subsequently appended to the main figure's first row and column.
+
+        Args:
+            xaxis_column (str): The name of the column in the summary data frame that contains
+                                the x-axis data for the line plot.
 
         Returns:
             ChartBuilderSelf: The instance itself is returned, enabling method chaining
@@ -193,9 +206,11 @@ class ChartBuilder:
         traces to it.
         """
         # Line plots of total LOC trend
-        fig_sum = px.line(data_frame=self._sum_data, y="SUM", markers=True)
+        fig_sum = px.line(
+            data_frame=self._summary_data, x=xaxis_column, y="SUM", markers=True
+        )
         for trace in fig_sum["data"]:
-            trace["showlegend"] = False
+            # trace["showlegend"] = False
             trace["name"] = "SUM"
             trace["marker"] = {"size": 8, "color": "#636EFA"}
             trace["line"] = {"width": 2, "color": "#636EFA"}
@@ -203,7 +218,7 @@ class ChartBuilder:
 
         return self
 
-    def create_diff_trace(self) -> ChartBuilderSelf:
+    def create_diff_trace(self, xaxis_column: str) -> ChartBuilderSelf:
         """
         Adds a differential trace to an existing plotly figure within the ChartBuilder instance.
 
@@ -212,19 +227,64 @@ class ChartBuilder:
         It then adds this newly created trace to the main figure without including it in the legend.
         The trace is placed on a secondary y-axis in the first row and column of the subplot grid.
 
+        Args:
+            xaxis_column (str): The name of the column in the summary data frame that contains
+                                the x-axis data for the line plot.
+
         Returns:
             self (ChartBuilder): Returns the instance itself for method chaining purposes.
         """
-        fig_diff = px.line(data_frame=self._sum_data, y="Diff", markers=True)
+        fig_diff = px.line(
+            data_frame=self._summary_data, x=xaxis_column, y="Diff", markers=True
+        )
         for trace in fig_diff["data"]:
-            trace["showlegend"] = False
+            # trace["showlegend"] = False
             trace["name"] = "Diff"
             trace["marker"] = {"size": 8, "color": "#EF553B"}
             trace["line"] = {"width": 2, "color": "#EF553B"}
             self._fig.add_trace(trace, row=1, col=1, secondary_y=True)
         return self
 
-    def update_fig(self, repo_name: str, branch_name: str) -> ChartBuilderSelf:
+    # added, deleted の棒グラフを追加するメソッド
+    def create_bar_trace(self, xaxis_column: str) -> ChartBuilderSelf:
+        """
+        Adds a bar trace to an existing plotly figure within the ChartBuilder instance.
+
+        This method creates a bar chart using the internal summed data
+        focusing on the 'NLOC_Added' and 'NLOC_Deleted' columns.
+        It then adds this newly created trace to the main figure without including it in the legend.
+        The trace is placed on a secondary y-axis in the first row and column of the subplot grid.
+
+        Args:
+            xaxis_column (str): The name of the column in the summary data frame that contains
+                                the x-axis data for the line plot.
+
+        Returns:
+            self (ChartBuilder): Returns the instance itself for method chaining purposes.
+        """
+        fig_bar = px.bar(
+            data_frame=self._summary_data,
+            x=xaxis_column,
+            y=["Added", "Deleted"],
+            barmode="relative",
+        )
+
+        # Add the bar traces to the figure
+        for trace in fig_bar["data"]:
+            # trace["showlegend"] = False
+            self._fig.add_trace(trace, row=1, col=1, secondary_y=True)
+
+        # Update the color of the bar traces
+        added_trace, deleted_trace = self._fig.data[-2], self._fig.data[-1]
+        added_trace.marker.color = "rgba(0,204,150,0.6)"
+        deleted_trace.marker.color = "rgba(239,85,59,0.6)"
+        for trace in [added_trace, deleted_trace]:
+            trace.marker.line.width = 1
+            trace.marker.line.color = "rgba(0,0,0,0)"
+
+        return self
+
+    def update_fig(self, sub_title: str) -> ChartBuilderSelf:
         """
         Updates the axes and layout of the `_fig` attribute with a specific style.
 
@@ -234,8 +294,7 @@ class ChartBuilder:
         and legend styling.
 
         Args:
-            repo_name (str): The name of the repository to be displayed in the chart title.
-            branch_name (str): The name of the branch to be displayed in the chart title.
+            sub_title (str): The subtitle to be displayed in the chart title.
 
         Returns:
             ChartBuilderSelf: The instance itself, enabling method chaining.
@@ -300,7 +359,7 @@ class ChartBuilder:
             font_family="Open Sans",
             plot_bgcolor="white",
             title={
-                "text": f"LOC trend by Language - {repo_name} ({branch_name})",
+                "text": f"LOC trend by Language - {sub_title}",
                 "x": 0.5,
                 "xanchor": "center",
                 "font_size": 20,
@@ -334,11 +393,9 @@ class ChartBuilder:
     def build(
         self,
         trend_data: pd.DataFrame,
-        sum_data: pd.DataFrame,
-        color_data: str,
+        summary_data: pd.DataFrame,
         interval: str,
-        repo_name: str,
-        branch_name: str,
+        sub_title: str,
     ) -> go.Figure:
         """
         Constructs the chart by setting data and creating figure and traces.
@@ -351,24 +408,22 @@ class ChartBuilder:
         Parameters:
             trend_data (pd.DataFrame): A pandas DataFrame containing the data to be used for
                                        trend trace creation.
-            sum_data (pd.DataFrame): A pandas DataFrame containing the data to be used for
+            summary_data (pd.DataFrame): A pandas DataFrame containing the data to be used for
                                      summary trace creation.
-            color_data (str): The name of the column in the trend data frame that contains
-                                the color data for the area plot.
             interval (str): The interval to use for formatting the x-axis ticks.
-            repo_name (str): The name of the repository to be displayed in the chart title.
-            branch_name (str): The name of the branch to be displayed in the chart
+            sub_title (str): The subtitle to be displayed in the chart title.
         Returns:
             ChartBuilderSelf: The Plotly figure object configured with the trend and summary
                               traces, ready for display or further modification.
         """
         self.set_trend_data(trend_data)
-        self.set_sum_data(sum_data)
+        self.set_summary_data(summary_data)
         self.create_fig()
-        self.create_trend_trace(color_data)
-        self.create_sum_trace()
-        self.create_diff_trace()
-        self.update_fig(repo_name, branch_name)
+        self.create_trend_trace(xaxis_column=interval)
+        self.create_sum_trace(xaxis_column=interval)
+        # self.create_diff_trace(xaxis_column=interval)
+        self.create_bar_trace(xaxis_column=interval)
+        self.update_fig(sub_title)
         self.update_xaxis_tickformat(interval)
         return self._fig
 

@@ -1,43 +1,46 @@
 """
-This module provides the GitRepoLOCAnalyzer class, which is used to analyze lines of code (LOC) in a Git repository.
-The class offers functionalities to initialize a Git repository, create output directories, find and verify the 'cloc' executable,
-retrieve commits, run 'cloc' for LOC analysis, and generate charts for visualizing LOC trends.
+This module provides the `GitRepoLOCAnalyzer` class for analyzing lines of code (LOC)
+ in a Git repository.
+
 Classes:
     GitRepoLOCAnalyzer: A class for analyzing LOC in a Git repository.
+
 Functions:
-    __init__(self, repo_path: Path, cache_dir: Path, output_dir: Path):
-    init_repository(self) -> Repo:
-    make_output_dir(self, output_dir: Path) -> Path:
-    clear_cache_files(self):
-    find_cloc_path(self) -> Path:
-    verify_cloc_executable(self, executable_path: Path) -> None:
-    get_commits(self, branch: str, start_date: datetime, end_date: datetime, interval="daily", author: str = None) -> list[tuple[Commit, str]]:
-        Get a list of Commit objects.
-    branch_exists(self, branch: str) -> bool:
-    run_cloc(self, commit: Commit, lang: list[str] = None) -> str:
-    analyze_git_repo_loc(self, branch: str, start_date_str: str, end_date_str: str, interval: str = "daily", lang: list[str] = None, author: str = None) -> pd.DataFrame:
-        Analyze and extract LOC statistics from a Git repository.
-    convert_json_to_dataframe(self, json_str):
-    save_dataframe(self, data: pd.DataFrame, csv_file: Path) -> None:
-        Save dataframe type to csv file.
-    create_charts(self, language_trend_data: pd.DataFrame, author_trend_data: pd.DataFrame, sum_data: pd.DataFrame, output_path: Path, interval: str):
-    save_charts(self, output_path: Path) -> None:
+    make_output_dir(output_dir: Path) -> Path:
+    clear_cache_files():
+        Deletes all files located in the directory specified by the `_cache_path` attribute.
+    is_branch_exists(repo_path: PathLike, branch_name: str) -> bool:
+        Checks if a branch exists in the given Git repository.
+    is_comment_or_empty_line(line: str, language: str) -> bool:
+        Checks if a line is a comment or an empty line.
+    load_cache() -> pd.DataFrame:
+        Loads the cached commit data from the cache directory.
+    get_commit_analysis() -> pd.DataFrame:
+        Analyzes the commits in the repository and returns a DataFrame with 
+        the analyzed commit data.
+    save_cache() -> None:
+    get_repository_name(repo_path: Union[Path, str]) -> str:
+    valid_language_key(languages: list[str]) -> list[str]:
+
 """
 
-import json
+import copy
 import os
-import subprocess
 import sys
-from datetime import datetime, timedelta
+import threading
+from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime
 from pathlib import Path
+from typing import Union
 
 import pandas as pd
-import plotly.graph_objects as go
-from git import Commit, InvalidGitRepositoryError, NoSuchPathError, Repo, exc
-from plotly.subplots import make_subplots
+from git import GitCommandError, PathLike, Repo
+from pydriller import Commit, Repository
 from tqdm import tqdm
+from tqdm.contrib.concurrent import thread_map
 
-from .chart_builder import ChartBuilder
+from analyze_git_repo_loc.language_comment import LanguageComment
+from analyze_git_repo_loc.language_extensions import LanguageExtensions
 
 
 class GitRepoLOCAnalyzer:
@@ -46,91 +49,88 @@ class GitRepoLOCAnalyzer:
     """
 
     def __init__(
-        self, repo_path: Path, branch_name: str, cache_dir: Path, output_dir: Path
+        self,
+        repo_path: Union[Path, str],
+        branch_name: str,
+        cache_dir: Path,
+        output_dir: Path,
+        since: datetime = None,
+        to: datetime = None,
+        from_tag: str = None,
+        to_tag: str = None,
+        authors: list[str] = None,
+        languages: list[str] = None,
     ):
         """
         Initialize the Git repository Lines of Code (LOC) Analyzer.
 
         Args:
-            repo_path (Path): The path to the git repository.
+            repo_path (Union[Path,str]): The path to the git repository.
             branch_name (str): The name of the branch to analyze.
             cache_dir (Path): The directory where intermediate results can be cached.
             output_dir (Path): The directory where final outputs will be saved.
+            since (datetime): The start date for filtering commits.
+            to (datetime): The end date for filtering commits.
+            from_tag (str): The start tag for filtering commits.
+            to_tag (str): The end tag for filtering commits.
+            authors (list[str]): A list of author names to filter commits.
+            languages (list[str]): A list of languages to filter commits.
+
+        Raises:
+            OSError: If there is an error creating the cache or output directories.
         """
         # Initialize Git Repo object.
         self._repo_path = repo_path
         """ Git repository path """
-        self._repo = self.init_repository()
-        """ Git repository object """
         self._branch_name = branch_name
-        """ Active branch name """
+        """ Branch name to analyze """
+
         # Make output directory.
         self._cache_path = self.make_output_dir(cache_dir / repo_path.name).resolve()
         """ Path to cache directory """
         self._output_path = self.make_output_dir(output_dir / repo_path.name).resolve()
         """ Path to output directory """
 
-        # Find 'cloc.exe' path.
-        self._cloc_path = self.find_cloc_path()
-        """ Path to 'cloc.exe' """
-        self.verify_cloc_executable(self._cloc_path)
+        # pydriller options
+        self._since = since
+        """ Start date for filtering commits """
+        self._to = to
+        """ End date for filtering commits """
+        self._from_tag = from_tag
+        """ Start tag for filtering commits """
+        self._to_tag = to_tag
+        """ End tag for filtering commits """
+        self._authors = authors
+        """ List of author names to filter commits """
+        self._languages = languages
+        """ List of languages to filter commits """
+        self._language_extensions = LanguageExtensions.get_extensions(languages)
+        """ Language extensions to filter commits """
 
-        # Initialize ChartBuilder
-        self._chart_builder: ChartBuilder = ChartBuilder()
-        self._chart: go.Figure = None
-        """ The final Plotly figure object that contains the combined area and line plot. """
-
-    def init_repository(self) -> Repo:
-        """
-        Initializes and returns a Repo object if the repository is valid.
-
-        This method attempts to create a Repo object using the directory path
-        provided in `self.repo_path`. If the path does not represent a valid Git
-        repository or the path does not exist, it will print an error message to
-        stderr and re-raise the exception.
-
-        Returns:
-            Repo: A Repo object representing the Git repository at `self.repo_path`.
-
-        Raises:
-            InvalidGitRepositoryError: An error is raised if `self.repo_path` is
-                                       not a valid Git repository.
-            NoSuchPathError: An error is raised if `self.repo_path` does not exist.
-        """
-        try:
-            return Repo(self._repo_path)
-        except InvalidGitRepositoryError as e:
-            print(
-                f"InvalidGitRepositoryError: Not a git repository. {str(e)}",
-                file=sys.stderr,
-            )
-            raise
-        except NoSuchPathError as e:
-            print(f"NoSuchPathError: No such path. {str(e)}", file=sys.stderr)
-            raise
+        # Analyzed data
+        self._commit_data = None
+        """ DataFrame containing the analyzed commit data """
+        self._cache_commit_data = self.load_cache()
+        """ DataFrame containing the cached commit data """
 
     def make_output_dir(self, output_dir: Path) -> Path:
         """
-        Attempts to create the directory specified by `output_dir`, if it does not already exist.
+        Creates the specified output directory, including any necessary parent directories.
 
         Args:
-            output_dir (Path): The path of the output directory to be created.
+            output_dir (Path): The path of the directory to create.
 
         Returns:
-            Path: The resolved path of the output directory which may have been created.
+            Path: The path of the created directory.
 
-        This method will resolve the provided `output_dir` and check its existence.
-        If the directory does not exist, it will create the directory and all its
-        required parents, then print a confirmation message. If the directory already exists,
-        it will simply print an informational message stating that the directory exists.
-        In both cases, the resolved output directory path is returned.
+        Raises:
+            OSError: If the directory cannot be created.
         """
-        output_dir.resolve()
-        if not output_dir.exists():
-            print(f"Make directory. ({output_dir})")
-            output_dir.mkdir(parents=True)
-        else:
-            print(f"Directory exists. ({output_dir.resolve()})")
+        try:
+            output_dir.mkdir(parents=True, exist_ok=True)
+        except OSError as ex:
+            print(f"Error creating directory: {str(ex)})", file=sys.stderr)
+            raise
         return output_dir
 
     def clear_cache_files(self):
@@ -142,552 +142,264 @@ class GitRepoLOCAnalyzer:
         subdirectories) and deletes each file.
 
         Raises:
-            AttributeError: If `_cache_path` does not exist or is not a directory.
+            FileNotFoundError: If the cache directory does not exist.
         """
         if self._cache_path.exists() and self._cache_path.is_dir():
             for file in tqdm(self._cache_path.glob("**/*")):
                 if file.is_file():
                     file.unlink()
 
-    def find_cloc_path(self) -> Path:
+    def is_branch_exists(self, repo_path: PathLike, branch_name: str) -> bool:
         """
-        Searches for the 'cloc.exe' executable in the system PATH and current working directory.
-
-        The function searches each directory in the PATH environment variable
-        for a file named 'cloc.exe'. If it is not found, the function then checks
-        the current working directory. If 'cloc.exe' is found and is an executable file,
-        its full path is returned.
-
-        Returns:
-            Path: The full path to the 'cloc.exe'.
-
-        Raises:
-            FileNotFoundError: If 'cloc.exe' is not found.
-
-        Usage example:
-            >>> cloc_path = find_cloc_path()
-            >>> print(cloc_path)
-            WindowsPath('C:/path/to/cloc.exe')
-            # this output can vary depending on the actual found path
-        """
-        cloc_exe_filename: str = "cloc.exe" if os.name == "nt" else "cloc"
-
-        # Find full path of 'cloc.exe' from 'PATH' environment variable.
-        for path in os.environ["PATH"].split(os.pathsep):
-            full_path = Path(path) / cloc_exe_filename
-            if full_path.is_file() and os.access(str(full_path), os.X_OK):
-                print(f"Path: {full_path}")
-                return full_path
-
-        # Find 'cloc.exe' from current directory.
-        current_dir = Path.cwd()
-        full_path = current_dir / cloc_exe_filename
-        if full_path.is_file() and os.access(str(full_path), os.X_OK):
-            print(f"Path: {full_path}")
-            return full_path
-
-        raise FileNotFoundError("Not found cloc.exe.")
-
-    def verify_cloc_executable(self, executable_path: Path) -> None:
-        """
-        Verifies that the 'cloc' executable is present at the specified path and can be run.
-
-        This function attempts to run `cloc --version` using the given cloc executable path.
-        If successful, it prints out the version of cloc. If the executable is not found,
-        an error message is printed and the program exits with status code 1.
+        Check if a branch exists in the given Git repository.
 
         Args:
-            executable_path (Path): The file system path to the cloc executable.
-
-        Returns:
-            None
-
-        Raises:
-            FileNotFoundError: If the cloc executable is not found at the given path.
-
-        Usage example:
-            >>> from pathlib import Path
-            >>> cloc_path = Path('/usr/bin/cloc')
-            >>> verify_cloc_executable(cloc_path)
-        """
-        try:
-            version_result = subprocess.run(
-                [
-                    str(executable_path.resolve()),
-                    "--version",
-                ],
-                check=True,
-                capture_output=True,
-                text=True,
-            )
-            print(f"- cloc.exe: Ver. {version_result.stdout}")
-        except subprocess.CalledProcessError as e:
-            raise RuntimeError(f"Error executing cloc: {e.stderr}") from e
-
-    def get_commits(
-        self,
-        branch: str,
-        since: datetime,
-        until: datetime,
-        interval="daily",
-        author: str = None,
-    ) -> list[tuple[Commit, str]]:
-        """
-        get_commits Get a list of Commit object.
-
-        This function retrieves a list of commits for a specified repository and branch.
-        It filters for a specified date range and interval.
-
-        Args:
-            branch (str): The name of the branch to retrieve commits from.
-            since (datetime): The start date for filtering commits.
-            until (datetime): The end date for filtering commits.
-            interval (str, optional): The interval to use for filtering commits.
-                                      Defaults to 'daily'. ("hourly", "daily", "weekly", etc.).
-            author (str, optional): The author name to filter commits. Defaults to 'None'.
-
-        Raises:
-            ValueError: If the provided `interval` is not one of 'daily', 'weekly', or 'monthly'.
-
-        Returns:
-            list[tuple[Commit, str]]: A list of tuples containing the Commit object and author name.
-        """
-
-        # Check if the branch exists
-        if not self.branch_exists(branch):
-            raise RuntimeError(f"Branch '{branch}' does not exist.")
-
-        # Set the timedelta object that defines the interval.
-        # NOTE: Approximate average length of month in days
-        intervals = {
-            "daily": timedelta(days=1),
-            "weekly": timedelta(weeks=1),
-            "monthly": timedelta(days=30),
-        }
-        delta = intervals.get(interval)
-        if not delta:
-            raise ValueError(
-                "Invalid interval. Choose 'daily', 'weekly', or 'monthly'."
-            )
-
-        # Start and end dates to filter
-        since_str = f'--since="{since.strftime("%Y-%m-%d")}"'
-        until_str = f'--until="{until.strftime("%Y-%m-%d")}"'
-
-        # Search and filter commits in order and add them to the list
-        # NOTE: Commit dates are ordered by newest to oldest, so filter by end date
-        last_added_commit_date = until
-        commits: list[tuple[Commit, str]] = []
-        for commit in self._repo.iter_commits(branch, since=since_str, until=until_str):
-            commit_date = datetime.fromtimestamp(commit.committed_date)
-            if commit_date <= last_added_commit_date - delta:
-                # commits.append((commit.hexsha, commit_date.strftime("%Y-%m-%d %H:%M:%S")))
-                author_name = commit.author.name
-                if author is None or author_name == author:
-                    commits.append((commit, author_name))
-                    last_added_commit_date = commit_date
-
-        print(f"-> {len(commits)} commits found.", end=os.linesep + os.linesep)
-        return commits
-
-    def branch_exists(self, branch: str) -> bool:
-        """
-        Check if a branch exists in the repository.
-
-        Args:
-            branch (str): The branch name to check.
+            repo_path (PathLike): The file system path to the Git repository.
+            branch_name (str): The name of the branch to check for existence.
 
         Returns:
             bool: True if the branch exists, False otherwise.
         """
         try:
-            self._repo.git.show_ref(f"refs/heads/{branch}")
-            return True
-        except exc.GitCommandError:
+            repo = Repo(repo_path)
+            return branch_name in repo.heads
+        except (GitCommandError, AttributeError):
             return False
 
-    def run_cloc(self, commit: Commit, lang: list[str] = None) -> str:
+    @classmethod
+    def is_comment_or_empty_line(cls, line: str, language: str) -> bool:
         """
-        Run the `cloc` to analyze LOC for a specific commit in a Git repository.
-
-        This function executes the `cloc` program with JSON output format, targeting
-        the provided commit. `cloc` is a command line tool used to count blank lines,
-        comment lines, and physical lines of source code in many programming languages.
+        Check if a line is a comment or an empty line.
 
         Args:
-            commit (Commit): A GitPython `Commit` object representing the commit to analyze.
-            lang (list[str], optional): List of languages to search. Defaults to 'None'.
+            line (str): The line of code to check.
+            language (str): The language of the code.
 
         Returns:
-            str: A JSON-formatted string containing the `cloc` analysis result.
-
-        Remarks:
-            The command executed is equivalent to:
-                cloc --json --quiet --git --include-lang=L1, L2, L3 <commit hash>
-            and produces output in the following format:
-                {
-                    "Language": {
-                        "nfiles": count,
-                        "blank": count,
-                        "comment": count,
-                        "code": count
-                    },
-                    ...
-                }
-
-        Raises:
-            subprocess.CalledProcessError: If the `cloc` command fails to execute properly.
-            SystemExit: If there is an error during the execution of the `cloc` command.
+            bool: True if the line is a comment or an empty line, False otherwise
         """
+        stripped_line = line.strip()
+        comment_syntax = LanguageComment.get_comment_syntax(language)
+        if not comment_syntax:
+            return not stripped_line
+        return not stripped_line or any(
+            stripped_line.startswith(syntax) for syntax in comment_syntax
+        )
 
-        # Generate argument options for the language list to be searched
-        if lang is None:
-            include_lang: str = ""
-        else:
-            include_lang: str = "--include-lang=" + ",".join(lang)
-
-        try:
-            # Run cloc.exe and analyze LOC
-            result = subprocess.run(
-                [
-                    str(self._cloc_path.resolve()),
-                    "--json",
-                    "--quiet",
-                    "--git",
-                    include_lang,
-                    commit.hexsha,
-                ],
-                check=True,
-                capture_output=True,
-                text=True,
-            )
-        except subprocess.CalledProcessError as e:
-            print(f"Error: {str(e)}", file=sys.stderr)
-            sys.exit(1)
-        except FileNotFoundError as e:
-            print(
-                f"Error: Not found cloc.exe. {str(e)}",
-                file=sys.stderr,
-            )
-            sys.exit(1)
-        return result.stdout
-
-    def analyze_git_repo_loc(
-        self,
-        branch: str,
-        since_str: str,
-        until_str: str,
-        interval: str = "daily",
-        lang: list[str] = None,
-        author: str = None,
-    ) -> pd.DataFrame:
+    def load_cache(self) -> pd.DataFrame:
         """
-        analyze_git_repo_loc Analyze and extract LOC statistics from a Git repository.
+        Load the cached commit data from the cache directory.
 
-        Specified repository path, branch name, date range, and an optional interval, this function
-        extracts the counts of lines of code, including the number of files, comments, blank,
-        and lines of code per language. It runs `cloc` for each commit within the specified range
-        and compiles the results into a single DataFrame.
-
-        Args:
-            branch (str): The name of the branch to retrieve commits from.
-            since_str (str): The start date for filtering commits in 'YYYY-MM-DD' format.
-            until_str (str): The end date for filtering commits in 'YYYY-MM-DD' format.
-            interval (str, optional): The interval to use for filtering commits.
-                                      Defaults to 'daily'. ("hourly", "daily", "weekly", etc.).
-            lang (list[str], optional): List of languages to search. Defaults to 'None'
-            author (str, optional): The author name to filter commits. Defaults to 'None'.
+        This method reads the cached commit data from the pickle file located
+        at the specified cache path. If the file does not exist, it does nothing.
 
         Returns:
-            pd.DataFrame: A DataFrame containing the analysis results with columns for Commit hash,
-                        Date, Language, Number of files, Comments, Blank lines, and Code lines.
-
-        Raises:
-            ValueError: If the provided start or end date strings are not in the correct format
-                        or represent invalid dates.
-            SystemExit: If failing to parse the start or end date strings.
+            pd.DataFrame: The cached commit data, if available, otherwise an empty DataFrame.
         """
-
-        # Define start and end dates as datetime type.
         try:
-            if since_str is None:
-                since: datetime = datetime.strptime("1970-01-01", "%Y-%m-%d")
-            else:
-                since: datetime = datetime.strptime(since_str, "%Y-%m-%d")
+            return pd.read_pickle(self._cache_path / "commit_data.pkl")
+        except (FileNotFoundError, pd.errors.EmptyDataError):
+            print("No cache file found. it does nothing, and continue.")
+            return None
 
-            if until_str is None:
-                until: datetime = datetime.now()
-            else:
-                until: datetime = datetime.strptime(until_str, "%Y-%m-%d")
-        except ValueError as e:
-            print(f"Error: {str(e)}", file=sys.stderr)
-            sys.exit(1)
+    def get_commit_analysis(self) -> pd.DataFrame:
+        """
+        Analyzes the commits in the repository and returns a DataFrame with the following columns:
+        - Datetime: The date of the commit.
+        - Repository: The name of the repository.
+        - Commit_hash: The hash of the commit.
+        - Author: The author of the commit.
+        - Language: The programming language of the modified file.
+        - NLOC_Added: The number of net lines of code added.
+        - NLOC_Deleted: The number of net lines of code deleted.
+        - NLOC: The net lines of code (NLOC_Added - NLOC_Deleted).
 
-        # Output analysis conditions.
-        analysis_config: list[str] = []
-        analysis_config.append(f"- repository:\t{self._repo_path.resolve()}")
-        analysis_config.append(f"- branch:\t{branch}")
-        analysis_config.append(f"- since:\t{since:%Y-%m-%d %H:%M:%S}")
-        analysis_config.append(f"- until:\t{until:%Y-%m-%d %H:%M:%S}")
-        analysis_config.append(f"- interval:\t{interval}")
-        analysis_config.append(f"- language:\t{lang if lang else 'All'}")
-        analysis_config.append(f"- author:\t{author if author else 'All'}")
-        print(f"{os.linesep}".join(analysis_config))
+        Returns:
+            pd.DataFrame: A DataFrame containing the analyzed commit data.
+        """
+        # Initialize the repository object for pydriller
+        repository = Repository(
+            str(self._repo_path),
+            only_in_branch=self._branch_name,
+            since=self._since,
+            to=self._to,
+            from_tag=self._from_tag,
+            to_tag=self._to_tag,
+            only_authors=self._authors,
+            only_modifications_with_file_types=self._language_extensions,
+            only_no_merge=True,
+            histogram_diff=True,
+            num_workers=os.cpu_count(),
+        )
 
-        # Get a list of Commits filtered by the specified date and interval.
-        try:
-            commits = self.get_commits(
-                branch=branch,
-                since=since,
-                until=until,
-                interval=interval,
-                author=author,
-            )
-        except ValueError as e:
-            print(f"Error: {str(e)}", file=sys.stderr)
-            sys.exit(1)
+        # temporary list to store commit data
+        commit_data_list = []
+        commits = list(
+            tqdm(repository.traverse_commits(), desc="Getting commits", unit="commit")
+        )
+        total_commits = len(commits)
 
-        if len(commits) == 0:
-            print("Error: Not found commits in the specified branch.", file=sys.stderr)
-            sys.exit(1)
+        # Traverse commits
+        for commit in tqdm(
+            commits,
+            desc="Analyzing commits",
+            total=total_commits,
+            unit="commit",
+        ):
+            commit_datetime = commit.committer_date
+            repository_name = GitRepoLOCAnalyzer.get_repository_name(self._repo_path)
+            commit_hash = commit.hash
+            commit_author = commit.author.name
 
-        cloc_df: pd.DataFrame = pd.DataFrame(
+            # Skip if the commit is already analyzed
+            if self._cache_commit_data is not None:
+                # Check for the presence of commit_hash in the "Commit_hash" column
+                # of the cached commit data. If found, append the matching rows to
+                # the commit_data_list and continue to the next commit.
+                matching_rows = self._cache_commit_data[
+                    self._cache_commit_data["Commit_hash"] == commit_hash
+                ]
+                if not matching_rows.empty:
+                    commit_data_list.extend(matching_rows.to_dict("records"))
+                    continue
+
+            # Traverse modified files
+            for mod in commit.modified_files:
+                # Get the programming language of the modified file
+                language = LanguageExtensions.get_language(mod.filename)
+                if language == "Unknown":
+                    continue
+
+                # Skip if the file is not in the specified language
+                if self._languages and language not in self._languages:
+                    continue
+
+                # Calculate add LOC, delete LOC, net LOC
+                # NOTE: diff_parsed is a list of tuples (line_number, line)
+                nloc_added = sum(
+                    1
+                    for _, diff in mod.diff_parsed.get("added", [])
+                    if not self.is_comment_or_empty_line(diff, language)
+                )
+                nloc_deleted = sum(
+                    1
+                    for _, diff in mod.diff_parsed.get("deleted", [])
+                    if not self.is_comment_or_empty_line(diff, language)
+                )
+                nloc = nloc_added - nloc_deleted
+
+                commit_data_list.append(
+                    {
+                        "Datetime": commit_datetime,
+                        "Repository": repository_name,
+                        "Branch": self._branch_name,
+                        "Commit_hash": commit_hash,
+                        "Author": commit_author,
+                        "Language": language,
+                        "NLOC_Added": nloc_added,
+                        "NLOC_Deleted": nloc_deleted,
+                        "NLOC": nloc,
+                    }
+                )
+        # Create DataFrame from list in a single operation
+        commit_data = pd.DataFrame(
+            commit_data_list,
             columns=[
-                "Commit",
-                "Date",
+                "Datetime",
+                "Repository",
+                "Branch",
+                "Commit_hash",
+                "Author",
                 "Language",
-                "nFiles",
-                "comment",
-                "blank",
-                "code",
+                "NLOC_Added",
+                "NLOC_Deleted",
+                "NLOC",
             ],
         )
+        # Column type conversion
+        commit_data["Datetime"] = pd.to_datetime(commit_data["Datetime"], utc=True)
+        commit_data["Repository"] = commit_data["Repository"].astype("string")
+        commit_data["Branch"] = commit_data["Branch"].astype("string")
+        commit_data["Commit_hash"] = commit_data["Commit_hash"].astype("string")
+        commit_data["Author"] = commit_data["Author"].astype("string")
+        commit_data["Language"] = commit_data["Language"].astype("string")
+        commit_data["NLOC_Added"] = commit_data["NLOC_Added"].astype("int")
+        commit_data["NLOC_Deleted"] = commit_data["NLOC_Deleted"].astype("int")
+        commit_data["NLOC"] = commit_data["NLOC"].astype("int")
 
-        # Change the directory to the repository path.
-        origin_path: Path = Path.cwd()
-        os.chdir(self._repo_path)
+        self._commit_data = commit_data
+        return commit_data
 
-        # Analyse LOC for each commit.
-        print("Analyse LOC for each commit.")
-        for commit, author_name in tqdm(commits, desc="Commits"):
-            # Check for cache files
-            cloc_result_file: Path = self._cache_path / f"{commit.hexsha}.json"
-            cloc_result: str = None
+    def save_cache(self) -> None:
+        """
+        Saves the commit data to a cache file.
 
-            if cloc_result_file.exists():
-                with cloc_result_file.open(mode="r") as file:
-                    cloc_result = file.read()
+        This method serializes the commit data and saves it to a pickle file
+        located at the specified cache path. If there is no commit data available,
+        it raises a ValueError.
+
+        Raises:
+            ValueError: If there is no commit data to save.
+        """
+        if self._commit_data is None:
+            raise ValueError("No data to save. Run get_commit_analysis() first.")
+
+        self._commit_data.to_pickle(self._cache_path / "commit_data.pkl")
+
+    @classmethod
+    def get_repository_name(cls, repo_path: Union[Path, str]) -> str:
+        """
+        Retrieves the repository name from the given local path or URL.
+
+        If 'repo_path' is a Path object, it returns the directory name.
+        If 'repo_path' is a string URL, it returns the last segment
+        after '/' and removes ".git" if present.
+
+        Args:
+            repo_path (Union[Path, str]): The path or URL of the repository.
+
+        Returns:
+            str: The name of the repository.
+        """
+        # Check if repo_path is an instance of Path
+        if isinstance(repo_path, Path):
+            return repo_path.name
+
+        # Assume repo_path is a string (URL), process accordingly
+        return repo_path.rsplit("/", 1)[-1].removesuffix(".git")
+
+    def valid_language_key(self, languages: list[str]) -> list[str]:
+        """
+        Validates the language keys and returns a list of valid language keys.
+
+        Args:
+            languages (list[str]): A list of language keys to validate.
+
+        Returns:
+            list[str]: A list of valid language keys.
+        """
+
+        def capitalize_words(words: str) -> str:
+            """
+            Capitalizes the first letter of each word in a given string.
+
+            Args:
+                words (str): A string containing words separated by spaces.
+
+            Returns:
+                str: A string with the first letter of each word capitalized.
+            """
+
+            return " ".join([word.capitalize() for word in words.split()])
+
+        # Check if the language is in the language_to_extensions dictionary
+        valid_languages: list[str] = []
+        for lang in languages:
+            if lang in LanguageExtensions.language_to_extensions:
+                valid_languages.append(lang)
             else:
-                # Run "cloc.exe"
-                cloc_result = self.run_cloc(commit=commit, lang=lang)
-                with cloc_result_file.open(mode="w") as file:
-                    file.write(cloc_result)
-
-            df = self.convert_json_to_dataframe(cloc_result)
-
-            # Insert Commit and Date columns at the head of columns in the dataframe.
-            df.insert(0, "Commit", commit.hexsha)
-            committed_date = datetime.fromtimestamp(commit.committed_date)
-            df.insert(1, "Date", committed_date.strftime("%Y-%m-%d %H:%M:%S"))
-            df.insert(2, "Author", author_name)
-            # Concatenate data frames
-            cloc_df = pd.concat([cloc_df, df])
-
-        cloc_df.reset_index(inplace=True, drop=True)
-
-        # Return to original directory.
-        os.chdir(origin_path)
-
-        return cloc_df
-
-    def convert_json_to_dataframe(self, json_str):
-        """
-        Convert a JSON string to a pandas DataFrame after removing specified keys.
-
-        This function takes a JSON string and decodes it into a dictionary, removes
-        the 'header' and 'SUM' elements if they exist, and then converts it into a
-        pandas DataFrame. The index of the DataFrame is reset, and the first column
-        is renamed to 'Language'.
-
-        Args:
-            json_str (str): A JSON string representation of the data to be converted
-                            into a DataFrame.
-
-        Returns:
-        df : pandas.DataFrame
-            The resulting pandas DataFrame with the 'header' and 'SUM' entries removed,
-            and the 'index' column renamed to 'Language'.
-        """
-        try:
-            # Decode json string to dict type
-            json_dict: dict = json.loads(json_str)
-            json_dict.pop("header", None)
-            json_dict.pop("SUM", None)
-
-            # Create a dataframe from the json dict type.
-            df = pd.DataFrame.from_dict(json_dict, orient="index")
-            df.reset_index(inplace=True)
-            df.rename(columns={"index": "Language"}, inplace=True)
-        except (json.JSONDecodeError, TypeError) as e:
-            print(f"Error: {str(e)}", file=sys.stderr)
-            return pd.DataFrame()
-
-        return df
-
-    def save_dataframe(self, data: pd.DataFrame, csv_file: Path) -> None:
-        """
-        save_dataframe Save dataframe type to csv file
-
-        Args:
-            data (pd.DataFrame): Data of dataframe type to be saved.
-            csv_file (Path): Full path to save csv file
-
-        Returns:
-            None
-        """
-        print(f"- Save: {csv_file}")
-        data.to_csv(csv_file)
-
-    def create_charts(
-        self,
-        language_trend_data: pd.DataFrame,
-        author_trend_data: pd.DataFrame,
-        sum_data: pd.DataFrame,
-        output_path: Path,
-        interval: str,
-    ):
-        """
-        Creates charts using the provided trend and summation data.
-
-        This method takes a trend dataframe and a summation dataframe,
-        builds a chart using the internal _chart_builder.
-        Args:
-            language_trend_data (pd.DataFrame):
-                A pandas DataFrame containing the trend data of LOC by language.
-            author_trend_data (pd.DataFrame):
-                A pandas DataFrame containing the trend data of LOC by author.
-            sum_data (pd.DataFrame): A pandas DataFrame that contains the summary data.
-            output_path (Path): The path to save the chart HTML file.
-            interval (str): The interval to use for formatting the x-axis ticks.
-                            Should be one of 'daily', 'weekly', or 'monthly'.
-        """
-        language_trend_chart = self._chart_builder.build(
-            trend_data=language_trend_data,
-            sum_data=sum_data,
-            color_data="Language",
-            interval=interval,
-            repo_name=self._repo_path.name,
-            branch_name=self._repo.active_branch.name,
-        )
-        language_trend_chart.write_html(output_path / "language_trend_chart.html")
-
-        author_trend_chart = self._chart_builder.build(
-            trend_data=author_trend_data,
-            sum_data=sum_data,
-            color_data="Author",
-            interval=interval,
-            repo_name=self._repo_path.name,
-            branch_name=self._repo.active_branch.name,
-        )
-        author_trend_chart.write_html(output_path / "author_trend_chart.html")
-
-        # Combine two charts
-        self._chart = make_subplots(
-            rows=2,
-            cols=1,
-            shared_xaxes=True,
-            subplot_titles=("Language Trend", "Author Trend"),
-            vertical_spacing=0.1,
-            specs=[[{"secondary_y": True}], [{"secondary_y": True}]],
-        )
-
-        # Add traces from language_trend_chart
-        for trace in language_trend_chart["data"]:
-            self._chart.add_trace(trace, row=1, col=1)
-
-        # Add traces from author_trend_chart
-        for trace in author_trend_chart["data"]:
-            self._chart.add_trace(trace, row=2, col=1)
-
-        # Update layout
-        self._chart.update_xaxes(
-            showline=True,
-            linewidth=1,
-            linecolor="grey",
-            color="black",
-            gridcolor="lightgrey",
-            gridwidth=0.5,
-            title_text="Date",
-            title_font_size=18,
-            tickfont_size=14,
-            tickangle=-45,
-            tickformat=language_trend_chart["layout"]["xaxis"]["tickformat"],
-            automargin=True,
-        )
-        self._chart.update_yaxes(
-            secondary_y=False,
-            showline=True,
-            linewidth=1,
-            linecolor="grey",
-            color="black",
-            gridcolor="lightgrey",
-            gridwidth=0.5,
-            title_text="LOC",
-            title_font_size=18,
-            tickfont_size=14,
-            range=[0, None],
-            autorange="max",
-            rangemode="tozero",
-            automargin=True,
-            spikethickness=1,
-            spikemode="toaxis+across",
-        )
-        self._chart.update_yaxes(
-            secondary_y=True,
-            showline=True,
-            linewidth=1,
-            linecolor="grey",
-            color="black",
-            gridcolor="lightgrey",
-            gridwidth=0.5,
-            title_text="Difference of LOC",
-            title_font_size=18,
-            tickfont_size=14,
-            range=[0, None],
-            autorange="max",
-            rangemode="tozero",
-            automargin=True,
-            spikethickness=1,
-            spikemode="toaxis+across",
-            overlaying="y",
-            side="right",
-        )
-        chat_title = f"LOC trend by Language and Author - {self._repo_path.name} ({self._branch_name})"
-        self._chart.update_layout(
-            font_family="Open Sans",
-            plot_bgcolor="white",
-            title={
-                "text": chat_title,
-                "x": 0.5,
-                "xanchor": "center",
-                "font_size": 20,
-            },
-            xaxis={"dtick": "M1"},
-            legend_title_font_size=14,
-            legend_font_size=14,
-        )
-
-        self._chart.show()
-
-    def save_charts(self, output_path: Path) -> None:
-        """
-        Saves the generated charts to HTML format.
-
-        The file is saved to the path specified by _output_path with the filename 'report.html'.
-        It's expected that the _chart attribute is already populated with a chart object.
-
-        Args:
-            output_path (Path): The path to save the chart HTML file.
-        """
-        if self._chart is not None:
-            self._chart.write_html(output_path / "report.html")
+                # if the language is not in the dictionary, capitalize the first letter of each word
+                capitalized_lang = capitalize_words(lang)
+                if capitalized_lang in LanguageExtensions.language_to_extensions:
+                    valid_languages.append(capitalized_lang)
+        return valid_languages
