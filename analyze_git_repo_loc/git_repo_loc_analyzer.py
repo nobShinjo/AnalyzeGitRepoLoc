@@ -211,7 +211,7 @@ class GitRepoLOCAnalyzer:
         # temporary list to store commit data
         commit_data_list = []
         traverse_commits = repository.traverse_commits()
-        total_commits = len(list(traverse_commits))
+        total_commits = sum(1 for _ in tqdm(traverse_commits))
         # Traverse commits
         for commit in tqdm(
             repository.traverse_commits(),
@@ -319,115 +319,6 @@ class GitRepoLOCAnalyzer:
             raise ValueError("No data to save. Run get_commit_analysis() first.")
 
         self._commit_data.to_pickle(self._cache_path / "commit_data.pkl")
-
-    # def create_charts(
-    #     self,
-    #     sub_title: str,
-    # ):
-    #     """
-    #     Creates charts using the provided trend and summation data.
-
-    #     This method takes a trend dataframe and a summation dataframe,
-    #     builds a chart using the internal _chart_builder.
-    #     Args:
-    #         language_trend_data (pd.DataFrame):
-    #             A pandas DataFrame containing the trend data of LOC by language.
-    #         author_trend_data (pd.DataFrame):
-    #             A pandas DataFrame containing the trend data of LOC by author.
-    #         sum_data (pd.DataFrame): A pandas DataFrame that contains the summary data.
-    #         output_path (Path): The path to save the chart HTML file.
-    #         interval (str): The interval to use for formatting the x-axis ticks.
-    #                         Should be one of 'daily', 'weekly', or 'monthly'.
-    #         sub_title (str): The sub-title to include in the chart title.
-    #     """
-
-    #     # Combine two charts
-    #     self._chart = make_subplots(
-    #         rows=2,
-    #         cols=1,
-    #         shared_xaxes=True,
-    #         subplot_titles=("Language Trend", "Author Trend"),
-    #         vertical_spacing=0.1,
-    #         specs=[[{"secondary_y": True}], [{"secondary_y": True}]],
-    #     )
-
-    #     # Add traces from language_trend_chart
-    #     for trace in language_trend_chart["data"]:
-    #         self._chart.add_trace(trace, row=1, col=1)
-
-    #     # Add traces from author_trend_chart
-    #     for trace in author_trend_chart["data"]:
-    #         self._chart.add_trace(trace, row=2, col=1)
-
-    #     # Update layout
-    #     self._chart.update_xaxes(
-    #         showline=True,
-    #         linewidth=1,
-    #         linecolor="grey",
-    #         color="black",
-    #         gridcolor="lightgrey",
-    #         gridwidth=0.5,
-    #         title_text="Date",
-    #         title_font_size=18,
-    #         tickfont_size=14,
-    #         tickangle=-45,
-    #         tickformat=language_trend_chart["layout"]["xaxis"]["tickformat"],
-    #         automargin=True,
-    #     )
-    #     self._chart.update_yaxes(
-    #         secondary_y=False,
-    #         showline=True,
-    #         linewidth=1,
-    #         linecolor="grey",
-    #         color="black",
-    #         gridcolor="lightgrey",
-    #         gridwidth=0.5,
-    #         title_text="LOC",
-    #         title_font_size=18,
-    #         tickfont_size=14,
-    #         range=[0, None],
-    #         autorange="max",
-    #         rangemode="tozero",
-    #         automargin=True,
-    #         spikethickness=1,
-    #         spikemode="toaxis+across",
-    #     )
-    #     self._chart.update_yaxes(
-    #         secondary_y=True,
-    #         showline=True,
-    #         linewidth=1,
-    #         linecolor="grey",
-    #         color="black",
-    #         gridcolor="lightgrey",
-    #         gridwidth=0.5,
-    #         title_text="Difference of LOC",
-    #         title_font_size=18,
-    #         tickfont_size=14,
-    #         range=[0, None],
-    #         autorange="max",
-    #         rangemode="tozero",
-    #         automargin=True,
-    #         spikethickness=1,
-    #         spikemode="toaxis+across",
-    #         overlaying="y",
-    #         side="right",
-    #     )
-    #     chat_title = f"LOC trend by Language and Author - {sub_title}"
-    #     self._chart.update_layout(
-    #         font_family="Open Sans",
-    #         plot_bgcolor="white",
-    #         title={
-    #             "text": chat_title,
-    #             "x": 0.5,
-    #             "xanchor": "center",
-    #             "font_size": 20,
-    #         },
-    #         xaxis={"dtick": "M1"},
-    #         legend_title_font_size=14,
-    #         legend_font_size=14,
-    #     )
-
-    #     self._chart.show()
 
     @classmethod
     def get_repository_name(cls, repo_path: Union[Path, str]) -> str:

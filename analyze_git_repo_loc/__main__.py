@@ -143,40 +143,12 @@ def main() -> None:
         progress_bar.update(1)
 
         # 3. Stacked trend chart of code volume per repository
-
-        # Repository trend data
-        repository_trend_data = prepare_trend_data(
+        generate_repository_trend_chart(
             data=repository_analysis,
             time_interval=time_interval,
-            category_column="Repository",
-        )
-        # Summary data
-        summary_data = prepare_summary_data(
-            data=repository_analysis, time_interval=time_interval
-        )
-
-        # Build the chart
-        chart_builder: ChartBuilder = ChartBuilder()
-        repository_trend_chart = chart_builder.build(
-            trend_data=repository_trend_data,
-            summary_data=summary_data,
-            interval=time_interval,
-            sub_title="All repositories",
-        )
-
-        # Show the chart
-        repository_trend_chart.show()
-
-        # Save the data and chart
-        save_chart_data(
-            trend_data=repository_trend_data,
-            summary_data=summary_data,
-            trend_chart=repository_trend_chart,
-            output_prefix="Repository".lower(),
             output_path=output_dir,
         )
         progress_bar.update(1)
-        progress_bar.close()
 
     console.print_h1("\n# LOC Analyze")
     print(Cursor.UP() + Cursor.FORWARD(50) + Fore.GREEN + "FINISH")
@@ -287,48 +259,47 @@ def generate_trend_chart(
         output_path (Path): The output path to save the chart.
         sub_title (str): The sub title for the chart.
     """
+    if data.empty:
+        return
 
-    if not data.empty:
-        # Generate trend chart for each repository
-        for repository in tqdm(
-            data["Repository"].unique(), desc="Generating trend chart", leave=False
-        ):
-            loc_data = data[data["Repository"] == repository]
-            branch_name = next(iter(loc_data["Branch"].unique()), "Unknown")
+    # Generate trend chart for each repository
+    for repository in tqdm(
+        data["Repository"].unique(), desc="Generating trend chart", leave=False
+    ):
+        loc_data = data[data["Repository"] == repository]
+        branch_name = next(iter(loc_data["Branch"].unique()), "Unknown")
 
-            # Language trend data
-            trend_data = prepare_trend_data(
-                data=loc_data,
-                time_interval=time_interval,
-                category_column=category_column,
-            )
+        # Language trend data
+        trend_data = prepare_trend_data(
+            data=loc_data,
+            time_interval=time_interval,
+            category_column=category_column,
+        )
 
-            # Summary data
-            summary_data = prepare_summary_data(
-                data=loc_data, time_interval=time_interval
-            )
+        # Summary data
+        summary_data = prepare_summary_data(data=loc_data, time_interval=time_interval)
 
-            # Build the chart
-            chart_builder: ChartBuilder = ChartBuilder()
-            trend_chart = chart_builder.build(
-                trend_data=trend_data,
-                summary_data=summary_data,
-                interval=time_interval,
-                sub_title=(
-                    f"{repository} ({branch_name})" if sub_title == "" else sub_title
-                ),
-            )
-            # Show the chart
-            trend_chart.show()
+        # Build the chart
+        chart_builder: ChartBuilder = ChartBuilder()
+        trend_chart = chart_builder.build(
+            trend_data=trend_data,
+            summary_data=summary_data,
+            interval=time_interval,
+            sub_title=(
+                f"{repository} ({branch_name})" if sub_title == "" else sub_title
+            ),
+        )
+        # Show the chart
+        trend_chart.show()
 
-            # Save the data and chart
-            save_chart_data(
-                trend_data=trend_data,
-                summary_data=summary_data,
-                trend_chart=trend_chart,
-                output_prefix=category_column.lower(),
-                output_path=output_path / repository,
-            )
+        # Save the data and chart
+        save_chart_data(
+            trend_data=trend_data,
+            summary_data=summary_data,
+            trend_chart=trend_chart,
+            output_prefix=category_column.lower(),
+            output_path=output_path / repository,
+        )
 
 
 def save_chart_data(
@@ -371,6 +342,51 @@ def save_chart_data(
         trend_chart.write_html(output_path / f"{output_prefix}_trend_chart.html")
     except (OSError, IOError, pd.errors.EmptyDataError) as ex:
         handle_exception(ex)
+
+
+def generate_repository_trend_chart(
+    data: pd.DataFrame, time_interval: str, output_path: Path
+) -> None:
+    """
+    Generate trend chart for all repositories.
+
+    Args:
+        data (pd.DataFrame): The data to generate the trend chart.
+        time_interval (str): The time interval to group by.
+        output_path (Path): The output path to save the chart.
+    """
+    if data.empty:
+        return
+
+    # Repository trend data
+    repository_trend_data = prepare_trend_data(
+        data=data,
+        time_interval=time_interval,
+        category_column="Repository",
+    )
+    # Summary data
+    summary_data = prepare_summary_data(data=data, time_interval=time_interval)
+
+    # Build the chart
+    chart_builder: ChartBuilder = ChartBuilder()
+    repository_trend_chart = chart_builder.build(
+        trend_data=repository_trend_data,
+        summary_data=summary_data,
+        interval=time_interval,
+        sub_title="All repositories",
+    )
+
+    # Show the chart
+    repository_trend_chart.show()
+
+    # Save the data and chart
+    save_chart_data(
+        trend_data=repository_trend_data,
+        summary_data=summary_data,
+        trend_chart=repository_trend_chart,
+        output_prefix="Repository".lower(),
+        output_path=output_path,
+    )
 
 
 if __name__ == "__main__":
