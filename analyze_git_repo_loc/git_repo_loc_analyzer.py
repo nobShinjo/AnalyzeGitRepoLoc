@@ -4,14 +4,16 @@
 
 import os
 import sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
 from typing import Union
 
 import pandas as pd
 from git import GitCommandError, PathLike, Repo
-from pydriller import Repository
+from pydriller import Commit, Repository
 from tqdm import tqdm
+from tqdm.contrib.concurrent import thread_map
 
 from analyze_git_repo_loc.language_comment import LanguageComment
 from analyze_git_repo_loc.language_extensions import LanguageExtensions
@@ -210,14 +212,14 @@ class GitRepoLOCAnalyzer:
 
         # temporary list to store commit data
         commit_data_list = []
-        traverse_commits = repository.traverse_commits()
-        total_commits = sum(1 for _ in tqdm(traverse_commits))
-        # Traverse commits
-        for commit in tqdm(
-            repository.traverse_commits(),
-            desc="Analyzing commits",
-            total=total_commits,
-        ):
+        commits = list(tqdm(repository.traverse_commits(), desc="Getting commits"))
+        total_commits = len(commits)
+
+        def process_commit(commit: Commit) -> list[dict]:
+            """
+            Process the commit and return a list of dictionaries containing the commit data.
+            """
+            result = []
             commit_datetime = commit.committer_date
             repository_name = GitRepoLOCAnalyzer.get_repository_name(self._repo_path)
             commit_hash = commit.hash
@@ -232,15 +234,11 @@ class GitRepoLOCAnalyzer:
 
                 # Convert matching rows to a list of dictionaries and extend the target list
                 if not matching_rows.empty:
-                    commit_data_list.extend(matching_rows.to_dict("records"))
-                    continue
+                    result.extend(matching_rows.to_dict("records"))
+                    return result
 
             # Traverse modified files
-            for mod in tqdm(
-                commit.modified_files,
-                desc=f"Files in {commit_hash[:7]}",
-                leave=False,
-            ):
+            for mod in commit.modified_files:
                 language = LanguageExtensions.get_language(mod.filename)
                 if language == "Unknown":
                     continue
@@ -263,7 +261,7 @@ class GitRepoLOCAnalyzer:
                 )
                 nloc = nloc_added - nloc_deleted
 
-                commit_data_list.append(
+                result.append(
                     {
                         "Datetime": commit_datetime,
                         "Repository": repository_name,
@@ -276,9 +274,23 @@ class GitRepoLOCAnalyzer:
                         "NLOC": nloc,
                     }
                 )
+            return result
+
+        # Use thread_map for concurrent execution and progress tracking
+        commit_data_list = thread_map(
+            process_commit,
+            commits,
+            max_workers=os.cpu_count(),
+            desc="Analyzing commits",
+            unit="commit",
+            total=total_commits,
+        )
+        # Flatten the list of lists to a single list
+        commit_data_flat = [item for sublist in commit_data_list for item in sublist]
+
         # Create DataFrame from list in a single operation
         commit_data = pd.DataFrame(
-            commit_data_list,
+            commit_data_flat,
             columns=[
                 "Datetime",
                 "Repository",
