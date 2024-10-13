@@ -3,19 +3,10 @@ $out_dir = Get-Item -Path "..\out"
 $since = ""
 $until = ""
 $interval = "weekly"
-$languages = "C#,python,markdown,txt"
+$languages = "C#,Python,Markdown,txt"
 $author_name = ""
 $clear_cache = $false
-$repo_list_file = ".\repo_list.txt"
-
-# Repository List file check
-if (-not (Test-Path $repo_list_file)) {
-    Write-Host "Repository list file not found."
-    exit
-}
-# Repository List file read
-$repo_list = Get-Content -Path $repo_list_file
-$repo_paths = $repo_list -join ","
+$repo_paths = ".\repo_list_ps1.txt"
 
 # venv environment activation
 $venv_path = Join-Path -Path (Get-Item -Path "..\").FullName -ChildPath ".venv\Scripts\Activate.ps1"
