@@ -1,15 +1,17 @@
 """
-This module provides the `ColoredConsolePrinter` class, which offers functionalities
-for printing colored text to the console. The class leverages the Colorama library
-to enable cross-platform support for colored terminal output, enhancing the readability
-and visual appeal of command-line programs.
+A module for printing colored text to the console using the Colorama library.
+This module provides a class, `ColoredConsolePrinter`, which offers methods to print
+text in various colors and styles to the console. It also includes functionalities
+to move the cursor within the terminal window, enhancing the visual presentation
+of command-line programs.
+
 Classes:
     ColoredConsolePrinter: A class designed to provide colored console printing functionalities.
+
 Usage Example:
     printer = ColoredConsolePrinter()
     printer.print_colored("Hello, World!", Fore.RED)
     printer.print_ok(up=1, forward=10)
-
 """
 
 import os

@@ -19,7 +19,13 @@ gitdb==4.0.11
     #   -r .\requirements.txt
     #   gitpython
 gitpython==3.1.43
-    # via -r .\requirements.txt
+    # via
+    #   -r .\requirements.txt
+    #   pydriller
+lizard==1.17.10
+    # via
+    #   -r .\requirements.txt
+    #   pydriller
 numpy==1.26.2
     # via
     #   -r .\requirements.txt
@@ -47,6 +53,8 @@ plotly==5.24.1
     # via -r .\requirements.txt
 prettytable==3.11.0
     # via pip-licenses
+pydriller==2.6
+    # via -r .\requirements.txt
 pyproject-hooks==1.2.0
     # via
     #   build
@@ -59,6 +67,7 @@ pytz==2023.3.post1
     # via
     #   -r .\requirements.txt
     #   pandas
+    #   pydriller
 six==1.16.0
     # via
     #   -r .\requirements.txt
@@ -75,6 +84,10 @@ tomli==2.0.1
     # via pip-licenses
 tqdm==4.66.5
     # via -r .\requirements.txt
+types-pytz==2024.2.0.20241003
+    # via
+    #   -r .\requirements.txt
+    #   pydriller
 tzdata==2023.3
     # via
     #   -r .\requirements.txt

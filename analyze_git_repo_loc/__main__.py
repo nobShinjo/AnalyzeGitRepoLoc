@@ -1,23 +1,61 @@
 """
-Analyze Git repositories and visualize code LOC.
+Analyzing Git Repositories and Visualizing Code LOC.
 
-Author:    Nob Shinjo
+This script analyzes the lines of code (LOC) in Git repositories 
+and visualizes the data through various charts. 
+It processes the LOC data, categorizes it by programming language, author,
+ and repository, and generates trend charts to show the evolution of code volume over time.
+
+Functions:
+    main() -> None:
+        Main function to execute the program. It parses command line arguments, 
+        initializes the console printer, 
+        analyzes the LOC data, forms dataframes, saves the analyzed data, and generates charts.
+    save_analysis_data(language_analysis: pd.DataFrame, author_analysis: pd.DataFrame, 
+    repository_analysis: pd.DataFrame, output_dir: Path) -> None:
+        Saves the analyzed data to CSV files in the specified output directory.
+    prepare_trend_data(data: pd.DataFrame, time_interval: str, category_column: str)
+      -> pd.DataFrame:
+        Prepares trend data for the trend chart by pivoting the data and sorting the columns.
+    prepare_summary_data(data: pd.DataFrame, time_interval: str) -> pd.DataFrame:
+        Prepares summary data for the trend chart by aggregating the data and calculating 
+        cumulative sums and differences.
+    generate_trend_chart(data: pd.DataFrame, category_column: str, time_interval: str,
+        output_path: Path, sub_title: str = "") -> None:
+        Generates trend charts for each repository and saves the data and charts 
+        to the specified output path.
+    save_chart_data(trend_data: pd.DataFrame, summary_data: pd.DataFrame, trend_chart: go.Figure,
+         output_prefix: str, output_path: Path):
+        Saves the trend data and chart to CSV and HTML files in the specified output path.
+    generate_repository_trend_chart(data: pd.DataFrame, time_interval: str, output_path: Path) -> None:
+        Generates a trend chart for all repositories and saves the data and chart 
+        to the specified output path.
 """
 
 import argparse
 import os
 import sys
 from datetime import datetime
+from pathlib import Path
 
 import pandas as pd
+import plotly.graph_objects as go
 from colorama import Cursor, Fore, Style
+from tqdm import tqdm
 
-from .colored_console_printer import ColoredConsolePrinter
-from .git_repo_loc_analyzer import GitRepoLOCAnalyzer
-from .utils import analyze_and_save_loc_data, parse_arguments
+from analyze_git_repo_loc.chart_builder import ChartBuilder
+from analyze_git_repo_loc.colored_console_printer import ColoredConsolePrinter
+from analyze_git_repo_loc.utils import (
+    analyze_git_repositories,
+    analyze_trends,
+    get_time_interval_and_period,
+    handle_exception,
+    parse_arguments,
+    save_repository_branch_info,
+)
 
 
-def main():
+def main() -> None:
     """
     main function to execute the program.
     """
@@ -35,108 +73,348 @@ def main():
     console.print_h1(f"# Start {parser.prog}.")
     print(Style.DIM + f"- {parser.description}", end=os.linesep + os.linesep)
 
-    all_loc_data = []
+    # Analyze the LOC in the Git repositories
+    loc_data_repositories = analyze_git_repositories(args)
+    time_interval, time_period = get_time_interval_and_period(args.interval)
 
-    for repo_path in args.repo_paths:
-        # Create GitRepoLOCAnalyzer
-        try:
-            analyzer = GitRepoLOCAnalyzer(
-                repo_path=repo_path,
-                branch_name=args.branch,
-                cache_dir=args.output / ".cache",
-                output_dir=args.output,
+    # Dataframe declaration
+    language_analysis = pd.DataFrame()
+    author_analysis = pd.DataFrame()
+    repository_analysis = pd.DataFrame()
+
+    # Convert analyzed data for visualization
+    console.print_h1("\n# Forming dataframe type data.")
+    for loc_data in tqdm(loc_data_repositories, desc="Processing loc data"):
+        if "Datetime" not in loc_data.columns:
+            console.print_colored(
+                "Error: 'Datetime' column is not found in the dataframe.", Fore.RED
             )
-        except FileNotFoundError as ex:
-            print(f"Error: {str(ex)}", file=sys.stderr)
             sys.exit(1)
-
-        # Remove cache files
-        if args.clear_cache:
-            try:
-                console.print_h1("# Remove cache files.")
-                analyzer.clear_cache_files()
-                console.print_ok(up=2, forward=50)
-            except FileNotFoundError as ex:
-                print(f"Error: {str(ex)}", file=sys.stderr)
-                sys.exit(1)
-
-        # Analyze LOC against the git repository.
-        console.print_h1(f"# Analyze LOC against the git repository: {repo_path}")
-        loc_data = analyzer.analyze_git_repo_loc(
-            branch=args.branch,
-            since_str=args.since,
-            until_str=args.until,
-            interval=args.interval,
-            lang=args.lang,
-            author=args.author_name,
+        loc_data[time_interval] = (
+            loc_data["Datetime"]
+            .dt.tz_localize(None)
+            .dt.to_period(time_period)
+            .dt.to_timestamp()
         )
-        all_loc_data.append(loc_data)
-
         # Create output directory for the repository
-        repo_output_dir = args.output / repo_path.name
-        repo_output_dir.mkdir(parents=True, exist_ok=True)
-
-        # Forming dataframe type data.
-        console.print_h1("# Forming dataframe type data.")
-
-        # Combine processing into one consistent step to reduce duplication.
-        analyze_and_save_loc_data(
-            loc_data=loc_data,
-            output_path=repo_output_dir,
-            analyzer=analyzer,
-            interval=args.interval,
-        )
-
-    if len(args.repo_paths) > 1:
-        # Combine all LOC data
-        console.print_h1("# Combine all LOC data.")
-        # add Repo column to each dataframe
-        for repo_index, df in enumerate(all_loc_data):
-            df["Repo"] = args.repo_paths[repo_index].name
-        combined_loc_data = pd.concat(all_loc_data, ignore_index=True)
-        combined_loc_data.reset_index(drop=True, inplace=True)
-
-        # Add new Code_repo* columns for each Repo and copy to Code column
-        for repo in combined_loc_data["Repo"].unique():
-            repo_col = f"Code_repo{repo[-1]}"
-            combined_loc_data[repo_col] = combined_loc_data.apply(
-                lambda row, repo=repo: row["code"] if row["Repo"] == repo else None,
-                axis=1,
+        if "Repository" not in loc_data.columns:
+            console.print_colored(
+                "Error: 'Repository' column is not found in the dataframe.", Fore.RED
             )
-        # Drop the temporary Repo column
-        combined_loc_data.drop(columns=["code"], inplace=True)
+            sys.exit(1)
+        repository_name = next(iter(loc_data["Repository"].unique()), "Unknown")
+        repo_output_dir: Path = Path(args.output) / repository_name
+        try:
+            repo_output_dir.mkdir(parents=True, exist_ok=True)
+        except OSError as ex:
+            handle_exception(ex)
 
-        # Sort the combined data by Language, Author, and Date
-        combined_loc_data.sort_values(by=["Language", "Author", "Date"], inplace=True)
-
-        # Forward fill the empty entries per repository
-        repos_columns = [
-            col for col in combined_loc_data.columns if col.startswith("Code_repo")
-        ]
-        combined_loc_data[repos_columns] = combined_loc_data[repos_columns].ffill()
-
-        # Sum the Code_repo* columns to create a Code column
-        combined_loc_data["code"] = combined_loc_data[repos_columns].sum(axis=1)
-
-        # Create output directory for the combined data
-        combined_output_dir = args.output / datetime.now().strftime("%Y%m%d%H%M%S")
-        combined_output_dir.mkdir(parents=True, exist_ok=True)
-
-        # Forming dataframe type data.
-        console.print_h1("# Forming dataframe type data.")
-        analyze_and_save_loc_data(
-            loc_data=combined_loc_data,
-            output_path=combined_output_dir,
-            analyzer=analyzer,
-            interval=args.interval,
+        # 1. Stacked area trend chart of code volume by programming language per repository,
+        #    bar graph of added/deleted code volume, and line graph of average code volume
+        language_analysis = analyze_trends(
+            category_column="Language",
+            interval=time_interval,
+            loc_data=loc_data,
+            analysis_data=language_analysis,
+            output_path=repo_output_dir,
         )
 
-        # Save the list of repositories
-        with open(combined_output_dir / "repo_list.txt", "w", encoding="utf-8") as f:
-            f.write("\n".join([str(repo) for repo in args.repo_paths]))
+        # 2. Stacked area trend chart by author per repository
+        author_analysis = analyze_trends(
+            category_column="Author",
+            interval=time_interval,
+            loc_data=loc_data,
+            analysis_data=author_analysis,
+            output_path=repo_output_dir,
+        )
 
-    console.print_h1("# LOC Analyze")
+        # 3. Stacked trend chart of code volume per repository,
+        #    bar graph of added/deleted code volume, and line graph of average code volume
+        repository_analysis = analyze_trends(
+            category_column="Repository",
+            interval=time_interval,
+            loc_data=loc_data,
+            analysis_data=repository_analysis,
+        )
+
+    # Save the analyzed data
+    console.print_h1("\n# Save the analyzed data.")
+    output_dir = Path(args.output) / datetime.now().strftime("%Y%m%d%H%M%S")
+    save_analysis_data(
+        language_analysis=language_analysis,
+        author_analysis=author_analysis,
+        repository_analysis=repository_analysis,
+        output_dir=output_dir,
+    )
+    # Save the list of repositories and branch name
+    save_repository_branch_info(args.repo_paths, output_dir / "repo_list.txt")
+
+    # Generate charts
+    console.print_h1("\n# Generate charts.")
+    with tqdm(total=3, desc="Generating charts") as progress_bar:
+        # 1. Stacked area trend chart of code volume by programming language per repository,
+        generate_trend_chart(
+            data=language_analysis,
+            category_column="Language",
+            time_interval=time_interval,
+            output_path=Path(args.output),
+        )
+        progress_bar.update(1)
+
+        # 2. Stacked area trend chart by author per repository
+        generate_trend_chart(
+            data=author_analysis,
+            category_column="Author",
+            time_interval=time_interval,
+            output_path=Path(args.output),
+        )
+        progress_bar.update(1)
+
+        # 3. Stacked trend chart of code volume per repository
+        generate_repository_trend_chart(
+            data=repository_analysis,
+            time_interval=time_interval,
+            output_path=output_dir,
+        )
+        progress_bar.update(1)
+
+    console.print_h1("\n# LOC Analyze")
     print(Cursor.UP() + Cursor.FORWARD(50) + Fore.GREEN + "FINISH")
+
+
+def save_analysis_data(
+    language_analysis: pd.DataFrame,
+    author_analysis: pd.DataFrame,
+    repository_analysis: pd.DataFrame,
+    output_dir: Path,
+) -> None:
+    """
+    Save the analyzed data.
+
+    Args:
+        language_analysis (pd.DataFrame): The language analysis data.
+        author_analysis (pd.DataFrame): The author analysis data.
+        repository_analysis (pd.DataFrame): The repository analysis data.
+        output_dir (Path): The output directory to save the data.
+    """
+    try:
+        output_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as ex:
+        handle_exception(ex)
+
+    with tqdm(total=3, desc="Saving analyzed data") as progress_bar:
+        language_analysis.to_csv(output_dir / "language_analysis.csv", index=False)
+        progress_bar.update(1)
+
+        author_analysis.to_csv(output_dir / "author_analysis.csv", index=False)
+        progress_bar.update(1)
+
+        repository_analysis.to_csv(output_dir / "repository_analysis.csv", index=False)
+        progress_bar.update(1)
+
+
+def prepare_trend_data(
+    data: pd.DataFrame, time_interval: str, category_column: str
+) -> pd.DataFrame:
+    """
+    Prepare trend data for the trend chart.
+
+    Args:
+        data (pd.DataFrame): The data to prepare the trend.
+        time_interval (str): The interval to group by.
+        category_column (str): The column name to group by.
+
+    Returns:
+        pd.DataFrame: The trend data for the trend chart.
+    """
+    trend_data = (
+        data.pivot_table(
+            index=time_interval, columns=category_column, values="SUM", aggfunc="sum"
+        )
+        .reset_index()
+        .ffill()
+    )
+    # Sort the columns by the last value
+    sorted_columns = trend_data.columns[1:][trend_data.iloc[-1, 1:].argsort()[::-1]]
+    trend_data = trend_data.loc[:, [time_interval] + sorted_columns.tolist()]
+
+    return trend_data
+
+
+def prepare_summary_data(data: pd.DataFrame, time_interval: str) -> pd.DataFrame:
+    """
+    Prepare summary data for the trend chart.
+
+    Args:
+        data (pd.DataFrame): The data to prepare the summary.
+        time_interval (str): The interval to group by.
+
+    Returns:
+        pd.DataFrame: The summary data for the trend chart.
+    """
+    summary_data = (
+        data.groupby(time_interval)
+        .agg(
+            {
+                "NLOC_Added": "sum",
+                "NLOC_Deleted": "sum",
+                "NLOC": "sum",
+            }
+        )
+        .rename(columns={"NLOC_Added": "Added", "NLOC_Deleted": "Deleted"})
+        .reset_index()[[time_interval, "Added", "Deleted", "NLOC"]]
+    )
+    summary_data["SUM"] = summary_data["NLOC"].cumsum()
+    summary_data["Diff"] = summary_data["SUM"].diff()
+    summary_data["Mean"] = summary_data["Diff"].mean()
+    return summary_data
+
+
+def generate_trend_chart(
+    data: pd.DataFrame,
+    category_column: str,
+    time_interval: str,
+    output_path: Path,
+    sub_title: str = "",
+) -> None:
+    """
+    Generate trend chart for each repository.
+
+    Args:
+        data (pd.DataFrame): The data to generate the trend chart.
+        category_column (str): The column name to group by.
+        time_interval (str): The time interval to group by.
+        output_path (Path): The output path to save the chart.
+        sub_title (str): The sub title for the chart.
+    """
+    if data.empty:
+        return
+
+    # Generate trend chart for each repository
+    for repository in tqdm(
+        data["Repository"].unique(), desc="Generating trend chart", leave=False
+    ):
+        loc_data = data[data["Repository"] == repository]
+        branch_name = next(iter(loc_data["Branch"].unique()), "Unknown")
+
+        # Language trend data
+        trend_data = prepare_trend_data(
+            data=loc_data,
+            time_interval=time_interval,
+            category_column=category_column,
+        )
+
+        # Summary data
+        summary_data = prepare_summary_data(data=loc_data, time_interval=time_interval)
+
+        # Build the chart
+        chart_builder: ChartBuilder = ChartBuilder()
+        trend_chart = chart_builder.build(
+            trend_data=trend_data,
+            summary_data=summary_data,
+            interval=time_interval,
+            sub_title=(
+                f"{repository} ({branch_name})" if sub_title == "" else sub_title
+            ),
+        )
+        # Show the chart
+        trend_chart.show()
+
+        # Save the data and chart
+        save_chart_data(
+            trend_data=trend_data,
+            summary_data=summary_data,
+            trend_chart=trend_chart,
+            output_prefix=category_column.lower(),
+            output_path=output_path / repository,
+        )
+
+
+def save_chart_data(
+    trend_data: pd.DataFrame,
+    summary_data: pd.DataFrame,
+    trend_chart: go.Figure,
+    output_prefix: str,
+    output_path: Path,
+):
+    """
+    Save the trend data and chart.
+
+    Args:
+        trend_data (pd.DataFrame): The trend data to save.
+        summary_data (pd.DataFrame): The summary data to save.
+        trend_chart (go.Figure): The trend chart to save.
+        output_prefix (str): The output prefix for the files.
+        output_path (Path): The output path to save the files.
+
+    Raises:
+        OSError: If an error occurs while saving the files.
+        IOError: If an error occurs while saving the files.
+        pd.errors.EmptyDataError: If the data is empty.
+    """
+    try:
+        # Check if the output path is a Path object
+        if not isinstance(output_path, Path):
+            output_path = Path(output_path)
+        # Create the output directory
+        output_path.mkdir(parents=True, exist_ok=True)
+        # Save the data and chart
+        trend_data.to_csv(
+            output_path / f"{output_prefix}_trend_data.csv",
+            index=False,
+        )
+        summary_data.to_csv(
+            output_path / f"{output_prefix}_trend_summary.csv",
+            index=False,
+        )
+        trend_chart.write_html(output_path / f"{output_prefix}_trend_chart.html")
+    except (OSError, IOError, pd.errors.EmptyDataError) as ex:
+        handle_exception(ex)
+
+
+def generate_repository_trend_chart(
+    data: pd.DataFrame, time_interval: str, output_path: Path
+) -> None:
+    """
+    Generate trend chart for all repositories.
+
+    Args:
+        data (pd.DataFrame): The data to generate the trend chart.
+        time_interval (str): The time interval to group by.
+        output_path (Path): The output path to save the chart.
+    """
+    if data.empty:
+        return
+
+    # Repository trend data
+    repository_trend_data = prepare_trend_data(
+        data=data,
+        time_interval=time_interval,
+        category_column="Repository",
+    )
+    # Summary data
+    summary_data = prepare_summary_data(data=data, time_interval=time_interval)
+
+    # Build the chart
+    chart_builder: ChartBuilder = ChartBuilder()
+    repository_trend_chart = chart_builder.build(
+        trend_data=repository_trend_data,
+        summary_data=summary_data,
+        interval=time_interval,
+        sub_title="All repositories",
+    )
+
+    # Show the chart
+    repository_trend_chart.show()
+
+    # Save the data and chart
+    save_chart_data(
+        trend_data=repository_trend_data,
+        summary_data=summary_data,
+        trend_chart=repository_trend_chart,
+        output_prefix="Repository".lower(),
+        output_path=output_path,
+    )
 
 
 if __name__ == "__main__":
