@@ -197,8 +197,6 @@ def analyze_trends(
     )
     trends_data.drop(columns=["Datetime", "Commit_hash"], inplace=True)
     trends_data["SUM"] = trends_data.groupby(category_column)["NLOC"].cumsum()
-    trends_data["Diff"] = trends_data.groupby(category_column)["NLOC"].diff()
-    trends_data["Mean"] = trends_data.groupby(category_column)["NLOC"].transform("mean")
     return trends_data
 
 

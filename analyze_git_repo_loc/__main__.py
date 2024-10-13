@@ -154,18 +154,17 @@ def main() -> None:
                 loc_data.groupby(time_interval)
                 .agg(
                     {
-                        "SUM": "sum",
                         "NLOC_Added": "sum",
                         "NLOC_Deleted": "sum",
-                        "Diff": "mean",
-                        "Mean": "mean",
+                        "NLOC": "sum",
                     }
                 )
-                .reset_index()[
-                    [time_interval, "SUM", "NLOC_Added", "NLOC_Deleted", "Diff", "Mean"]
-                ]
                 .rename(columns={"NLOC_Added": "Added", "NLOC_Deleted": "Deleted"})
+                .reset_index()[[time_interval, "Added", "Deleted", "NLOC"]]
             )
+            summary_data["SUM"] = summary_data["NLOC"].cumsum()
+            summary_data["Diff"] = summary_data["SUM"].diff()
+            summary_data["Mean"] = summary_data["Diff"].mean()
 
             language_trend_chart = chart_builder.build(
                 trend_data=language_trend_data,
@@ -174,6 +173,12 @@ def main() -> None:
                 sub_title=f"{repository} ({branch_name})",
             )
             chart_output_dir = Path(args.output) / repository
+            language_trend_data.to_csv(
+                chart_output_dir / "language_trend_data.csv", index=False
+            )
+            summary_data.to_csv(
+                chart_output_dir / "language_trend_summary.csv", index=False
+            )
             language_trend_chart.write_html(
                 chart_output_dir / "language_trend_chart.html"
             )
@@ -194,18 +199,17 @@ def main() -> None:
                 loc_data.groupby(time_interval)
                 .agg(
                     {
-                        "SUM": "sum",
                         "NLOC_Added": "sum",
                         "NLOC_Deleted": "sum",
-                        "Diff": "mean",
-                        "Mean": "mean",
+                        "NLOC": "sum",
                     }
                 )
-                .reset_index()[
-                    [time_interval, "SUM", "NLOC_Added", "NLOC_Deleted", "Diff", "Mean"]
-                ]
                 .rename(columns={"NLOC_Added": "Added", "NLOC_Deleted": "Deleted"})
+                .reset_index()[[time_interval, "Added", "Deleted", "NLOC"]]
             )
+            summary_data["SUM"] = summary_data["NLOC"].cumsum()
+            summary_data["Diff"] = summary_data["SUM"].diff()
+            summary_data["Mean"] = summary_data["Diff"].mean()
 
             author_trend_chart = chart_builder.build(
                 trend_data=author_trend_data,
@@ -214,6 +218,12 @@ def main() -> None:
                 sub_title=f"{repository} ({branch_name})",
             )
             chart_output_dir = Path(args.output) / repository
+            author_trend_data.to_csv(
+                chart_output_dir / "author_trend_data.csv", index=False
+            )
+            summary_data.to_csv(
+                chart_output_dir / "author_trend_summary.csv", index=False
+            )
             author_trend_chart.write_html(chart_output_dir / "author_trend_chart.html")
 
     # 3. Stacked trend chart of code volume per repository
@@ -227,18 +237,17 @@ def main() -> None:
         loc_data.groupby(time_interval)
         .agg(
             {
-                "SUM": "sum",
                 "NLOC_Added": "sum",
                 "NLOC_Deleted": "sum",
-                "Diff": "mean",
-                "Mean": "mean",
+                "NLOC": "sum",
             }
         )
-        .reset_index()[
-            [time_interval, "SUM", "NLOC_Added", "NLOC_Deleted", "Diff", "Mean"]
-        ]
         .rename(columns={"NLOC_Added": "Added", "NLOC_Deleted": "Deleted"})
+        .reset_index()[[time_interval, "Added", "Deleted", "NLOC"]]
     )
+    summary_data["SUM"] = summary_data["NLOC"].cumsum()
+    summary_data["Diff"] = summary_data["SUM"].diff()
+    summary_data["Mean"] = summary_data["Diff"].mean()
 
     repository_trend_chart = chart_builder.build(
         trend_data=repository_trend_data,
@@ -246,6 +255,10 @@ def main() -> None:
         interval=time_interval,
         sub_title="All repositories",
     )
+    repository_trend_data.to_csv(
+        chart_output_dir / "repository_trend_data.csv", index=False
+    )
+    summary_data.to_csv(chart_output_dir / "repository_trend_summary.csv", index=False)
     repository_trend_chart.write_html(output_dir / "repository_trend_chart.html")
 
     console.print_h1("# LOC Analyze")
