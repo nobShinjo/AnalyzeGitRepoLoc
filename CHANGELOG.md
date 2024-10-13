@@ -1,5 +1,28 @@
 # Changelog
 
+## [2.0.0] - 2024-10-14
+
+### Added
+
+- Introduced new modular architecture.
+- Added `__init__.py` to `analyze_git_repo_loc` package to define module exports.
+
+### Changed
+
+- Switched from __GitPython__ to __Pydriller__ for commit processing.
+- Updated `create_trend_trace` method in `ChartBuilder` class to improve trace addition.
+- Updated third-party library versions in `3rdPartyLicenses.md`.
+- Enhanced threading support and code clarity in `git_repo_loc_analyzer`.
+- Improved console output and chart generation progress handling in `main`.
+- Consolidated summary data aggregation logic in `main`.
+- Enhanced repository trend analysis with Plotly in `charts`.
+- Improved language filtering and LOC calculation in `analyze_git_repo_loc`.
+
+### Fixed
+
+- Fixed legend font size setting in `update_fig` method of `ChartBuilder` class.
+- Corrected title text format in LOC trend chart in `chart_builder`.
+
 ## [1.3.0] - 2024-10-10
 
 ### Added
@@ -63,7 +86,9 @@
 - Initial release.
 - Provided basic functionality to analyze LOC in a Git repository.
 - Provided functionality to generate LOC trend charts by language and author.
+-
 
+[2.0.0](https://github.com/nobShinjo/AnalyzeGitRepoLoc/releases/tag/v2.0.0)
 [1.1.1](https://github.com/nobShinjo/AnalyzeGitRepoLoc/releases/tag/v1.1.1)
 [1.1.0](https://github.com/nobShinjo/AnalyzeGitRepoLoc/releases/tag/v1.1.0)
 [1.0.0](https://github.com/nobShinjo/AnalyzeGitRepoLoc/releases/tag/v1.0.0)
