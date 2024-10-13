@@ -203,7 +203,7 @@ class ChartBuilder:
             data_frame=self._summary_data, x=xaxis_column, y="SUM", markers=True
         )
         for trace in fig_sum["data"]:
-            trace["showlegend"] = False
+            # trace["showlegend"] = False
             trace["name"] = "SUM"
             trace["marker"] = {"size": 8, "color": "#636EFA"}
             trace["line"] = {"width": 2, "color": "#636EFA"}
@@ -231,11 +231,50 @@ class ChartBuilder:
             data_frame=self._summary_data, x=xaxis_column, y="Diff", markers=True
         )
         for trace in fig_diff["data"]:
-            trace["showlegend"] = False
+            # trace["showlegend"] = False
             trace["name"] = "Diff"
             trace["marker"] = {"size": 8, "color": "#EF553B"}
             trace["line"] = {"width": 2, "color": "#EF553B"}
             self._fig.add_trace(trace, row=1, col=1, secondary_y=True)
+        return self
+
+    # added, deleted の棒グラフを追加するメソッド
+    def create_bar_trace(self, xaxis_column: str) -> ChartBuilderSelf:
+        """
+        Adds a bar trace to an existing plotly figure within the ChartBuilder instance.
+
+        This method creates a bar chart using the internal summed data
+        focusing on the 'NLOC_Added' and 'NLOC_Deleted' columns.
+        It then adds this newly created trace to the main figure without including it in the legend.
+        The trace is placed on a secondary y-axis in the first row and column of the subplot grid.
+
+        Args:
+            xaxis_column (str): The name of the column in the summary data frame that contains
+                                the x-axis data for the line plot.
+
+        Returns:
+            self (ChartBuilder): Returns the instance itself for method chaining purposes.
+        """
+        fig_bar = px.bar(
+            data_frame=self._summary_data,
+            x=xaxis_column,
+            y=["Added", "Deleted"],
+            barmode="relative",
+        )
+
+        # Add the bar traces to the figure
+        for trace in fig_bar["data"]:
+            # trace["showlegend"] = False
+            self._fig.add_trace(trace, row=1, col=1, secondary_y=True)
+
+        # Update the color of the bar traces
+        added_trace, deleted_trace = self._fig.data[-2], self._fig.data[-1]
+        added_trace.marker.color = "rgba(0,204,150,0.6)"
+        deleted_trace.marker.color = "rgba(239,85,59,0.6)"
+        for trace in [added_trace, deleted_trace]:
+            trace.marker.line.width = 1
+            trace.marker.line.color = "rgba(0,0,0,0)"
+
         return self
 
     def update_fig(self, sub_title: str) -> ChartBuilderSelf:
@@ -376,6 +415,7 @@ class ChartBuilder:
         self.create_trend_trace(xaxis_column=interval)
         self.create_sum_trace(xaxis_column=interval)
         self.create_diff_trace(xaxis_column=interval)
+        self.create_bar_trace(xaxis_column=interval)
         self.update_fig(sub_title)
         self.update_xaxis_tickformat(interval)
         return self._fig
