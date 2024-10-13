@@ -24,11 +24,10 @@
                 "--interval",
                 "weekly",
                 "--lang",
-                "C#,Python,Markdown,txt",
+                "C#,Python,Markdown,PowerShell",
                 ".\\Scripts\\repo_list.txt"
             ],
             "console": "integratedTerminal",
-            "subProcess": true
         }
     ]
 }
