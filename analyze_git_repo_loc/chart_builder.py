@@ -414,7 +414,7 @@ class ChartBuilder:
         self.create_fig()
         self.create_trend_trace(xaxis_column=interval)
         self.create_sum_trace(xaxis_column=interval)
-        self.create_diff_trace(xaxis_column=interval)
+        # self.create_diff_trace(xaxis_column=interval)
         self.create_bar_trace(xaxis_column=interval)
         self.update_fig(sub_title)
         self.update_xaxis_tickformat(interval)
