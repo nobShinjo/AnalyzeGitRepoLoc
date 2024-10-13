@@ -89,8 +89,7 @@ def parse_arguments(parser: argparse.ArgumentParser) -> argparse.Namespace:
         "--lang",
         type=lambda s: [item.strip() for item in s.split(",")],
         default=None,
-        help="Count only the given space separated, case-insensitive languages L1,L2,L3, etc. \n \
-        Use 'cloc --show-lang' to see the list of recognized languages.",
+        help="Count only the given space separated, case-insensitive languages L1,L2,L3, etc. ",
     )
     parser.add_argument(
         "--author-name",

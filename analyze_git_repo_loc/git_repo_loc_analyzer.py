@@ -24,8 +24,10 @@ Functions:
 
 """
 
+import copy
 import os
 import sys
+import threading
 from datetime import datetime
 from pathlib import Path
 from typing import Union
@@ -76,6 +78,9 @@ class GitRepoLOCAnalyzer:
         Raises:
             OSError: If there is an error creating the cache or output directories.
         """
+        # Lock for thread safety
+        self._lock = threading.Lock()
+
         # Initialize Git Repo object.
         self._repo_path = repo_path
         """ Git repository path """
@@ -101,10 +106,7 @@ class GitRepoLOCAnalyzer:
         """ List of author names to filter commits """
         self._languages = languages
         """ List of languages to filter commits """
-
-        self._language_extensions = LanguageExtensions.get_extensions(
-            language=languages
-        )
+        self._language_extensions = LanguageExtensions.get_extensions(languages)
         """ Language extensions to filter commits """
 
         # Analyzed data
@@ -166,7 +168,8 @@ class GitRepoLOCAnalyzer:
         except (GitCommandError, AttributeError):
             return False
 
-    def is_comment_or_empty_line(self, line: str, language: str) -> bool:
+    @classmethod
+    def is_comment_or_empty_line(cls, line: str, language: str) -> bool:
         """
         Check if a line is a comment or an empty line.
 
@@ -236,24 +239,48 @@ class GitRepoLOCAnalyzer:
         commits = list(tqdm(repository.traverse_commits(), desc="Getting commits"))
         total_commits = len(commits)
 
-        def process_commit(commit: Commit) -> list[dict]:
+        def is_comment_or_empty_line(line: str, language: str) -> bool:
+            """
+            Check if a line is a comment or an empty line.
+
+            Args:
+                line (str): The line of code to check.
+                language (str): The language of the code.
+
+            Returns:
+                bool: True if the line is a comment or an empty line, False otherwise
+            """
+            stripped_line = line.strip()
+            comment_syntax = LanguageComment.get_comment_syntax(language)
+            if not comment_syntax:
+                return not stripped_line
+            return not stripped_line or any(
+                stripped_line.startswith(syntax) for syntax in comment_syntax
+            )
+
+        def process_commit(args):
+            (
+                commit,
+                repository_name,
+                branch_name,
+                languages,
+                cache_commit_data,
+            ) = args
+
             """
             Process the commit and return a list of dictionaries containing the commit data.
             """
             result = []
             commit_datetime = commit.committer_date
-            repository_name = GitRepoLOCAnalyzer.get_repository_name(self._repo_path)
             commit_hash = commit.hash
             commit_author = commit.author.name
 
             # Skip if the commit is already analyzed
-            if self._cache_commit_data is not None:
+            if cache_commit_data is not None:
                 # Check for the presence of commit_hash in the "Commit_hash" column
-                matching_rows = self._cache_commit_data[
-                    self._cache_commit_data["Commit_hash"] == commit_hash
+                matching_rows = cache_commit_data[
+                    cache_commit_data["Commit_hash"] == commit_hash
                 ]
-
-                # Convert matching rows to a list of dictionaries and extend the target list
                 if not matching_rows.empty:
                     result.extend(matching_rows.to_dict("records"))
                     return result
@@ -265,7 +292,7 @@ class GitRepoLOCAnalyzer:
                     continue
 
                 # Skip if the file is not in the specified language
-                if self._languages and language not in self._languages:
+                if languages and language not in languages:
                     continue
 
                 # Calculate add LOC, delete LOC, net LOC
@@ -273,35 +300,51 @@ class GitRepoLOCAnalyzer:
                 nloc_added = sum(
                     1
                     for _, diff in mod.diff_parsed.get("added", [])
-                    if not self.is_comment_or_empty_line(diff, language)
+                    if not is_comment_or_empty_line(diff, language)
                 )
                 nloc_deleted = sum(
                     1
                     for _, diff in mod.diff_parsed.get("deleted", [])
-                    if not self.is_comment_or_empty_line(diff, language)
+                    if not is_comment_or_empty_line(diff, language)
                 )
                 nloc = nloc_added - nloc_deleted
 
-                result.append(
-                    {
-                        "Datetime": commit_datetime,
-                        "Repository": repository_name,
-                        "Branch": self._branch_name,
-                        "Commit_hash": commit_hash,
-                        "Author": commit_author,
-                        "Language": language,
-                        "NLOC_Added": nloc_added,
-                        "NLOC_Deleted": nloc_deleted,
-                        "NLOC": nloc,
-                    }
-                )
+                with self._lock:
+                    result.append(
+                        {
+                            "Datetime": commit_datetime,
+                            "Repository": repository_name,
+                            "Branch": branch_name,
+                            "Commit_hash": commit_hash,
+                            "Author": commit_author,
+                            "Language": language,
+                            "NLOC_Added": nloc_added,
+                            "NLOC_Deleted": nloc_deleted,
+                            "NLOC": nloc,
+                        }
+                    )
             return result
 
         # Use thread_map for concurrent execution and progress tracking
+        languages = copy.deepcopy(self._languages)
+        cache_commit_data = None
+        if self._cache_commit_data is not None:
+            cache_commit_data = self._cache_commit_data.copy(deep=True)
+        LanguageExtensions.initialize_extension_to_language()
+        commit_args = [
+            (
+                commit,
+                GitRepoLOCAnalyzer.get_repository_name(self._repo_path),
+                self._branch_name,
+                languages,
+                cache_commit_data,
+            )
+            for commit in commits
+        ]
         commit_data_list = thread_map(
             process_commit,
-            commits,
-            max_workers=os.cpu_count(),
+            commit_args,
+            max_workers=2,
             desc="Analyzing commits",
             unit="commit",
             total=total_commits,
@@ -334,6 +377,7 @@ class GitRepoLOCAnalyzer:
         commit_data["NLOC_Added"] = commit_data["NLOC_Added"].astype("int")
         commit_data["NLOC_Deleted"] = commit_data["NLOC_Deleted"].astype("int")
         commit_data["NLOC"] = commit_data["NLOC"].astype("int")
+
         self._commit_data = commit_data
         return commit_data
 
