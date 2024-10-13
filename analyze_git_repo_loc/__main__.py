@@ -164,6 +164,9 @@ def main() -> None:
             sub_title="All repositories",
         )
 
+        # Show the chart
+        repository_trend_chart.show()
+
         # Save the data and chart
         save_chart_data(
             trend_data=repository_trend_data,
@@ -224,9 +227,17 @@ def prepare_trend_data(
     Returns:
         pd.DataFrame: The trend data for the trend chart.
     """
-    trend_data = data.pivot_table(
-        index=time_interval, columns=category_column, values="SUM", aggfunc="sum"
-    ).reset_index()
+    trend_data = (
+        data.pivot_table(
+            index=time_interval, columns=category_column, values="SUM", aggfunc="sum"
+        )
+        .reset_index()
+        .ffill()
+    )
+    # Sort the columns by the last value
+    sorted_columns = trend_data.columns[1:][trend_data.iloc[-1, 1:].argsort()[::-1]]
+    trend_data = trend_data.loc[:, [time_interval] + sorted_columns.tolist()]
+
     return trend_data
 
 
@@ -307,6 +318,8 @@ def generate_trend_chart(
                     f"{repository} ({branch_name})" if sub_title == "" else sub_title
                 ),
             )
+            # Show the chart
+            trend_chart.show()
 
             # Save the data and chart
             save_chart_data(

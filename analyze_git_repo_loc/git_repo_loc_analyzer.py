@@ -2,6 +2,7 @@
 
 """
 
+import os
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -202,15 +203,15 @@ class GitRepoLOCAnalyzer:
             to_tag=self._to_tag,
             only_authors=self._authors,
             only_modifications_with_file_types=self._language_extensions,
-            only_no_merge=False,
+            only_no_merge=True,
             histogram_diff=True,
-            num_workers=1,
+            num_workers=os.cpu_count(),
         )
 
         # temporary list to store commit data
         commit_data_list = []
         traverse_commits = repository.traverse_commits()
-        total_commits = sum(1 for _ in traverse_commits)
+        total_commits = len(list(traverse_commits))
         # Traverse commits
         for commit in tqdm(
             repository.traverse_commits(),
@@ -427,19 +428,6 @@ class GitRepoLOCAnalyzer:
     #     )
 
     #     self._chart.show()
-
-    # def save_charts(self, output_path: Path) -> None:
-    #     """
-    #     Saves the generated charts to HTML format.
-
-    #     The file is saved to the path specified by _output_path with the filename 'report.html'.
-    #     It's expected that the _chart attribute is already populated with a chart object.
-
-    #     Args:
-    #         output_path (Path): The path to save the chart HTML file.
-    #     """
-    #     if self._chart is not None:
-    #         self._chart.write_html(output_path / "report.html")
 
     @classmethod
     def get_repository_name(cls, repo_path: Union[Path, str]) -> str:
