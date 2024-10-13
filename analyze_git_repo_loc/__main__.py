@@ -123,58 +123,57 @@ def main() -> None:
 
     # Generate charts
     console.print_h1("\n# Generate charts.")
-    chart_generation_progress = tqdm(total=3, desc="Generating charts")
+    with tqdm(total=3, desc="Generating charts") as progress_bar:
+        # 1. Stacked area trend chart of code volume by programming language per repository,
+        generate_trend_chart(
+            data=language_analysis,
+            category_column="Language",
+            time_interval=time_interval,
+            output_path=Path(args.output),
+        )
+        progress_bar.update(1)
 
-    # 1. Stacked area trend chart of code volume by programming language per repository,
-    generate_trend_chart(
-        data=language_analysis,
-        category_column="Language",
-        time_interval=time_interval,
-        output_path=Path(args.output),
-    )
-    chart_generation_progress.update(1)
+        # 2. Stacked area trend chart by author per repository
+        generate_trend_chart(
+            data=author_analysis,
+            category_column="Author",
+            time_interval=time_interval,
+            output_path=Path(args.output),
+        )
+        progress_bar.update(1)
 
-    # 2. Stacked area trend chart by author per repository
-    generate_trend_chart(
-        data=author_analysis,
-        category_column="Author",
-        time_interval=time_interval,
-        output_path=Path(args.output),
-    )
-    chart_generation_progress.update(1)
+        # 3. Stacked trend chart of code volume per repository
 
-    # 3. Stacked trend chart of code volume per repository
+        # Repository trend data
+        repository_trend_data = prepare_trend_data(
+            data=repository_analysis,
+            time_interval=time_interval,
+            category_column="Repository",
+        )
+        # Summary data
+        summary_data = prepare_summary_data(
+            data=repository_analysis, time_interval=time_interval
+        )
 
-    # Repository trend data
-    repository_trend_data = prepare_trend_data(
-        data=repository_analysis,
-        time_interval=time_interval,
-        category_column="Repository",
-    )
-    # Summary data
-    summary_data = prepare_summary_data(
-        data=repository_analysis, time_interval=time_interval
-    )
+        # Build the chart
+        chart_builder: ChartBuilder = ChartBuilder()
+        repository_trend_chart = chart_builder.build(
+            trend_data=repository_trend_data,
+            summary_data=summary_data,
+            interval=time_interval,
+            sub_title="All repositories",
+        )
 
-    # Build the chart
-    chart_builder: ChartBuilder = ChartBuilder()
-    repository_trend_chart = chart_builder.build(
-        trend_data=repository_trend_data,
-        summary_data=summary_data,
-        interval=time_interval,
-        sub_title="All repositories",
-    )
-
-    # Save the data and chart
-    save_chart_data(
-        trend_data=repository_trend_data,
-        summary_data=summary_data,
-        trend_chart=repository_trend_chart,
-        output_prefix="Repository".lower(),
-        output_path=output_dir,
-    )
-    chart_generation_progress.update(1)
-    chart_generation_progress.close()
+        # Save the data and chart
+        save_chart_data(
+            trend_data=repository_trend_data,
+            summary_data=summary_data,
+            trend_chart=repository_trend_chart,
+            output_prefix="Repository".lower(),
+            output_path=output_dir,
+        )
+        progress_bar.update(1)
+        progress_bar.close()
 
     console.print_h1("\n# LOC Analyze")
     print(Cursor.UP() + Cursor.FORWARD(50) + Fore.GREEN + "FINISH")
@@ -200,9 +199,15 @@ def save_analysis_data(
     except OSError as ex:
         handle_exception(ex)
 
-    language_analysis.to_csv(output_dir / "language_analysis.csv", index=False)
-    author_analysis.to_csv(output_dir / "author_analysis.csv", index=False)
-    repository_analysis.to_csv(output_dir / "repository_analysis.csv", index=False)
+    with tqdm(total=3, desc="Saving analyzed data") as progress_bar:
+        language_analysis.to_csv(output_dir / "language_analysis.csv", index=False)
+        progress_bar.update(1)
+
+        author_analysis.to_csv(output_dir / "author_analysis.csv", index=False)
+        progress_bar.update(1)
+
+        repository_analysis.to_csv(output_dir / "repository_analysis.csv", index=False)
+        progress_bar.update(1)
 
 
 def prepare_trend_data(
