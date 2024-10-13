@@ -27,7 +27,8 @@
                 "C#,Python,Markdown,txt",
                 ".\\Scripts\\repo_list.txt"
             ],
-            "console": "integratedTerminal"
+            "console": "integratedTerminal",
+            "subProcess": true
         }
     ]
 }
