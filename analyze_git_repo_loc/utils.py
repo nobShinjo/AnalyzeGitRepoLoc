@@ -227,6 +227,7 @@ def analyze_git_repositories(args: argparse.Namespace) -> list[pd.DataFrame]:
     loc_data_repositories: list[pd.DataFrame] = []
     for repo_path, branch_name in tqdm(args.repo_paths, desc="Analyzing repositories"):
         repository_name = GitRepoLOCAnalyzer.get_repository_name(repo_path)
+        console.print_h1("\n")
         console.print_h1(
             f"# Analysis of LOC in git repository: {repository_name}({branch_name})",
         )

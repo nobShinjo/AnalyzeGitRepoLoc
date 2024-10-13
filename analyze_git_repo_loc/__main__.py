@@ -55,7 +55,7 @@ def main() -> None:
     repository_analysis = pd.DataFrame()
 
     # Convert analyzed data for visualization
-    console.print_h1("# Forming dataframe type data.")
+    console.print_h1("\n# Forming dataframe type data.")
     for loc_data in tqdm(loc_data_repositories, desc="Processing loc data"):
         if "Datetime" not in loc_data.columns:
             console.print_colored(
@@ -110,7 +110,7 @@ def main() -> None:
         )
 
     # Save the analyzed data
-    console.print_h1("# Save the analyzed data.")
+    console.print_h1("\n# Save the analyzed data.")
     output_dir = Path(args.output) / datetime.now().strftime("%Y%m%d%H%M%S")
     save_analysis_data(
         language_analysis=language_analysis,
@@ -122,7 +122,8 @@ def main() -> None:
     save_repository_branch_info(args.repo_paths, output_dir / "repo_list.txt")
 
     # Generate charts
-    console.print_h1("# Generate charts.")
+    console.print_h1("\n# Generate charts.")
+    chart_generation_progress = tqdm(total=3, desc="Generating charts")
 
     # 1. Stacked area trend chart of code volume by programming language per repository,
     generate_trend_chart(
@@ -131,14 +132,16 @@ def main() -> None:
         time_interval=time_interval,
         output_path=Path(args.output),
     )
+    chart_generation_progress.update(1)
 
     # 2. Stacked area trend chart by author per repository
     generate_trend_chart(
-        data=language_analysis,
+        data=author_analysis,
         category_column="Author",
         time_interval=time_interval,
         output_path=Path(args.output),
     )
+    chart_generation_progress.update(1)
 
     # 3. Stacked trend chart of code volume per repository
 
@@ -150,7 +153,7 @@ def main() -> None:
     )
     # Summary data
     summary_data = prepare_summary_data(
-        data=repository_analysis, groupby_column="Repository"
+        data=repository_analysis, time_interval=time_interval
     )
 
     # Build the chart
@@ -170,8 +173,10 @@ def main() -> None:
         output_prefix="Repository".lower(),
         output_path=output_dir,
     )
+    chart_generation_progress.update(1)
+    chart_generation_progress.close()
 
-    console.print_h1("# LOC Analyze")
+    console.print_h1("\n# LOC Analyze")
     print(Cursor.UP() + Cursor.FORWARD(50) + Fore.GREEN + "FINISH")
 
 
@@ -220,19 +225,19 @@ def prepare_trend_data(
     return trend_data
 
 
-def prepare_summary_data(data: pd.DataFrame, groupby_column: str) -> pd.DataFrame:
+def prepare_summary_data(data: pd.DataFrame, time_interval: str) -> pd.DataFrame:
     """
     Prepare summary data for the trend chart.
 
     Args:
         data (pd.DataFrame): The data to prepare the summary.
-        groupby_column (str): The column name to group by.
+        time_interval (str): The interval to group by.
 
     Returns:
         pd.DataFrame: The summary data for the trend chart.
     """
     summary_data = (
-        data.groupby(groupby_column)
+        data.groupby(time_interval)
         .agg(
             {
                 "NLOC_Added": "sum",
@@ -241,7 +246,7 @@ def prepare_summary_data(data: pd.DataFrame, groupby_column: str) -> pd.DataFram
             }
         )
         .rename(columns={"NLOC_Added": "Added", "NLOC_Deleted": "Deleted"})
-        .reset_index()[[groupby_column, "Added", "Deleted", "NLOC"]]
+        .reset_index()[[time_interval, "Added", "Deleted", "NLOC"]]
     )
     summary_data["SUM"] = summary_data["NLOC"].cumsum()
     summary_data["Diff"] = summary_data["SUM"].diff()
@@ -269,7 +274,9 @@ def generate_trend_chart(
 
     if not data.empty:
         # Generate trend chart for each repository
-        for repository in data["Repository"].unique():
+        for repository in tqdm(
+            data["Repository"].unique(), desc="Generating trend chart", leave=False
+        ):
             loc_data = data[data["Repository"] == repository]
             branch_name = next(iter(loc_data["Branch"].unique()), "Unknown")
 
@@ -282,7 +289,7 @@ def generate_trend_chart(
 
             # Summary data
             summary_data = prepare_summary_data(
-                data=loc_data, groupby_column=category_column
+                data=loc_data, time_interval=time_interval
             )
 
             # Build the chart

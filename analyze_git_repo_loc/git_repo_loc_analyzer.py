@@ -215,7 +215,6 @@ class GitRepoLOCAnalyzer:
         for commit in tqdm(
             repository.traverse_commits(),
             desc="Analyzing commits",
-            leave=False,
             total=total_commits,
         ):
             commit_datetime = commit.committer_date
