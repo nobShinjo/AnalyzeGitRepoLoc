@@ -1,9 +1,20 @@
 """
+This module provides a class to get the extensions for a given language.
+
 Attributes:
-    extensions (dict): A dictionary of languages and their extensions.
+    language_to_extensions (dict): A dictionary of languages and their extensions.
+    extension_to_language (dict): A dictionary of extensions and their languages.
+    sorted_extensions (list): A list of extensions sorted by length in descending order.
+    is_initialized (bool): A flag to check if the extension_to_language dictionary is initialized.
+
 Methods:
     get_extensions(language: str) -> list[str]:
         Get the extensions for a given language.
+    get_extension(filename: str) -> str:
+        Get the extension for a given filename, considering multiple dots.
+    get_language(filename: str) -> str:
+        Get the language for a given extension.
+        If the language is unknown, "Unknown" is returned.
 """
 
 from typing import Union

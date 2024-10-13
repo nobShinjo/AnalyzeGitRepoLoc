@@ -1,10 +1,15 @@
 """
 This module provides utility functions for analyzing lines of code (LOC) in Git repositories.
+
 Functions:
+    parse_repos_paths(input_string: str) -> list[tuple[Path, str]]:
     parse_arguments(parser: argparse.ArgumentParser) -> argparse.Namespace:
         Parse command line arguments.
-    process_loc_data(
-        Process LOC data and save data and charts.
+    handle_exception(ex: Exception) -> None:
+    get_time_interval_and_period(interval: str) -> Union[str, str]:
+    save_repository_branch_info(repo_paths, output_file: Path) -> None:
+    analyze_trends(
+    analyze_git_repositories(args: argparse.Namespace) -> list[pd.DataFrame]:
 """
 
 import argparse

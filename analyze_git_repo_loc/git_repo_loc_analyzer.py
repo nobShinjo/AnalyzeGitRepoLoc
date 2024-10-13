@@ -1,10 +1,31 @@
 """
+This module provides the `GitRepoLOCAnalyzer` class for analyzing lines of code (LOC)
+ in a Git repository.
+
+Classes:
+    GitRepoLOCAnalyzer: A class for analyzing LOC in a Git repository.
+
+Functions:
+    make_output_dir(output_dir: Path) -> Path:
+    clear_cache_files():
+        Deletes all files located in the directory specified by the `_cache_path` attribute.
+    is_branch_exists(repo_path: PathLike, branch_name: str) -> bool:
+        Checks if a branch exists in the given Git repository.
+    is_comment_or_empty_line(line: str, language: str) -> bool:
+        Checks if a line is a comment or an empty line.
+    load_cache() -> pd.DataFrame:
+        Loads the cached commit data from the cache directory.
+    get_commit_analysis() -> pd.DataFrame:
+        Analyzes the commits in the repository and returns a DataFrame with 
+        the analyzed commit data.
+    save_cache() -> None:
+    get_repository_name(repo_path: Union[Path, str]) -> str:
+    valid_language_key(languages: list[str]) -> list[str]:
 
 """
 
 import os
 import sys
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
 from typing import Union

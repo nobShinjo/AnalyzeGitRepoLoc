@@ -1,15 +1,22 @@
 """
-A module for building and displaying LOC trend by language and total LOC charts using Plotly.
+A module for building and displaying LOC (Lines of Code) trend charts using Plotly.
+This module defines the `ChartBuilder` class, which provides methods to set data,
+create various types of traces (area, line, bar), and update the layout of a Plotly
+figure. The class supports method chaining for a fluid interface pattern, allowing
+for dynamic updates and modifications of the visualization.
+
 Classes:
-    ChartBuilder: A class responsible for building and displaying LOC trend by language and total LOC charts.
-Usage Example:
+    ChartBuilder: A class responsible for building and displaying LOC trend by language
+                  and total LOC charts.
+
+Usage example:
         .create_fig()
-        .create_trend_trace(color_data="language")
-        .create_diff_trace()
-        .update_fig()
+        .create_trend_trace(xaxis_column="Date")
+        .create_sum_trace(xaxis_column="Date")
+        .create_bar_trace(xaxis_column="Date")
+        .update_fig(sub_title="My Subtitle")
         .update_xaxis_tickformat(interval="monthly")
     chart_builder.show()
-
 """
 
 from typing import TypeVar

@@ -1,7 +1,35 @@
 """
-Analyze Git repositories and visualize code LOC.
+Analyzing Git Repositories and Visualizing Code LOC.
 
-Author:    Nob Shinjo
+This script analyzes the lines of code (LOC) in Git repositories 
+and visualizes the data through various charts. 
+It processes the LOC data, categorizes it by programming language, author,
+ and repository, and generates trend charts to show the evolution of code volume over time.
+
+Functions:
+    main() -> None:
+        Main function to execute the program. It parses command line arguments, 
+        initializes the console printer, 
+        analyzes the LOC data, forms dataframes, saves the analyzed data, and generates charts.
+    save_analysis_data(language_analysis: pd.DataFrame, author_analysis: pd.DataFrame, 
+    repository_analysis: pd.DataFrame, output_dir: Path) -> None:
+        Saves the analyzed data to CSV files in the specified output directory.
+    prepare_trend_data(data: pd.DataFrame, time_interval: str, category_column: str)
+      -> pd.DataFrame:
+        Prepares trend data for the trend chart by pivoting the data and sorting the columns.
+    prepare_summary_data(data: pd.DataFrame, time_interval: str) -> pd.DataFrame:
+        Prepares summary data for the trend chart by aggregating the data and calculating 
+        cumulative sums and differences.
+    generate_trend_chart(data: pd.DataFrame, category_column: str, time_interval: str,
+        output_path: Path, sub_title: str = "") -> None:
+        Generates trend charts for each repository and saves the data and charts 
+        to the specified output path.
+    save_chart_data(trend_data: pd.DataFrame, summary_data: pd.DataFrame, trend_chart: go.Figure,
+         output_prefix: str, output_path: Path):
+        Saves the trend data and chart to CSV and HTML files in the specified output path.
+    generate_repository_trend_chart(data: pd.DataFrame, time_interval: str, output_path: Path) -> None:
+        Generates a trend chart for all repositories and saves the data and chart 
+        to the specified output path.
 """
 
 import argparse

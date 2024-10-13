@@ -1,10 +1,12 @@
 """
+LanguageComment class is a class that contains the comment syntax for each language
+
 Attributes:
     language_comment_syntax (dict): A dictionary that contains the comment syntax for each language.
+
 Methods:
     get_comment_syntax(language: str) -> list[str]:
         Returns the comment syntax for the given language.
-
 """
 
 
