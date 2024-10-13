@@ -160,21 +160,26 @@ def save_repository_branch_info(repo_paths, output_file: Path) -> None:
 
 
 def analyze_trends(
-    category_column: str, interval: str, loc_data: pd.DataFrame
+    category_column: str,
+    interval: str,
+    loc_data: pd.DataFrame,
+    analysis_data: pd.DataFrame,
+    output_path: Path = None,
 ) -> pd.DataFrame:
     """
-    Analyzes trends in lines of code (LOC) data by grouping and aggregating based
-    on specified categories and intervals.
+    Analyze the trends in the LOC data and save the results to a CSV file.
 
     Args:
         category_column (str): The column name in `loc_data` representing the category to group by.
         interval (str): The column name in `loc_data` representing the interval to group by.
         loc_data (pd.DataFrame): A DataFrame containing lines of code data with at least
                                  the columns specified by `category_column`, `interval`, and 'NLOC'.
+        analysis_data (pd.DataFrame): A DataFrame containing the aggregated LOC data for each group.
+        output_path (Path): The path to save the output CSV file. If None, the file will not be saved.
 
     Returns:
-        pd.DataFrame: A DataFrame with aggregated trend data, including cumulative sum ('SUM'),
-                      difference ('Diff'), and mean ('Mean') of 'NLOC' for each group.
+        pd.DataFrame: A DataFrame containing the aggregated LOC data for each group.
+
     """
     aggregate_functions = {
         "Datetime": "min",
@@ -197,7 +202,12 @@ def analyze_trends(
     )
     trends_data.drop(columns=["Datetime", "Commit_hash"], inplace=True)
     trends_data["SUM"] = trends_data.groupby(category_column)["NLOC"].cumsum()
-    return trends_data
+
+    if output_path is not None:
+        output_prefix = category_column.lower()
+        trends_data.to_csv(output_path / f"{output_prefix}_trends.csv", index=False)
+
+    return pd.concat([analysis_data, trends_data], ignore_index=True)
 
 
 def analyze_git_repositories(args: argparse.Namespace) -> list[pd.DataFrame]:

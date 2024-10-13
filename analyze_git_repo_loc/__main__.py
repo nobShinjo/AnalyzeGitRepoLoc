@@ -11,6 +11,7 @@ from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
+import plotly.graph_objects as go
 from colorama import Cursor, Fore, Style
 from tqdm import tqdm
 
@@ -46,20 +47,15 @@ def main() -> None:
 
     # Analyze the LOC in the Git repositories
     loc_data_repositories = analyze_git_repositories(args)
+    time_interval, time_period = get_time_interval_and_period(args.interval)
 
-    # Convert analyzed data for visualization
-    # 1. Stacked area trend chart of code volume by programming language per repository,
-    #    bar graph of added/deleted code volume, and line graph of average code volume
-    # 2. Stacked area trend chart by author per repository
-    # 3. Stacked trend chart of code volume per repository, bar graph of added/deleted code volume,
-    #    and line graph of average code volume
-    # 4. Aggregate each data daily, weekly, and monthly
-    console.print_h1("# Forming dataframe type data.")
     # Dataframe declaration
     language_analysis = pd.DataFrame()
     author_analysis = pd.DataFrame()
     repository_analysis = pd.DataFrame()
-    time_interval, time_period = get_time_interval_and_period(args.interval)
+
+    # Convert analyzed data for visualization
+    console.print_h1("# Forming dataframe type data.")
     for loc_data in tqdm(loc_data_repositories, desc="Processing loc data"):
         if "Datetime" not in loc_data.columns:
             console.print_colored(
@@ -79,162 +75,164 @@ def main() -> None:
             )
             sys.exit(1)
         repository_name = next(iter(loc_data["Repository"].unique()), "Unknown")
-        output_dir_for_repo: Path = Path(args.output) / repository_name
+        repo_output_dir: Path = Path(args.output) / repository_name
         try:
-            output_dir_for_repo.mkdir(parents=True, exist_ok=True)
+            repo_output_dir.mkdir(parents=True, exist_ok=True)
         except OSError as ex:
             handle_exception(ex)
 
         # 1. Stacked area trend chart of code volume by programming language per repository,
         #    bar graph of added/deleted code volume, and line graph of average code volume
-        language_trends = analyze_trends(
-            category_column="Language", interval=time_interval, loc_data=loc_data
-        )
-        language_trends.to_csv(output_dir_for_repo / "language_trends.csv", index=False)
-        language_analysis = pd.concat(
-            [language_analysis, language_trends], ignore_index=True
+        language_analysis = analyze_trends(
+            category_column="Language",
+            interval=time_interval,
+            loc_data=loc_data,
+            analysis_data=language_analysis,
+            output_path=repo_output_dir,
         )
 
         # 2. Stacked area trend chart by author per repository
-        author_trends = analyze_trends(
-            category_column="Author", interval=time_interval, loc_data=loc_data
+        author_analysis = analyze_trends(
+            category_column="Author",
+            interval=time_interval,
+            loc_data=loc_data,
+            analysis_data=author_analysis,
+            output_path=repo_output_dir,
         )
-        author_trends.to_csv(output_dir_for_repo / "author_trends.csv", index=False)
-        author_analysis = pd.concat([author_analysis, author_trends], ignore_index=True)
 
         # 3. Stacked trend chart of code volume per repository,
         #    bar graph of added/deleted code volume, and line graph of average code volume
-        repository_trends = analyze_trends(
-            category_column="Repository", interval=time_interval, loc_data=loc_data
-        )
-        repository_analysis = pd.concat(
-            [repository_analysis, repository_trends], ignore_index=True
+        repository_analysis = analyze_trends(
+            category_column="Repository",
+            interval=time_interval,
+            loc_data=loc_data,
+            analysis_data=repository_analysis,
         )
 
     # Save the analyzed data
     console.print_h1("# Save the analyzed data.")
-    current_date = datetime.now()
-    output_dir = Path(args.output) / current_date.strftime("%Y%m%d%H%M%S")
-    try:
-        output_dir.mkdir(parents=True, exist_ok=True)
-    except OSError as ex:
-        handle_exception(ex)
-    language_analysis.to_csv(output_dir / "language_analysis.csv", index=False)
-    author_analysis.to_csv(output_dir / "author_analysis.csv", index=False)
-    repository_analysis.to_csv(output_dir / "repository_analysis.csv", index=False)
+    output_dir = Path(args.output) / datetime.now().strftime("%Y%m%d%H%M%S")
+    save_analysis_data(
+        language_analysis=language_analysis,
+        author_analysis=author_analysis,
+        repository_analysis=repository_analysis,
+        output_dir=output_dir,
+    )
     # Save the list of repositories and branch name
     save_repository_branch_info(args.repo_paths, output_dir / "repo_list.txt")
 
     # Generate charts
     console.print_h1("# Generate charts.")
-    # 1. Stacked area trend chart of code volume by programming language per repository,
-    #    bar graph of added/deleted code volume, and line graph of average code volume
-    # 2. Stacked area trend chart by author per repository
-    # 3. Stacked trend chart of code volume per repository,
-    #    bar graph of added/deleted code volume, and line graph of average code volume
-    # 4. Aggregate each data daily, weekly, and monthly
-
-    # Initialize ChartBuilder
-    chart_builder: ChartBuilder = ChartBuilder()
-    # chart: go.Figure = None
 
     # 1. Stacked area trend chart of code volume by programming language per repository,
-    if not language_analysis.empty:
-        for repository in language_analysis["Repository"].unique():
-            loc_data = language_analysis[language_analysis["Repository"] == repository]
-            branch_name = next(iter(loc_data["Branch"].unique()), "Unknown")
-
-            # Language trend data
-            language_trend_data = loc_data.pivot_table(
-                index=time_interval, columns="Language", values="SUM", aggfunc="sum"
-            ).reset_index()
-
-            # Summary data
-            summary_data = (
-                loc_data.groupby(time_interval)
-                .agg(
-                    {
-                        "NLOC_Added": "sum",
-                        "NLOC_Deleted": "sum",
-                        "NLOC": "sum",
-                    }
-                )
-                .rename(columns={"NLOC_Added": "Added", "NLOC_Deleted": "Deleted"})
-                .reset_index()[[time_interval, "Added", "Deleted", "NLOC"]]
-            )
-            summary_data["SUM"] = summary_data["NLOC"].cumsum()
-            summary_data["Diff"] = summary_data["SUM"].diff()
-            summary_data["Mean"] = summary_data["Diff"].mean()
-
-            language_trend_chart = chart_builder.build(
-                trend_data=language_trend_data,
-                summary_data=summary_data,
-                interval=time_interval,
-                sub_title=f"{repository} ({branch_name})",
-            )
-            chart_output_dir = Path(args.output) / repository
-            language_trend_data.to_csv(
-                chart_output_dir / "language_trend_data.csv", index=False
-            )
-            summary_data.to_csv(
-                chart_output_dir / "language_trend_summary.csv", index=False
-            )
-            language_trend_chart.write_html(
-                chart_output_dir / "language_trend_chart.html"
-            )
+    generate_trend_chart(
+        data=language_analysis,
+        category_column="Language",
+        time_interval=time_interval,
+        output_path=Path(args.output),
+    )
 
     # 2. Stacked area trend chart by author per repository
-    if not author_analysis.empty:
-        for repository in author_analysis["Repository"].unique():
-            loc_data = author_analysis[author_analysis["Repository"] == repository]
-            branch_name = next(iter(loc_data["Branch"].unique()), "Unknown")
-
-            # Author trend data
-            author_trend_data = loc_data.pivot_table(
-                index=time_interval, columns="Author", values="SUM", aggfunc="sum"
-            ).reset_index()
-
-            # Summary data
-            summary_data = (
-                loc_data.groupby(time_interval)
-                .agg(
-                    {
-                        "NLOC_Added": "sum",
-                        "NLOC_Deleted": "sum",
-                        "NLOC": "sum",
-                    }
-                )
-                .rename(columns={"NLOC_Added": "Added", "NLOC_Deleted": "Deleted"})
-                .reset_index()[[time_interval, "Added", "Deleted", "NLOC"]]
-            )
-            summary_data["SUM"] = summary_data["NLOC"].cumsum()
-            summary_data["Diff"] = summary_data["SUM"].diff()
-            summary_data["Mean"] = summary_data["Diff"].mean()
-
-            author_trend_chart = chart_builder.build(
-                trend_data=author_trend_data,
-                summary_data=summary_data,
-                interval=time_interval,
-                sub_title=f"{repository} ({branch_name})",
-            )
-            chart_output_dir = Path(args.output) / repository
-            author_trend_data.to_csv(
-                chart_output_dir / "author_trend_data.csv", index=False
-            )
-            summary_data.to_csv(
-                chart_output_dir / "author_trend_summary.csv", index=False
-            )
-            author_trend_chart.write_html(chart_output_dir / "author_trend_chart.html")
+    generate_trend_chart(
+        data=language_analysis,
+        category_column="Author",
+        time_interval=time_interval,
+        output_path=Path(args.output),
+    )
 
     # 3. Stacked trend chart of code volume per repository
 
     # Repository trend data
-    repository_trend_data = repository_analysis.pivot_table(
-        index=time_interval, columns="Repository", values="SUM", aggfunc="sum"
-    ).reset_index()
+    repository_trend_data = prepare_trend_data(
+        data=repository_analysis,
+        time_interval=time_interval,
+        category_column="Repository",
+    )
     # Summary data
+    summary_data = prepare_summary_data(
+        data=repository_analysis, groupby_column="Repository"
+    )
+
+    # Build the chart
+    chart_builder: ChartBuilder = ChartBuilder()
+    repository_trend_chart = chart_builder.build(
+        trend_data=repository_trend_data,
+        summary_data=summary_data,
+        interval=time_interval,
+        sub_title="All repositories",
+    )
+
+    # Save the data and chart
+    save_chart_data(
+        trend_data=repository_trend_data,
+        summary_data=summary_data,
+        trend_chart=repository_trend_chart,
+        output_prefix="Repository".lower(),
+        output_path=output_dir,
+    )
+
+    console.print_h1("# LOC Analyze")
+    print(Cursor.UP() + Cursor.FORWARD(50) + Fore.GREEN + "FINISH")
+
+
+def save_analysis_data(
+    language_analysis: pd.DataFrame,
+    author_analysis: pd.DataFrame,
+    repository_analysis: pd.DataFrame,
+    output_dir: Path,
+) -> None:
+    """
+    Save the analyzed data.
+
+    Args:
+        language_analysis (pd.DataFrame): The language analysis data.
+        author_analysis (pd.DataFrame): The author analysis data.
+        repository_analysis (pd.DataFrame): The repository analysis data.
+        output_dir (Path): The output directory to save the data.
+    """
+    try:
+        output_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as ex:
+        handle_exception(ex)
+
+    language_analysis.to_csv(output_dir / "language_analysis.csv", index=False)
+    author_analysis.to_csv(output_dir / "author_analysis.csv", index=False)
+    repository_analysis.to_csv(output_dir / "repository_analysis.csv", index=False)
+
+
+def prepare_trend_data(
+    data: pd.DataFrame, time_interval: str, category_column: str
+) -> pd.DataFrame:
+    """
+    Prepare trend data for the trend chart.
+
+    Args:
+        data (pd.DataFrame): The data to prepare the trend.
+        time_interval (str): The interval to group by.
+        category_column (str): The column name to group by.
+
+    Returns:
+        pd.DataFrame: The trend data for the trend chart.
+    """
+    trend_data = data.pivot_table(
+        index=time_interval, columns=category_column, values="SUM", aggfunc="sum"
+    ).reset_index()
+    return trend_data
+
+
+def prepare_summary_data(data: pd.DataFrame, groupby_column: str) -> pd.DataFrame:
+    """
+    Prepare summary data for the trend chart.
+
+    Args:
+        data (pd.DataFrame): The data to prepare the summary.
+        groupby_column (str): The column name to group by.
+
+    Returns:
+        pd.DataFrame: The summary data for the trend chart.
+    """
     summary_data = (
-        loc_data.groupby(time_interval)
+        data.groupby(groupby_column)
         .agg(
             {
                 "NLOC_Added": "sum",
@@ -243,26 +241,111 @@ def main() -> None:
             }
         )
         .rename(columns={"NLOC_Added": "Added", "NLOC_Deleted": "Deleted"})
-        .reset_index()[[time_interval, "Added", "Deleted", "NLOC"]]
+        .reset_index()[[groupby_column, "Added", "Deleted", "NLOC"]]
     )
     summary_data["SUM"] = summary_data["NLOC"].cumsum()
     summary_data["Diff"] = summary_data["SUM"].diff()
     summary_data["Mean"] = summary_data["Diff"].mean()
+    return summary_data
 
-    repository_trend_chart = chart_builder.build(
-        trend_data=repository_trend_data,
-        summary_data=summary_data,
-        interval=time_interval,
-        sub_title="All repositories",
-    )
-    repository_trend_data.to_csv(
-        chart_output_dir / "repository_trend_data.csv", index=False
-    )
-    summary_data.to_csv(chart_output_dir / "repository_trend_summary.csv", index=False)
-    repository_trend_chart.write_html(output_dir / "repository_trend_chart.html")
 
-    console.print_h1("# LOC Analyze")
-    print(Cursor.UP() + Cursor.FORWARD(50) + Fore.GREEN + "FINISH")
+def generate_trend_chart(
+    data: pd.DataFrame,
+    category_column: str,
+    time_interval: str,
+    output_path: Path,
+    sub_title: str = "",
+) -> None:
+    """
+    Generate trend chart for each repository.
+
+    Args:
+        data (pd.DataFrame): The data to generate the trend chart.
+        category_column (str): The column name to group by.
+        time_interval (str): The time interval to group by.
+        output_path (Path): The output path to save the chart.
+        sub_title (str): The sub title for the chart.
+    """
+
+    if not data.empty:
+        # Generate trend chart for each repository
+        for repository in data["Repository"].unique():
+            loc_data = data[data["Repository"] == repository]
+            branch_name = next(iter(loc_data["Branch"].unique()), "Unknown")
+
+            # Language trend data
+            trend_data = prepare_trend_data(
+                data=loc_data,
+                time_interval=time_interval,
+                category_column=category_column,
+            )
+
+            # Summary data
+            summary_data = prepare_summary_data(
+                data=loc_data, groupby_column=category_column
+            )
+
+            # Build the chart
+            chart_builder: ChartBuilder = ChartBuilder()
+            trend_chart = chart_builder.build(
+                trend_data=trend_data,
+                summary_data=summary_data,
+                interval=time_interval,
+                sub_title=(
+                    f"{repository} ({branch_name})" if sub_title == "" else sub_title
+                ),
+            )
+
+            # Save the data and chart
+            save_chart_data(
+                trend_data=trend_data,
+                summary_data=summary_data,
+                trend_chart=trend_chart,
+                output_prefix=category_column.lower(),
+                output_path=output_path / repository,
+            )
+
+
+def save_chart_data(
+    trend_data: pd.DataFrame,
+    summary_data: pd.DataFrame,
+    trend_chart: go.Figure,
+    output_prefix: str,
+    output_path: Path,
+):
+    """
+    Save the trend data and chart.
+
+    Args:
+        trend_data (pd.DataFrame): The trend data to save.
+        summary_data (pd.DataFrame): The summary data to save.
+        trend_chart (go.Figure): The trend chart to save.
+        output_prefix (str): The output prefix for the files.
+        output_path (Path): The output path to save the files.
+
+    Raises:
+        OSError: If an error occurs while saving the files.
+        IOError: If an error occurs while saving the files.
+        pd.errors.EmptyDataError: If the data is empty.
+    """
+    try:
+        # Check if the output path is a Path object
+        if not isinstance(output_path, Path):
+            output_path = Path(output_path)
+        # Create the output directory
+        output_path.mkdir(parents=True, exist_ok=True)
+        # Save the data and chart
+        trend_data.to_csv(
+            output_path / f"{output_prefix}_trend_data.csv",
+            index=False,
+        )
+        summary_data.to_csv(
+            output_path / f"{output_prefix}_trend_summary.csv",
+            index=False,
+        )
+        trend_chart.write_html(output_path / f"{output_prefix}_trend_chart.html")
+    except (OSError, IOError, pd.errors.EmptyDataError) as ex:
+        handle_exception(ex)
 
 
 if __name__ == "__main__":
