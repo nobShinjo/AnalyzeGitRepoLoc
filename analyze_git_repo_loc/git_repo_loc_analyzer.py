@@ -24,20 +24,16 @@ Functions:
 
 """
 
-import copy
 import os
 import sys
-import threading
-from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
 from typing import Union
 
 import pandas as pd
 from git import GitCommandError, PathLike, Repo
-from pydriller import Commit, Repository
+from pydriller import Repository
 from tqdm import tqdm
-from tqdm.contrib.concurrent import thread_map
 
 from analyze_git_repo_loc.language_comment import LanguageComment
 from analyze_git_repo_loc.language_extensions import LanguageExtensions

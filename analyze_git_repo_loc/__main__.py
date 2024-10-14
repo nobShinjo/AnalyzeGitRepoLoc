@@ -43,7 +43,7 @@ import plotly.graph_objects as go
 from colorama import Cursor, Fore, Style
 from tqdm import tqdm
 
-from analyze_git_repo_loc.chart_builder import ChartBuilder
+from analyze_git_repo_loc.chart_builder import ChartBuilder, ChartStrategy
 from analyze_git_repo_loc.colored_console_printer import ColoredConsolePrinter
 from analyze_git_repo_loc.utils import (
     analyze_git_repositories,
@@ -151,13 +151,14 @@ def main() -> None:
 
     # Generate charts
     console.print_h1("\n# Generate charts.")
-    with tqdm(total=3, desc="Generating charts") as progress_bar:
+    with tqdm(total=4, desc="Generating charts") as progress_bar:
         # 1. Stacked area trend chart of code volume by programming language per repository,
         generate_trend_chart(
             data=language_analysis,
             category_column="Language",
             time_interval=time_interval,
             output_path=Path(args.output),
+            no_plot_show=args.no_plot_show,
         )
         progress_bar.update(1)
 
@@ -167,6 +168,7 @@ def main() -> None:
             category_column="Author",
             time_interval=time_interval,
             output_path=Path(args.output),
+            no_plot_show=args.no_plot_show,
         )
         progress_bar.update(1)
 
@@ -175,6 +177,15 @@ def main() -> None:
             data=repository_analysis,
             time_interval=time_interval,
             output_path=output_dir,
+            no_plot_show=args.no_plot_show,
+        )
+        progress_bar.update(1)
+
+        # 4. Stacked bar chart of author contribution per repository
+        generate_author_contribution_chart(
+            data=author_analysis,
+            output_path=output_dir,
+            no_plot_show=args.no_plot_show,
         )
         progress_bar.update(1)
 
@@ -235,8 +246,13 @@ def prepare_trend_data(
         .ffill()
     )
     # Sort the columns by the last value
-    sorted_columns = trend_data.columns[1:][trend_data.iloc[-1, 1:].argsort()[::-1]]
-    trend_data = trend_data.loc[:, [time_interval] + sorted_columns.tolist()]
+    sorted_columns = (
+        trend_data.iloc[-1, 1:]
+        .infer_objects(copy=False)
+        .sort_values(ascending=False)
+        .index.tolist()
+    )
+    trend_data = trend_data.loc[:, [time_interval] + sorted_columns]
 
     return trend_data
 
@@ -270,12 +286,49 @@ def prepare_summary_data(data: pd.DataFrame, time_interval: str) -> pd.DataFrame
     return summary_data
 
 
+def prepare_author_contribution_data(data: pd.DataFrame) -> pd.DataFrame:
+    """
+    Prepare author contribution data for the bar chart.
+
+    Args:
+        data (pd.DataFrame): The data to prepare the author contribution.
+
+    Returns:
+        pd.DataFrame: The author contribution data for the trend chart.
+    """
+    contribution_data = (
+        data.groupby(["Author", "Repository"])
+        .agg(
+            {
+                "NLOC": "sum",
+            }
+        )
+        .reset_index()[["Author", "Repository", "NLOC"]]
+    )
+    summary_data = contribution_data.pivot_table(
+        index="Author", columns="Repository", values="NLOC", aggfunc="sum"
+    ).reset_index()
+    # Sort the columns by the last value
+    sorted_columns = (
+        summary_data.iloc[-1, 1:]
+        .infer_objects(copy=False)
+        .sort_values(ascending=False)
+        .index.tolist()
+    )
+    summary_data = summary_data.loc[:, ["Author"] + sorted_columns]
+    # Sort the rows by the sum of values
+    sorted_indices = summary_data.iloc[:, 1:].sum(axis=1).argsort()[::-1]
+    summary_data = summary_data.iloc[sorted_indices].reset_index(drop=True)
+    return summary_data
+
+
 def generate_trend_chart(
     data: pd.DataFrame,
     category_column: str,
     time_interval: str,
     output_path: Path,
     sub_title: str = "",
+    no_plot_show: bool = False,
 ) -> None:
     """
     Generate trend chart for each repository.
@@ -286,6 +339,7 @@ def generate_trend_chart(
         time_interval (str): The time interval to group by.
         output_path (Path): The output path to save the chart.
         sub_title (str): The sub title for the chart.
+        no_plot_show (bool): If True, the chart will not be shown.
     """
     if data.empty:
         return
@@ -309,43 +363,52 @@ def generate_trend_chart(
 
         # Build the chart
         chart_builder: ChartBuilder = ChartBuilder()
-        trend_chart = chart_builder.build(
-            trend_data=trend_data,
-            summary_data=summary_data,
-            interval=time_interval,
-            sub_title=(
-                f"{repository} ({branch_name})" if sub_title == "" else sub_title
-            ),
-        )
+        chart_builder.set_strategy(ChartStrategy.TREND)
+        try:
+            trend_chart = chart_builder.build(
+                trend_data=trend_data,
+                summary_data=summary_data,
+                interval=time_interval,
+                sub_title=(
+                    f"{repository} ({branch_name})" if sub_title == "" else sub_title
+                ),
+            )
+        except ValueError as ex:
+            handle_exception(ex)
+            continue
+
         # Show the chart
-        trend_chart.show()
+        if not no_plot_show:
+            trend_chart.show()
 
         # Save the data and chart
         save_chart_data(
+            output_prefix=category_column.lower(),
+            output_path=output_path / repository,
             trend_data=trend_data,
             summary_data=summary_data,
             trend_chart=trend_chart,
-            output_prefix=category_column.lower(),
-            output_path=output_path / repository,
         )
 
 
 def save_chart_data(
-    trend_data: pd.DataFrame,
-    summary_data: pd.DataFrame,
-    trend_chart: go.Figure,
     output_prefix: str,
     output_path: Path,
+    trend_data: pd.DataFrame = None,
+    summary_data: pd.DataFrame = None,
+    trend_chart: go.Figure = None,
+    contribution_chart: go.Figure = None,
 ):
     """
     Save the trend data and chart.
 
     Args:
+        output_prefix (str): The output prefix for the files.
+        output_path (Path): The output path to save the files.
         trend_data (pd.DataFrame): The trend data to save.
         summary_data (pd.DataFrame): The summary data to save.
         trend_chart (go.Figure): The trend chart to save.
-        output_prefix (str): The output prefix for the files.
-        output_path (Path): The output path to save the files.
+        contribution_chart (go.Figure): The contribution chart to save.
 
     Raises:
         OSError: If an error occurs while saving the files.
@@ -359,31 +422,50 @@ def save_chart_data(
         # Create the output directory
         output_path.mkdir(parents=True, exist_ok=True)
         # Save the data and chart
-        trend_data.to_csv(
-            output_path / f"{output_prefix}_trend_data.csv",
-            index=False,
-        )
-        summary_data.to_csv(
-            output_path / f"{output_prefix}_trend_summary.csv",
-            index=False,
-        )
-        trend_chart.write_html(output_path / f"{output_prefix}_trend_chart.html")
+        if trend_data is not None:
+            trend_data.to_csv(
+                output_path / f"{output_prefix}_trend_data.csv",
+                index=False,
+            )
+        if summary_data is not None:
+            summary_data.to_csv(
+                output_path / f"{output_prefix}_summary_data.csv",
+                index=False,
+            )
+        if trend_chart is not None:
+            trend_chart.write_html(output_path / f"{output_prefix}_chart.html")
+        if contribution_chart is not None:
+            contribution_chart.write_html(
+                output_path / f"{output_prefix}_contribution_chart.html"
+            )
+
     except (OSError, IOError, pd.errors.EmptyDataError) as ex:
         handle_exception(ex)
 
 
 def generate_repository_trend_chart(
-    data: pd.DataFrame, time_interval: str, output_path: Path
+    data: pd.DataFrame,
+    time_interval: str,
+    output_path: Path,
+    no_plot_show: bool = False,
 ) -> None:
     """
     Generate trend chart for all repositories.
+
+    Generate a trend chart for all repositories and save the data and chart
+    to the specified output path. If the data is empty or there is only one
+    repository, the function returns without generating the chart.
 
     Args:
         data (pd.DataFrame): The data to generate the trend chart.
         time_interval (str): The time interval to group by.
         output_path (Path): The output path to save the chart.
+        no_plot_show (bool): If True, the chart will not be shown.
     """
+    # Check if the data is empty or there is only one repository
     if data.empty:
+        return
+    if len(data["Repository"].unique()) == 1:
         return
 
     # Repository trend data
@@ -397,23 +479,83 @@ def generate_repository_trend_chart(
 
     # Build the chart
     chart_builder: ChartBuilder = ChartBuilder()
-    repository_trend_chart = chart_builder.build(
-        trend_data=repository_trend_data,
-        summary_data=summary_data,
-        interval=time_interval,
-        sub_title="All repositories",
-    )
+    try:
+        chart_builder.set_strategy(ChartStrategy.TREND)
+        repository_trend_chart = chart_builder.build(
+            trend_data=repository_trend_data,
+            summary_data=summary_data,
+            interval=time_interval,
+            sub_title="All repositories",
+        )
+    except ValueError as ex:
+        handle_exception(ex)
 
     # Show the chart
-    repository_trend_chart.show()
+    if not no_plot_show:
+        repository_trend_chart.show()
 
     # Save the data and chart
     save_chart_data(
+        output_prefix="Repository".lower(),
+        output_path=output_path,
         trend_data=repository_trend_data,
         summary_data=summary_data,
         trend_chart=repository_trend_chart,
-        output_prefix="Repository".lower(),
+    )
+
+
+def generate_author_contribution_chart(
+    data: pd.DataFrame,
+    output_path: Path,
+    no_plot_show: bool = False,
+) -> None:
+    """
+    Generate author contribution chart.
+
+    Generate a bar chart of author contribution per repository and save the data and chart
+    to the specified output path. If the data is empty or there is only one repository,
+    the function returns without generating the chart.
+
+    Args:
+        data (pd.DataFrame): The data to generate the author contribution chart.
+        output_path (Path): The output path to save the chart.
+        no_plot_show (bool): If True, the chart will not be shown.
+
+    Raises:
+        ValueError: If an error occurs while building the chart.
+    """
+    # Check if the data is empty or there is only one repository
+    if data.empty:
+        return
+    if len(data["Repository"].unique()) == 1:
+        return
+
+    # Author contribution data
+    author_contribution_data = prepare_author_contribution_data(data)
+
+    # Build the chart
+    chart_builder: ChartBuilder = ChartBuilder()
+    chart_builder.set_strategy(ChartStrategy.AUTHOR_CONTRIBUTION)
+    try:
+        author_contribution_chart = chart_builder.build(
+            trend_data=None,
+            summary_data=author_contribution_data,
+            interval=None,
+            sub_title="All repositories",
+        )
+    except ValueError as ex:
+        handle_exception(ex)
+
+    # Show the chart
+    if not no_plot_show:
+        author_contribution_chart.show()
+
+    # Save the data and chart
+    save_chart_data(
+        output_prefix="Author".lower(),
         output_path=output_path,
+        summary_data=author_contribution_data,
+        contribution_chart=author_contribution_chart,
     )
 
 
