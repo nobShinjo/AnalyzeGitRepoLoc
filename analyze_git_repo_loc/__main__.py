@@ -158,6 +158,7 @@ def main() -> None:
             category_column="Language",
             time_interval=time_interval,
             output_path=Path(args.output),
+            no_plot_show=args.no_plot_show,
         )
         progress_bar.update(1)
 
@@ -167,6 +168,7 @@ def main() -> None:
             category_column="Author",
             time_interval=time_interval,
             output_path=Path(args.output),
+            no_plot_show=args.no_plot_show,
         )
         progress_bar.update(1)
 
@@ -175,6 +177,7 @@ def main() -> None:
             data=repository_analysis,
             time_interval=time_interval,
             output_path=output_dir,
+            no_plot_show=args.no_plot_show,
         )
         progress_bar.update(1)
 
@@ -182,6 +185,7 @@ def main() -> None:
         generate_author_contribution_chart(
             data=author_analysis,
             output_path=output_dir,
+            no_plot_show=args.no_plot_show,
         )
         progress_bar.update(1)
 
@@ -324,6 +328,7 @@ def generate_trend_chart(
     time_interval: str,
     output_path: Path,
     sub_title: str = "",
+    no_plot_show: bool = False,
 ) -> None:
     """
     Generate trend chart for each repository.
@@ -334,6 +339,7 @@ def generate_trend_chart(
         time_interval (str): The time interval to group by.
         output_path (Path): The output path to save the chart.
         sub_title (str): The sub title for the chart.
+        no_plot_show (bool): If True, the chart will not be shown.
     """
     if data.empty:
         return
@@ -372,7 +378,8 @@ def generate_trend_chart(
             continue
 
         # Show the chart
-        trend_chart.show()
+        if not no_plot_show:
+            trend_chart.show()
 
         # Save the data and chart
         save_chart_data(
@@ -437,7 +444,10 @@ def save_chart_data(
 
 
 def generate_repository_trend_chart(
-    data: pd.DataFrame, time_interval: str, output_path: Path
+    data: pd.DataFrame,
+    time_interval: str,
+    output_path: Path,
+    no_plot_show: bool = False,
 ) -> None:
     """
     Generate trend chart for all repositories.
@@ -450,6 +460,7 @@ def generate_repository_trend_chart(
         data (pd.DataFrame): The data to generate the trend chart.
         time_interval (str): The time interval to group by.
         output_path (Path): The output path to save the chart.
+        no_plot_show (bool): If True, the chart will not be shown.
     """
     # Check if the data is empty or there is only one repository
     if data.empty:
@@ -480,7 +491,8 @@ def generate_repository_trend_chart(
         handle_exception(ex)
 
     # Show the chart
-    repository_trend_chart.show()
+    if not no_plot_show:
+        repository_trend_chart.show()
 
     # Save the data and chart
     save_chart_data(
@@ -495,6 +507,7 @@ def generate_repository_trend_chart(
 def generate_author_contribution_chart(
     data: pd.DataFrame,
     output_path: Path,
+    no_plot_show: bool = False,
 ) -> None:
     """
     Generate author contribution chart.
@@ -506,6 +519,7 @@ def generate_author_contribution_chart(
     Args:
         data (pd.DataFrame): The data to generate the author contribution chart.
         output_path (Path): The output path to save the chart.
+        no_plot_show (bool): If True, the chart will not be shown.
 
     Raises:
         ValueError: If an error occurs while building the chart.
@@ -533,7 +547,8 @@ def generate_author_contribution_chart(
         handle_exception(ex)
 
     # Show the chart
-    author_contribution_chart.show()
+    if not no_plot_show:
+        author_contribution_chart.show()
 
     # Save the data and chart
     save_chart_data(
