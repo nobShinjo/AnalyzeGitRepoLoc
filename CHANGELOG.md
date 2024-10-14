@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.1.1] - 2024-10-15
+
+### HotFixed
+
+- Fixed an issue where using the `--clear-cache` option did not properly clear cached data, causing analysis to use outdated data. Initialized `_cache_commit_data` attribute to `None` in `GitRepoLOCAnalyzer` class to ensure proper cache handling.
+
 ## [2.1.0] - 2024-10-15
 
 ### Added
@@ -109,6 +115,7 @@
 - Provided functionality to generate LOC trend charts by language and author.
 -
 
+[2.1.1](https://github.com/nobShinjo/AnalyzeGitRepoLoc/releases/tag/v2.1.1)
 [2.1.0](https://github.com/nobShinjo/AnalyzeGitRepoLoc/releases/tag/v2.1.0)
 [2.0.0](https://github.com/nobShinjo/AnalyzeGitRepoLoc/releases/tag/v2.0.0)
 [1.1.1](https://github.com/nobShinjo/AnalyzeGitRepoLoc/releases/tag/v1.1.1)
