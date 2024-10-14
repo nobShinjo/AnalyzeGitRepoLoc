@@ -378,12 +378,19 @@ def generate_repository_trend_chart(
     """
     Generate trend chart for all repositories.
 
+    Generate a trend chart for all repositories and save the data and chart
+    to the specified output path. If the data is empty or there is only one
+    repository, the function returns without generating the chart.
+
     Args:
         data (pd.DataFrame): The data to generate the trend chart.
         time_interval (str): The time interval to group by.
         output_path (Path): The output path to save the chart.
     """
+    # Check if the data is empty or there is only one repository
     if data.empty:
+        return
+    if len(data["Repository"].unique()) == 1:
         return
 
     # Repository trend data
