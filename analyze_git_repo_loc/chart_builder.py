@@ -19,12 +19,22 @@ Usage example:
     chart_builder.show()
 """
 
+from enum import Enum
 from typing import TypeVar
 
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+
+
+class ChartStrategy(Enum):
+    """
+    An enumeration class for different chart building strategies.
+    """
+
+    TREND = "trend"
+    AUTHOR_CONTRIBUTION = "author_contribution"
 
 
 class ChartBuilder:
@@ -48,6 +58,25 @@ class ChartBuilder:
         """ A DataFrame containing the summary data of LOC and the difference of LOC. """
         self._fig: go.Figure = None
         """ The final Plotly figure object that contains the combined area and line plot. """
+        self._strategy: ChartStrategy = None
+        """ The strategy for building the chart. """
+
+    def set_strategy(self, strategy: ChartStrategy) -> ChartBuilderSelf:
+        """
+        Sets the strategy for building the chart.
+
+        The method assigns the provided strategy to the `_strategy` attribute.
+
+        Args:
+            strategy (str): The strategy for building the chart.
+
+        Returns:
+            ChartBuilderSelf: The instance itself, enabling method chaining.
+
+        This method enables the caller to input a strategy into the chart builder instance.
+        """
+        self._strategy = strategy
+        return self
 
     def set_trend_data(self, trend_data: pd.DataFrame) -> ChartBuilderSelf:
         """
@@ -284,7 +313,44 @@ class ChartBuilder:
 
         return self
 
-    def update_fig(self, sub_title: str) -> ChartBuilderSelf:
+    def create_author_contribution_trace(self) -> ChartBuilderSelf:
+        """
+        Adds a horizontal stacked bar trace to an existing plotly figure
+        within the ChartBuilder instance.
+
+        This method creates a horizontal stacked bar chart using the internal summary data,
+        focusing on the contribution of each author. It then adds this newly created trace
+        to the main figure.
+
+        Returns:
+            self (ChartBuilder): Returns the instance itself for method chaining purposes.
+        """
+        # wide dataframe to long dataframe
+        contribution_data = self._summary_data.melt(
+            id_vars=["Author"], var_name="Repository", value_name="NLOC"
+        )
+        contribution_data["NLOC"] = contribution_data["NLOC"].fillna(0)
+
+        # Create a horizontal stacked bar chart
+        fig_author = px.bar(
+            data_frame=contribution_data,
+            x="NLOC",
+            y="Author",
+            color="Repository",
+            orientation="h",
+            barmode="relative",
+        )
+
+        # Add the bar traces to the figure
+        if self._fig is None:
+            self._fig = fig_author
+        else:
+            for trace in fig_author.data:
+                self._fig.add_trace(trace)
+
+        return self
+
+    def update_fig_trend(self, sub_title: str) -> ChartBuilderSelf:
         """
         Updates the axes and layout of the `_fig` attribute with a specific style.
 
@@ -298,9 +364,6 @@ class ChartBuilder:
 
         Returns:
             ChartBuilderSelf: The instance itself, enabling method chaining.
-
-        After the call to this method, the `_fig` attribute will be styled according to
-        the specifications set within this method and can be further manipulated or displayed.
         """
         self._fig.update_xaxes(
             showline=True,
@@ -364,13 +427,92 @@ class ChartBuilder:
                 "xanchor": "center",
                 "font_size": 20,
             },
-            xaxis={"dtick": "M1"},
             legend_title_font_size=14,
             legend_font_size=14,
         )
         return self
 
-    def update_xaxis_tickformat(self, interval: str) -> ChartBuilderSelf:
+    def update_fig_author_contribution(self, sub_title: str) -> ChartBuilderSelf:
+        """
+        Updates the axes and layout of the `_fig` attribute with a specific style.
+
+        This method configures various properties for both x and y axes, such as
+        visibility of grid lines, color and width of lines, angle and format of ticks,
+        as well as updating the layout of the figure to adjust background color, title,
+        and legend styling.
+
+        Args:
+            sub_title (str): The subtitle to be displayed in the chart title.
+
+        Returns:
+            ChartBuilderSelf: The instance itself, enabling method chaining.
+        """
+        self._fig.update_xaxes(
+            showline=True,
+            linewidth=1,
+            linecolor="grey",
+            color="black",
+            gridcolor="lightgrey",
+            gridwidth=0.5,
+            title_text="Code",
+            title_font_size=18,
+            side="top",
+            tickfont_size=14,
+            automargin=True,
+        )
+        self._fig.update_yaxes(
+            showline=True,
+            linewidth=1,
+            linecolor="grey",
+            color="black",
+            gridcolor="lightgrey",
+            gridwidth=0.5,
+            title_text="Author",
+            title_font_size=18,
+            tickfont_size=14,
+            # range=[0, None],
+            # autorange="max",
+            # rangemode="tozero",
+            # automargin=True,
+            spikethickness=1,
+            # spikemode=None,
+            # spikemode="toaxis+across",
+            categoryorder="total ascending",
+            automargin=True,
+        )
+        self._fig.update_layout(
+            font_family="Open Sans",
+            plot_bgcolor="white",
+            title={
+                "text": f"LOC trend by Language - {sub_title}",
+                "x": 0.5,
+                "y": 0.98,
+                "xanchor": "center",
+                "font_size": 20,
+            },
+            legend_title_font_size=14,
+            legend_font_size=14,
+            barmode="relative",
+        )
+        return self
+
+    def update_fig(self, sub_title: str) -> ChartBuilderSelf:
+        """
+        Updates the figure based on the strategy.
+
+        Args:
+            sub_title (str): The subtitle to be displayed in the chart title.
+
+        Returns:
+            ChartBuilderSelf: The instance itself, enabling method chaining.
+        """
+        match self._strategy:
+            case ChartStrategy.TREND:
+                return self.update_fig_trend(sub_title)
+            case ChartStrategy.AUTHOR_CONTRIBUTION:
+                return self.update_fig_author_contribution(sub_title)
+
+    def update_xaxis_tickformat(self, x_axis_interval: str) -> ChartBuilderSelf:
         """
         Update the x-axis tick format based on the interval.
 
@@ -381,13 +523,21 @@ class ChartBuilder:
         Returns:
             ChartBuilderSelf: The instance of the ChartBuilder for method chaining.
         """
+        # tick format
         tickformat = {
             "daily": "%b %d, %Y",
             "weekly": "%b %d, %Y",
             "monthly": "%b %Y",
-        }.get(interval, "%b %d, %Y")
+        }.get(x_axis_interval, "%b %d, %Y")
 
         self._fig.update_xaxes(tickformat=tickformat)
+        # dtick for x-axis
+        x_axis_interval = {
+            "daily": "W1",
+            "weekly": "W1",
+            "monthly": "M1",
+        }.get(x_axis_interval, "M1")
+        self._fig.update_layout(xaxis={"dtick": x_axis_interval})
         return self
 
     def build(
@@ -412,19 +562,79 @@ class ChartBuilder:
                                      summary trace creation.
             interval (str): The interval to use for formatting the x-axis ticks.
             sub_title (str): The subtitle to be displayed in the chart title.
+
+        Returns:
+            ChartBuilderSelf: The Plotly figure object configured with the trend and summary
+                              traces, ready for display or further modification.
+        raises:
+            ValueError: If the strategy is not set.
+        """
+
+        if self._strategy is None:
+            raise ValueError("The strategy for building the chart is not set.")
+
+        self.set_trend_data(trend_data)
+        self.set_summary_data(summary_data)
+        # Choose the strategy for building the chart
+        match self._strategy:
+            case ChartStrategy.TREND:
+                return self.build_trend_chart(interval, sub_title)
+            case ChartStrategy.AUTHOR_CONTRIBUTION:
+                return self.build_author_contribution_chart(sub_title)
+
+    def build_trend_chart(
+        self,
+        interval: str,
+        sub_title: str,
+    ) -> go.Figure:
+        """
+        Constructs the LOC trend chart by setting data and creating figure and traces.
+
+        This method configures the chart builder with the given `trend_data` and
+        `sum_data`, creates a new figure, then creates and attaches the necessary
+        trend and summary line traces, and finally updates the figure layout before
+        returning it.
+
+        Args:
+            interval (str): The interval to use for formatting the x-axis ticks.
+            sub_title (str): The subtitle to be displayed in the chart title.
+
         Returns:
             ChartBuilderSelf: The Plotly figure object configured with the trend and summary
                               traces, ready for display or further modification.
         """
-        self.set_trend_data(trend_data)
-        self.set_summary_data(summary_data)
         self.create_fig()
-        self.create_trend_trace(xaxis_column=interval)
-        self.create_sum_trace(xaxis_column=interval)
-        # self.create_diff_trace(xaxis_column=interval)
-        self.create_bar_trace(xaxis_column=interval)
+        self.create_trend_trace(interval)
+        self.create_sum_trace(interval)
+        self.create_bar_trace(interval)
         self.update_fig(sub_title)
         self.update_xaxis_tickformat(interval)
+        return self._fig
+
+    def build_author_contribution_chart(
+        self,
+        sub_title: str,
+    ) -> go.Figure:
+        """
+        Constructs the LOC contribution chart for each author by setting data
+        and creating figure and traces.
+
+        This method configures the chart builder with the given `sum_data`,
+        creates a new figure, then creates and attaches the necessary author
+        contribution traces, and finally updates the figure layout before
+        returning it.
+
+        Args:
+            interval (str): The interval to use for formatting the x-axis ticks.
+            sub_title (str): The subtitle to be displayed in the chart title.
+
+        Returns:
+            ChartBuilderSelf: The Plotly figure object configured with the trend and summary
+                              traces, ready for display or further modification
+        """
+        self.create_fig()
+        self.create_author_contribution_trace()
+        self.update_fig(sub_title)
         return self._fig
 
     def show(self) -> None:
