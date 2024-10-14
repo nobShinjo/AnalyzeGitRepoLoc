@@ -27,7 +27,7 @@ Analyze Git repositories and visualize code LOC.
     pip install -r requirements.txt
     ```
 
-    または pip-toolsを使用する場合は、
+    If you prefer to use `pip-tools`, you can use the following commands:
 
     ```shell
     cd ./AnalyzeGitRepoLoc/
@@ -35,11 +35,6 @@ Analyze Git repositories and visualize code LOC.
     python -m pip install --upgrade pip
     pip-sync --python-executable .venv/Scripts/python.exe
     ```
-
-1. Install CLOC.
-
-   - [Official Github project page](https://github.com/AlDanial/cloc)
-   - [How to install cloc](https://github.com/AlDanial/cloc#install-via-package-manager)
 
 ## Usage
 
@@ -88,7 +83,7 @@ Analyze Git repositories and visualize code LOC.
 ### Example : Clear old cache files
 
   ```shell
-  python -m analyze_git_repo_loc [repository_path] --interval monthly -o ./out --clear_cache
+  python -m analyze_git_repo_loc [repository_path] --interval monthly -o ./out --clear-cache
   ```
 
 ### Help
@@ -100,7 +95,7 @@ Analyze Git repositories and visualize code LOC.
   ```text
   usage: analyze_git_repo_loc [-h] [-o OUTPUT] [--since SINCE] [--until UNTIL] [-b BRANCH]
                             [--interval {daily,weekly,monthly}] [--lang LANG] [--author-name AUTHOR_NAME]        
-                            [--clear_cache]
+                            [--clear-cache] [--no-plot-show]
                             repo_paths
 
   Analyze Git repositories and visualize code LOC.
@@ -122,7 +117,8 @@ Analyze Git repositories and visualize code LOC.
                           'cloc --show-lang' to see the list of recognized languages.
     --author-name AUTHOR_NAME
                           Author name to filter commits
-    --clear_cache         If set, the cache will be cleared before executing the main function.
+    --clear-cache         If set, the cache will be cleared before executing the main function.
+    --no-plot-show        If set, the plots will not be shown.
   ```
 
 ## Author
@@ -138,8 +134,6 @@ Nob Shinjo (<https://github.com/nobShinjo>)
 
 The available languages can be checked by executing the following command.
 
-```shell
-cloc --show-lang
-```
+Please refer to [languages](./LANGUAGES.md) for the available programming languages.
 
 [languages](./LANGUAGES.md)

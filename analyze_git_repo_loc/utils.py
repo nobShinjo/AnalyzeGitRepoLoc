@@ -98,11 +98,15 @@ def parse_arguments(parser: argparse.ArgumentParser) -> argparse.Namespace:
         help="Author name or comma-separated list of author names to filter commits",
     )
     parser.add_argument(
-        "--clear_cache",
+        "--clear-cache",
         action="store_true",
         help="If set, the cache will be cleared before executing the main function.",
     )
-
+    parser.add_argument(
+        "--no-plot-show",
+        action="store_true",
+        help="If set, the plots will not be shown.",
+    )
     return parser.parse_args()
 
 
