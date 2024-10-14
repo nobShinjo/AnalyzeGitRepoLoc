@@ -6,7 +6,7 @@ $interval = "weekly"
 $languages = "C#,Python,Markdown,PowerShell"
 $author_name = ""
 $clear_cache = $false
-$repo_paths = ".\repo_list_ps1.txt"
+$repo_paths = ".\repo_list.txt"
 
 # venv environment activation
 $venv_path = Join-Path -Path (Get-Item -Path "..\").FullName -ChildPath ".venv\Scripts\Activate.ps1"
