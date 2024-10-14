@@ -2,10 +2,11 @@
 $out_dir = Get-Item -Path "..\out"
 $since = ""
 $until = ""
-$interval = "weekly"
-$languages = "C#,Python,Markdown,PowerShell"
+$interval = "daily"
+$languages = "C#,Python,Markdown,PowerShell,C++"
 $author_name = ""
 $clear_cache = $false
+$no_plot_show = $true
 $repo_paths = ".\repo_list.txt"
 
 # venv environment activation
@@ -23,7 +24,8 @@ $command += if ($languages) { " --lang $languages" } else { "" }
 $command += if ($since) { " --since $since" } else { "" }
 $command += if ($until) { " --until $until" } else { "" }
 $command += if ($author_name) { " --author-name $author_name" } else { "" }
-$command += if ($clear_cache) { " --clear_cache" } else { "" }
+$command += if ($clear_cache) { " --clear-cache" } else { "" }
+$command += if ($no_plot_show) { " --no-plot-show" } else { "" }
 $command += " $repo_paths"
 
 #comment display and line feed, space
