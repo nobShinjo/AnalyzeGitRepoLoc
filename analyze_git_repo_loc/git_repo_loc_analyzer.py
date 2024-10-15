@@ -140,6 +140,7 @@ class GitRepoLOCAnalyzer:
         Raises:
             FileNotFoundError: If the cache directory does not exist.
         """
+        self._cache_commit_data = None
         if self._cache_path.exists() and self._cache_path.is_dir():
             for file in tqdm(self._cache_path.glob("**/*")):
                 if file.is_file():

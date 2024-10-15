@@ -80,7 +80,7 @@ def main() -> None:
     # Dataframe declaration
     language_analysis = pd.DataFrame()
     author_analysis = pd.DataFrame()
-    repository_analysis = pd.DataFrame()
+    repository_trend_analysis = pd.DataFrame()
 
     # Convert analyzed data for visualization
     console.print_h1("\n# Forming dataframe type data.")
@@ -130,22 +130,22 @@ def main() -> None:
 
         # 3. Stacked trend chart of code volume per repository,
         #    bar graph of added/deleted code volume, and line graph of average code volume
-        repository_analysis = analyze_trends(
+        repository_trend_analysis = analyze_trends(
             category_column="Repository",
             interval=time_interval,
             loc_data=loc_data,
-            analysis_data=repository_analysis,
+            analysis_data=repository_trend_analysis,
         )
 
     # Save the analyzed data
     console.print_h1("\n# Save the analyzed data.")
     output_dir = Path(args.output) / datetime.now().strftime("%Y%m%d%H%M%S")
-    save_analysis_data(
-        language_analysis=language_analysis,
-        author_analysis=author_analysis,
-        repository_analysis=repository_analysis,
-        output_dir=output_dir,
-    )
+    data_list = {
+        "language_analysis": language_analysis,
+        "author_analysis": author_analysis,
+        "repository_trend_analysis": repository_trend_analysis,
+    }
+    save_analysis_data(data_list=data_list, output_dir=output_dir)
     # Save the list of repositories and branch name
     save_repository_branch_info(args.repo_paths, output_dir / "repo_list.txt")
 
@@ -173,9 +173,10 @@ def main() -> None:
         progress_bar.update(1)
 
         # 3. Stacked trend chart of code volume per repository
-        generate_repository_trend_chart(
-            data=repository_analysis,
+        generate_all_repositories_trend_chart(
+            data=repository_trend_analysis,
             time_interval=time_interval,
+            category_column="Repository",
             output_path=output_dir,
             no_plot_show=args.no_plot_show,
         )
@@ -194,18 +195,14 @@ def main() -> None:
 
 
 def save_analysis_data(
-    language_analysis: pd.DataFrame,
-    author_analysis: pd.DataFrame,
-    repository_analysis: pd.DataFrame,
+    data_list: dict[str, pd.DataFrame],
     output_dir: Path,
 ) -> None:
     """
     Save the analyzed data.
 
     Args:
-        language_analysis (pd.DataFrame): The language analysis data.
-        author_analysis (pd.DataFrame): The author analysis data.
-        repository_analysis (pd.DataFrame): The repository analysis data.
+        data_list (dict[str, pd.DataFrame]): The list of dataframes to save.
         output_dir (Path): The output directory to save the data.
     """
     try:
@@ -213,15 +210,9 @@ def save_analysis_data(
     except OSError as ex:
         handle_exception(ex)
 
-    with tqdm(total=3, desc="Saving analyzed data") as progress_bar:
-        language_analysis.to_csv(output_dir / "language_analysis.csv", index=False)
-        progress_bar.update(1)
-
-        author_analysis.to_csv(output_dir / "author_analysis.csv", index=False)
-        progress_bar.update(1)
-
-        repository_analysis.to_csv(output_dir / "repository_analysis.csv", index=False)
-        progress_bar.update(1)
+    # dictからname key, data valueを取り出して、name.csvとして保存
+    for name, data in tqdm(data_list.items(), desc="Saving analyzed data"):
+        data.to_csv(output_dir / f"{name}.csv", index=False)
 
 
 def prepare_trend_data(
@@ -351,7 +342,7 @@ def generate_trend_chart(
         loc_data = data[data["Repository"] == repository]
         branch_name = next(iter(loc_data["Branch"].unique()), "Unknown")
 
-        # Language trend data
+        # LOC trend data
         trend_data = prepare_trend_data(
             data=loc_data,
             time_interval=time_interval,
@@ -370,7 +361,9 @@ def generate_trend_chart(
                 summary_data=summary_data,
                 interval=time_interval,
                 sub_title=(
-                    f"{repository} ({branch_name})" if sub_title == "" else sub_title
+                    f"by {category_column} - {repository} ({branch_name})"
+                    if sub_title == ""
+                    else f"by {category_column} - {sub_title}"
                 ),
             )
         except ValueError as ex:
@@ -443,14 +436,15 @@ def save_chart_data(
         handle_exception(ex)
 
 
-def generate_repository_trend_chart(
+def generate_all_repositories_trend_chart(
     data: pd.DataFrame,
     time_interval: str,
+    category_column: str,
     output_path: Path,
     no_plot_show: bool = False,
 ) -> None:
     """
-    Generate trend chart for all repositories.
+    Generate a trend chart for all repositories.
 
     Generate a trend chart for all repositories and save the data and chart
     to the specified output path. If the data is empty or there is only one
@@ -459,6 +453,7 @@ def generate_repository_trend_chart(
     Args:
         data (pd.DataFrame): The data to generate the trend chart.
         time_interval (str): The time interval to group by.
+        category_column (str): The column name to group by.
         output_path (Path): The output path to save the chart.
         no_plot_show (bool): If True, the chart will not be shown.
     """
@@ -469,10 +464,10 @@ def generate_repository_trend_chart(
         return
 
     # Repository trend data
-    repository_trend_data = prepare_trend_data(
+    trend_data = prepare_trend_data(
         data=data,
         time_interval=time_interval,
-        category_column="Repository",
+        category_column=category_column,
     )
     # Summary data
     summary_data = prepare_summary_data(data=data, time_interval=time_interval)
@@ -481,26 +476,26 @@ def generate_repository_trend_chart(
     chart_builder: ChartBuilder = ChartBuilder()
     try:
         chart_builder.set_strategy(ChartStrategy.TREND)
-        repository_trend_chart = chart_builder.build(
-            trend_data=repository_trend_data,
+        trend_chart = chart_builder.build(
+            trend_data=trend_data,
             summary_data=summary_data,
             interval=time_interval,
-            sub_title="All repositories",
+            sub_title=f"by {category_column} - All repositories",
         )
     except ValueError as ex:
         handle_exception(ex)
 
     # Show the chart
     if not no_plot_show:
-        repository_trend_chart.show()
+        trend_chart.show()
 
     # Save the data and chart
     save_chart_data(
-        output_prefix="Repository".lower(),
+        output_prefix=category_column.lower(),
         output_path=output_path,
-        trend_data=repository_trend_data,
+        trend_data=trend_data,
         summary_data=summary_data,
-        trend_chart=repository_trend_chart,
+        trend_chart=trend_chart,
     )
 
 
@@ -541,7 +536,7 @@ def generate_author_contribution_chart(
             trend_data=None,
             summary_data=author_contribution_data,
             interval=None,
-            sub_title="All repositories",
+            sub_title="by Author - All repositories",
         )
     except ValueError as ex:
         handle_exception(ex)
@@ -552,7 +547,7 @@ def generate_author_contribution_chart(
 
     # Save the data and chart
     save_chart_data(
-        output_prefix="Author".lower(),
+        output_prefix="author_contribution",
         output_path=output_path,
         summary_data=author_contribution_data,
         contribution_chart=author_contribution_chart,
