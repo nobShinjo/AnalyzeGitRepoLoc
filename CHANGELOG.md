@@ -1,5 +1,32 @@
 # Changelog
 
+## [2.1.1] - 2024-10-15
+
+### HotFixed
+
+- Fixed an issue where using the `--clear-cache` option did not properly clear cached data, causing analysis to use outdated data. Initialized `_cache_commit_data` attribute to `None` in `GitRepoLOCAnalyzer` class to ensure proper cache handling.
+
+## [2.1.0] - 2024-10-15
+
+### Added
+
+- Added `--no-plot-show` option for non-interactive environments in CLI.
+- Added author contribution chart generation in `charts`.
+
+### Changed
+
+- Updated `launch.json` to include C++ language in the list of supported languages.
+- Updated third-party dependencies in `3rdPartyLicenses.md`.
+- Updated analyze_git_repo_loc settings in scripts.
+- Updated `.vscode/settings.json` with new autocomplete options.
+
+### Fixed
+
+- Refactored `language_extensions.py` to remove duplicate file extensions and commented out code.
+- Refactored `git_repo_loc_analyzer.ps1` to update repository list file path.
+- Refactored `git_repo_loc_analyzer.py` to remove unused imports and update dependencies.
+- Refactored `generate_repository_trend_chart` function to skip generating chart if data is empty or there is only one repository.
+
 ## [2.0.0] - 2024-10-14
 
 ### Added
@@ -88,6 +115,8 @@
 - Provided functionality to generate LOC trend charts by language and author.
 -
 
+[2.1.1](https://github.com/nobShinjo/AnalyzeGitRepoLoc/releases/tag/v2.1.1)
+[2.1.0](https://github.com/nobShinjo/AnalyzeGitRepoLoc/releases/tag/v2.1.0)
 [2.0.0](https://github.com/nobShinjo/AnalyzeGitRepoLoc/releases/tag/v2.0.0)
 [1.1.1](https://github.com/nobShinjo/AnalyzeGitRepoLoc/releases/tag/v1.1.1)
 [1.1.0](https://github.com/nobShinjo/AnalyzeGitRepoLoc/releases/tag/v1.1.0)

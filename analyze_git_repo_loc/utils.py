@@ -183,6 +183,7 @@ def analyze_trends(
         loc_data (pd.DataFrame): A DataFrame containing lines of code data with at least
                                  the columns specified by `category_column`, `interval`, and 'NLOC'.
         analysis_data (pd.DataFrame): A DataFrame containing the aggregated LOC data for each group.
+                                      If None, the DataFrame will be created from scratch.
         output_path (Path): The path to save the output CSV file. If None, the file will not be saved.
 
     Returns:
