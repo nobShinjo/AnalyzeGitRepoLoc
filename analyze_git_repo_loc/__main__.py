@@ -190,6 +190,15 @@ def main() -> None:
         )
         progress_bar.update(1)
 
+        # 5. Stack trend chart of code volume per author
+        generate_all_repositories_trend_chart(
+            data=repository_trend_analysis,
+            time_interval=time_interval,
+            category_column="Author",
+            output_path=output_dir,
+            no_plot_show=args.no_plot_show,
+        )
+
     console.print_h1("\n# LOC Analyze")
     print(Cursor.UP() + Cursor.FORWARD(50) + Fore.GREEN + "FINISH")
 
@@ -229,8 +238,19 @@ def prepare_trend_data(
     Returns:
         pd.DataFrame: The trend data for the trend chart.
     """
+    data_copy = data.copy(deep=True)
+    data_copy.sort_values(
+        by=[time_interval, category_column],
+        inplace=True,
+    )
+    data_copy = (
+        data_copy.groupby([time_interval, category_column])
+        .agg({"NLOC": "sum"})
+        .reset_index()
+    )
+    data_copy["SUM"] = data_copy.groupby(category_column)["NLOC"].cumsum()
     trend_data = (
-        data.pivot_table(
+        data_copy.pivot_table(
             index=time_interval, columns=category_column, values="SUM", aggfunc="sum"
         )
         .reset_index()
@@ -474,8 +494,8 @@ def generate_all_repositories_trend_chart(
 
     # Build the chart
     chart_builder: ChartBuilder = ChartBuilder()
+    chart_builder.set_strategy(ChartStrategy.TREND)
     try:
-        chart_builder.set_strategy(ChartStrategy.TREND)
         trend_chart = chart_builder.build(
             trend_data=trend_data,
             summary_data=summary_data,
