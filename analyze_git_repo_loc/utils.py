@@ -210,7 +210,6 @@ def analyze_trends(
         .reset_index()
     )
     trends_data.drop(columns=["Datetime", "Commit_hash"], inplace=True)
-    trends_data["SUM"] = trends_data.groupby(category_column)["NLOC"].cumsum()
 
     if output_path is not None:
         output_prefix = category_column.lower()
@@ -238,7 +237,7 @@ def analyze_git_repositories(args: argparse.Namespace) -> list[pd.DataFrame]:
         repository_name = GitRepoLOCAnalyzer.get_repository_name(repo_path)
         console.print_h1("\n")
         console.print_h1(
-            f"# Analysis of LOC in git repository: {repository_name}({branch_name})",
+            f"# Analysis of LOC in git repository: {repository_name} ({branch_name})",
         )
 
         # Create GitRepoLOCAnalyzer
