@@ -21,7 +21,7 @@ Functions:
         Prepares summary data for the trend chart by aggregating the data and calculating 
         cumulative sums and differences.
     generate_trend_chart(data: pd.DataFrame, category_column: str, time_interval: str,
-        output_path: Path, sub_title: str = "") -> None:
+        output_path: Path, title: str = "") -> None:
         Generates trend charts for each repository and saves the data and charts 
         to the specified output path.
     save_chart_data(trend_data: pd.DataFrame, summary_data: pd.DataFrame, trend_chart: go.Figure,
@@ -318,7 +318,7 @@ def generate_trend_chart(
     category_column: str,
     time_interval: str,
     output_path: Path,
-    sub_title: str = "",
+    title: str = "",
     no_plot_show: bool = False,
 ) -> None:
     """
@@ -329,7 +329,7 @@ def generate_trend_chart(
         category_column (str): The column name to group by.
         time_interval (str): The time interval to group by.
         output_path (Path): The output path to save the chart.
-        sub_title (str): The sub title for the chart.
+        title (str): The title for the chart.
         no_plot_show (bool): If True, the chart will not be shown.
     """
     if data.empty:
@@ -360,10 +360,10 @@ def generate_trend_chart(
                 trend_data=trend_data,
                 summary_data=summary_data,
                 interval=time_interval,
-                sub_title=(
-                    f"by {category_column} - {repository} ({branch_name})"
-                    if sub_title == ""
-                    else f"by {category_column} - {sub_title}"
+                title=(
+                    f"NLOC trend by {category_column} - {repository} ({branch_name})"
+                    if title == ""
+                    else f"by {category_column} - {title}"
                 ),
             )
         except ValueError as ex:
@@ -480,7 +480,7 @@ def generate_all_repositories_trend_chart(
             trend_data=trend_data,
             summary_data=summary_data,
             interval=time_interval,
-            sub_title=f"by {category_column} - All repositories",
+            title=f"NLOC trend by {category_column} - All repositories",
         )
     except ValueError as ex:
         handle_exception(ex)
@@ -536,7 +536,7 @@ def generate_author_contribution_chart(
             trend_data=None,
             summary_data=author_contribution_data,
             interval=None,
-            sub_title="by Author - All repositories",
+            title="Author contribution by repository - All repositories",
         )
     except ValueError as ex:
         handle_exception(ex)
