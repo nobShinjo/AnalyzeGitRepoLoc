@@ -1,5 +1,26 @@
 # Changelog
 
+## [2.1.4] - 2024-10-18
+
+### Added
+
+- Added stack trend chart for code volume by author in `analyze_git_repo_loc`.
+
+### Changed
+
+- Refactored `launch.json` to add `--no-plot-show` option.
+- Improved data preparation and chart generation in `data-processing` by optimizing cumulative sum calculations, simplifying groupby and pivot operations, and enhancing readability.
+- Refactored chart title handling in `generate_trend_chart` and `ChartBuilder` by renaming `sub_title` parameter to `title` for clarity and consistency.
+
+## [2.1.2] - 2024-10-16
+
+### Changed
+
+- Renamed the `repository_analysis` variable to `repository_trend_analysis` for improved clarity, reflecting its specific use for trend analysis.
+- Reorganized how analyzed data is saved by consolidating DataFrame parameters into a dictionary, which simplifies the `save_analysis_data` function.
+- Updated chart generation functions and their arguments to ensure consistency across repository and author-related analyses.
+- Modified chart titles to emphasize NLOC (non-blank lines of code) trends.
+
 ## [2.1.1] - 2024-10-15
 
 ### HotFixed
@@ -115,6 +136,8 @@
 - Provided functionality to generate LOC trend charts by language and author.
 -
 
+[2.1.3](https://github.com/nobShinjo/AnalyzeGitRepoLoc/releases/tag/v2.1.3)
+[2.1.2](https://github.com/nobShinjo/AnalyzeGitRepoLoc/releases/tag/v2.1.2)
 [2.1.1](https://github.com/nobShinjo/AnalyzeGitRepoLoc/releases/tag/v2.1.1)
 [2.1.0](https://github.com/nobShinjo/AnalyzeGitRepoLoc/releases/tag/v2.1.0)
 [2.0.0](https://github.com/nobShinjo/AnalyzeGitRepoLoc/releases/tag/v2.0.0)

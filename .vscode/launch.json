@@ -25,6 +25,7 @@
                 "weekly",
                 "--lang",
                 "C#,Python,Markdown,PowerShell,C++",
+                "--no-plot-show",
                 ".\\Scripts\\repo_list.txt"
             ],
             "console": "integratedTerminal",
