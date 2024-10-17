@@ -14,7 +14,7 @@ Usage example:
         .create_trend_trace(xaxis_column="Date")
         .create_sum_trace(xaxis_column="Date")
         .create_bar_trace(xaxis_column="Date")
-        .update_fig(sub_title="My Subtitle")
+        .update_fig(title="My title")
         .update_xaxis_tickformat(interval="monthly")
     chart_builder.show()
 """
@@ -350,7 +350,7 @@ class ChartBuilder:
 
         return self
 
-    def update_fig_trend(self, sub_title: str) -> ChartBuilderSelf:
+    def update_fig_trend(self, title: str) -> ChartBuilderSelf:
         """
         Updates the axes and layout of the `_fig` attribute with a specific style.
 
@@ -360,7 +360,7 @@ class ChartBuilder:
         and legend styling.
 
         Args:
-            sub_title (str): The subtitle to be displayed in the chart title.
+            title (str): The title to be displayed in the chart title.
 
         Returns:
             ChartBuilderSelf: The instance itself, enabling method chaining.
@@ -422,7 +422,7 @@ class ChartBuilder:
             font_family="Open Sans",
             plot_bgcolor="white",
             title={
-                "text": f"NLOC trend {sub_title}",
+                "text": title,
                 "x": 0.5,
                 "xanchor": "center",
                 "font_size": 20,
@@ -432,7 +432,7 @@ class ChartBuilder:
         )
         return self
 
-    def update_fig_author_contribution(self, sub_title: str) -> ChartBuilderSelf:
+    def update_fig_author_contribution(self, title: str) -> ChartBuilderSelf:
         """
         Updates the axes and layout of the `_fig` attribute with a specific style.
 
@@ -442,7 +442,7 @@ class ChartBuilder:
         and legend styling.
 
         Args:
-            sub_title (str): The subtitle to be displayed in the chart title.
+            title (str): The title to be displayed in the chart title.
 
         Returns:
             ChartBuilderSelf: The instance itself, enabling method chaining.
@@ -484,7 +484,7 @@ class ChartBuilder:
             font_family="Open Sans",
             plot_bgcolor="white",
             title={
-                "text": f"LOC trend {sub_title}",
+                "text": title,
                 "x": 0.5,
                 "y": 0.98,
                 "xanchor": "center",
@@ -496,21 +496,21 @@ class ChartBuilder:
         )
         return self
 
-    def update_fig(self, sub_title: str) -> ChartBuilderSelf:
+    def update_fig(self, title: str) -> ChartBuilderSelf:
         """
         Updates the figure based on the strategy.
 
         Args:
-            sub_title (str): The subtitle to be displayed in the chart title.
+            title (str): The title to be displayed in the chart title.
 
         Returns:
             ChartBuilderSelf: The instance itself, enabling method chaining.
         """
         match self._strategy:
             case ChartStrategy.TREND:
-                return self.update_fig_trend(sub_title)
+                return self.update_fig_trend(title)
             case ChartStrategy.AUTHOR_CONTRIBUTION:
-                return self.update_fig_author_contribution(sub_title)
+                return self.update_fig_author_contribution(title)
 
     def update_xaxis_tickformat(self, x_axis_interval: str) -> ChartBuilderSelf:
         """
@@ -545,7 +545,7 @@ class ChartBuilder:
         trend_data: pd.DataFrame,
         summary_data: pd.DataFrame,
         interval: str,
-        sub_title: str,
+        title: str,
     ) -> go.Figure:
         """
         Constructs the chart by setting data and creating figure and traces.
@@ -561,7 +561,7 @@ class ChartBuilder:
             summary_data (pd.DataFrame): A pandas DataFrame containing the data to be used for
                                      summary trace creation.
             interval (str): The interval to use for formatting the x-axis ticks.
-            sub_title (str): The subtitle to be displayed in the chart title.
+            title (str): The title to be displayed in the chart title.
 
         Returns:
             ChartBuilderSelf: The Plotly figure object configured with the trend and summary
@@ -578,14 +578,14 @@ class ChartBuilder:
         # Choose the strategy for building the chart
         match self._strategy:
             case ChartStrategy.TREND:
-                return self.build_trend_chart(interval, sub_title)
+                return self.build_trend_chart(interval, title)
             case ChartStrategy.AUTHOR_CONTRIBUTION:
-                return self.build_author_contribution_chart(sub_title)
+                return self.build_author_contribution_chart(title)
 
     def build_trend_chart(
         self,
         interval: str,
-        sub_title: str,
+        title: str,
     ) -> go.Figure:
         """
         Constructs the LOC trend chart by setting data and creating figure and traces.
@@ -597,7 +597,7 @@ class ChartBuilder:
 
         Args:
             interval (str): The interval to use for formatting the x-axis ticks.
-            sub_title (str): The subtitle to be displayed in the chart title.
+            title (str): The title to be displayed in the chart title.
 
         Returns:
             ChartBuilderSelf: The Plotly figure object configured with the trend and summary
@@ -607,13 +607,13 @@ class ChartBuilder:
         self.create_trend_trace(interval)
         self.create_sum_trace(interval)
         self.create_bar_trace(interval)
-        self.update_fig(sub_title)
+        self.update_fig(title)
         self.update_xaxis_tickformat(interval)
         return self._fig
 
     def build_author_contribution_chart(
         self,
-        sub_title: str,
+        title: str,
     ) -> go.Figure:
         """
         Constructs the LOC contribution chart for each author by setting data
@@ -626,7 +626,7 @@ class ChartBuilder:
 
         Args:
             interval (str): The interval to use for formatting the x-axis ticks.
-            sub_title (str): The subtitle to be displayed in the chart title.
+            title (str): The title to be displayed in the chart title.
 
         Returns:
             ChartBuilderSelf: The Plotly figure object configured with the trend and summary
@@ -634,7 +634,7 @@ class ChartBuilder:
         """
         self.create_fig()
         self.create_author_contribution_trace()
-        self.update_fig(sub_title)
+        self.update_fig(title)
         return self._fig
 
     def show(self) -> None:
