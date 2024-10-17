@@ -238,21 +238,18 @@ def prepare_trend_data(
     Returns:
         pd.DataFrame: The trend data for the trend chart.
     """
-    data_copy = data.copy(deep=True)
-    data_copy.sort_values(
-        by=[time_interval, category_column],
-        inplace=True,
+    # Sort and group the data
+    grouped_data = (
+        data.sort_values(by=[time_interval, category_column])
+        .groupby([time_interval, category_column], as_index=False)["NLOC"]
+        .sum()
     )
-    data_copy = (
-        data_copy.groupby([time_interval, category_column])
-        .agg({"NLOC": "sum"})
-        .reset_index()
-    )
-    data_copy["SUM"] = data_copy.groupby(category_column)["NLOC"].cumsum()
+    # Calculate cumulative sum
+    grouped_data["SUM"] = grouped_data.groupby(category_column)["NLOC"].cumsum()
+
+    # Pivot the data
     trend_data = (
-        data_copy.pivot_table(
-            index=time_interval, columns=category_column, values="SUM", aggfunc="sum"
-        )
+        grouped_data.pivot(index=time_interval, columns=category_column, values="SUM")
         .reset_index()
         .ffill()
     )
@@ -279,17 +276,15 @@ def prepare_summary_data(data: pd.DataFrame, time_interval: str) -> pd.DataFrame
     Returns:
         pd.DataFrame: The summary data for the trend chart.
     """
+    # Group by the specified time interval and aggregate required columns
     summary_data = (
         data.groupby(time_interval)
         .agg(
-            {
-                "NLOC_Added": "sum",
-                "NLOC_Deleted": "sum",
-                "NLOC": "sum",
-            }
+            Added=pd.NamedAgg(column="NLOC_Added", aggfunc="sum"),
+            Deleted=pd.NamedAgg(column="NLOC_Deleted", aggfunc="sum"),
+            NLOC=pd.NamedAgg(column="NLOC", aggfunc="sum"),
         )
-        .rename(columns={"NLOC_Added": "Added", "NLOC_Deleted": "Deleted"})
-        .reset_index()[[time_interval, "Added", "Deleted", "NLOC"]]
+        .reset_index()
     )
     summary_data["SUM"] = summary_data["NLOC"].cumsum()
     summary_data["Diff"] = summary_data["SUM"].diff()
@@ -307,29 +302,31 @@ def prepare_author_contribution_data(data: pd.DataFrame) -> pd.DataFrame:
     Returns:
         pd.DataFrame: The author contribution data for the trend chart.
     """
-    contribution_data = (
-        data.groupby(["Author", "Repository"])
-        .agg(
-            {
-                "NLOC": "sum",
-            }
-        )
-        .reset_index()[["Author", "Repository", "NLOC"]]
-    )
-    summary_data = contribution_data.pivot_table(
-        index="Author", columns="Repository", values="NLOC", aggfunc="sum"
-    ).reset_index()
+    contribution_data = data.groupby(["Author", "Repository"], as_index=False)[
+        "NLOC"
+    ].sum()
+    # Pivot the data to create a summary with Authors as index
+    summary_data = contribution_data.pivot(
+        index="Author", columns="Repository", values="NLOC"
+    ).fillna(0)
+
     # Sort the columns by the last value
     sorted_columns = (
-        summary_data.iloc[-1, 1:]
+        summary_data.iloc[-1]
         .infer_objects(copy=False)
         .sort_values(ascending=False)
         .index.tolist()
     )
-    summary_data = summary_data.loc[:, ["Author"] + sorted_columns]
-    # Sort the rows by the sum of values
-    sorted_indices = summary_data.iloc[:, 1:].sum(axis=1).argsort()[::-1]
-    summary_data = summary_data.iloc[sorted_indices].reset_index(drop=True)
+    # Reorder the summary_data
+    summary_data = summary_data[sorted_columns].reset_index()
+    # Sort the rows by total contributions across repositories in descending order
+    summary_data["Total"] = summary_data.iloc[:, 1:].sum(axis=1)
+    summary_data = (
+        summary_data.sort_values(by="Total", ascending=False)
+        .drop(columns="Total")
+        .reset_index(drop=True)
+    )
+
     return summary_data
 
 
@@ -355,9 +352,13 @@ def generate_trend_chart(
     if data.empty:
         return
 
+    chart_builder: ChartBuilder = ChartBuilder()
+    chart_builder.set_strategy(ChartStrategy.TREND)
+
     # Generate trend chart for each repository
+    unique_repositories = data["Repository"].unique()
     for repository in tqdm(
-        data["Repository"].unique(), desc="Generating trend chart", leave=False
+        unique_repositories, desc="Generating trend chart", leave=False
     ):
         loc_data = data[data["Repository"] == repository]
         branch_name = next(iter(loc_data["Branch"].unique()), "Unknown")
@@ -373,18 +374,17 @@ def generate_trend_chart(
         summary_data = prepare_summary_data(data=loc_data, time_interval=time_interval)
 
         # Build the chart
-        chart_builder: ChartBuilder = ChartBuilder()
-        chart_builder.set_strategy(ChartStrategy.TREND)
         try:
+            full_title = (
+                f"NLOC trend by {category_column} - {repository} ({branch_name})"
+                if title == ""
+                else f"by {category_column} - {title}"
+            )
             trend_chart = chart_builder.build(
                 trend_data=trend_data,
                 summary_data=summary_data,
                 interval=time_interval,
-                title=(
-                    f"NLOC trend by {category_column} - {repository} ({branch_name})"
-                    if title == ""
-                    else f"by {category_column} - {title}"
-                ),
+                title=full_title,
             )
         except ValueError as ex:
             handle_exception(ex)
@@ -480,7 +480,8 @@ def generate_all_repositories_trend_chart(
     # Check if the data is empty or there is only one repository
     if data.empty:
         return
-    if len(data["Repository"].unique()) == 1:
+    unique_repositories = data["Repository"].unique()
+    if len(unique_repositories) == 1:
         return
 
     # Repository trend data
@@ -542,7 +543,8 @@ def generate_author_contribution_chart(
     # Check if the data is empty or there is only one repository
     if data.empty:
         return
-    if len(data["Repository"].unique()) == 1:
+    unique_repositories = data["Repository"].unique()
+    if len(unique_repositories) == 1:
         return
 
     # Author contribution data
