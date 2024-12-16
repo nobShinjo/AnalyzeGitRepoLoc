@@ -56,6 +56,7 @@ class GitRepoLOCAnalyzer:
         to_tag: str = None,
         authors: list[str] = None,
         languages: list[str] = None,
+        exclude_dirs: list[str] = None,
     ):
         """
         Initialize the Git repository Lines of Code (LOC) Analyzer.
@@ -71,6 +72,7 @@ class GitRepoLOCAnalyzer:
             to_tag (str): The end tag for filtering commits.
             authors (list[str]): A list of author names to filter commits.
             languages (list[str]): A list of languages to filter commits.
+            exclude_dirs (list[str]): A list of directories to exclude from analysis.
 
         Raises:
             OSError: If there is an error creating the cache or output directories.
@@ -102,6 +104,13 @@ class GitRepoLOCAnalyzer:
         """ List of languages to filter commits """
         self._language_extensions = LanguageExtensions.get_extensions(languages)
         """ Language extensions to filter commits """
+        self._exclude_dirs = [Path(repo_path).resolve() / d for d in exclude_dirs or []]
+        """ List of directories to exclude from analysis """
+
+        # Check if exclude directories exist
+        for exclude_dir in self._exclude_dirs:
+            if not exclude_dir.exists():
+                print(f"Warning: {exclude_dir} does not exist.", file=sys.stderr)
 
         # Analyzed data
         self._commit_data = None
@@ -265,6 +274,14 @@ class GitRepoLOCAnalyzer:
                 # Get the programming language of the modified file
                 language = LanguageExtensions.get_language(mod.filename)
                 if language == "Unknown":
+                    continue
+
+                # Skip files in excluded directories
+                if self._exclude_dirs and any(
+                    (Path(self._repo_path) / mod.new_path).is_relative_to(d)
+                    for d in self._exclude_dirs
+                ):
+                    print(f"Excluded: {mod.new_path}")
                     continue
 
                 # Skip if the file is not in the specified language

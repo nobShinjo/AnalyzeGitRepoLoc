@@ -14,8 +14,9 @@ Functions:
 
 import argparse
 import sys
+import traceback
 from pathlib import Path
-from typing import Union
+from typing import List, Tuple, Union
 
 import pandas as pd
 from tqdm import tqdm
@@ -24,29 +25,50 @@ from analyze_git_repo_loc.colored_console_printer import ColoredConsolePrinter
 from analyze_git_repo_loc.git_repo_loc_analyzer import GitRepoLOCAnalyzer
 
 
-def parse_repos_paths(input_string: str) -> list[tuple[Path, str]]:
+def parse_repos_paths(repo_paths_input: str) -> List[Tuple[Path, str, List[Path]]]:
     """
-    Parse repository paths and branches from a string or file.
+    Parse repository paths, branches and excluded directories path from a string or file.
+
+    Args:
+        repo_paths_input (str): A string containing repository data or a path to a text file.
+            Format for each line: "repo_path#branch,/path/to/exclude1,/path/to/exclude2,..."
+
+    Returns:
+       List[Tuple[Path, str, List[Path]]]: A list of tuples containing:
+        - Path: Repository path
+        - str: Branch name
+        - List[Path]: List of excluded directories as Path objects
     """
-    path = Path(input_string)
+    path = Path(repo_paths_input)
+    repo_entries = []
+
     if path.is_file():
         try:
             # If the input string is a file, read its contents
             with open(path, "r", encoding="utf-8") as f:
-                lines = f.read().strip().splitlines()
+                repo_entries = f.read().strip().splitlines()
         except OSError as ex:
             handle_exception(ex)
+
+        if not repo_entries:
+            handle_exception(ValueError("The file is empty."))
     else:
         # Otherwise, treat the string as a list of repo paths
-        lines = input_string.split(",")
+        repo_entries = repo_paths_input.split(",")
 
-    return [
-        (
-            Path(item.split("#")[0].strip()),
-            item.split("#")[1].strip() if "#" in item else "main",
-        )
-        for item in lines
-    ]
+    # Parse each line into repository path, branch name, and excluded directories
+    result = []
+    for line in repo_entries:
+        parts = line.split(",")
+        if len(parts) < 1:
+            continue
+        repo_and_branch = parts[0].split("#", 1)
+        repo_path = Path(repo_and_branch[0].strip())
+        branch_name = repo_and_branch[1].strip() if len(repo_and_branch) > 1 else "main"
+        exclude_dirs = [Path(item.strip()) for item in parts[1:] if item.strip()]
+        result.append((repo_path, branch_name, exclude_dirs))
+
+    return result
 
 
 def parse_arguments(parser: argparse.ArgumentParser) -> argparse.Namespace:
@@ -98,6 +120,17 @@ def parse_arguments(parser: argparse.ArgumentParser) -> argparse.Namespace:
         help="Author name or comma-separated list of author names to filter commits",
     )
     parser.add_argument(
+        "--exclude-dirs",
+        default=[],
+        type=lambda s: [item.strip() for item in s.split(",")],
+        action="append",
+        help=(
+            "Exclude directories from analysis, "
+            "specified as comma-separated paths relative to the repository root."
+        ),
+    )
+
+    parser.add_argument(
         "--clear-cache",
         action="store_true",
         help="If set, the cache will be cleared before executing the main function.",
@@ -113,8 +146,15 @@ def parse_arguments(parser: argparse.ArgumentParser) -> argparse.Namespace:
 def handle_exception(ex: Exception) -> None:
     """
     Handle exceptions by printing the error message and exiting the program.
+
+    Args:
+        ex (Exception): The exception to handle.
     """
-    print(f"Error: {str(ex)}", file=sys.stderr)
+    print("An unexpected error occurred:", file=sys.stderr)
+    print(f"Error type: {type(ex).__name__}", file=sys.stderr)
+    print(f"Error message: {str(ex)}", file=sys.stderr)
+    print("Stack trace:", file=sys.stderr)
+    traceback.print_exc(file=sys.stderr)
     sys.exit(1)
 
 
