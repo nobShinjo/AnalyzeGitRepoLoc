@@ -281,7 +281,9 @@ class GitRepoLOCAnalyzer:
                     self._exclude_dirs
                     and mod.new_path
                     and any(
-                        (Path(self._repo_path) / mod.new_path).is_relative_to(d)
+                        (Path(self._repo_path) / mod.new_path)
+                        .resolve()
+                        .is_relative_to(d)
                         for d in self._exclude_dirs
                     )
                 ):
