@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.2.0] - 2024-12-18
+
+### Added
+
+- Introduced a new feature to exclude specified directories from analysis using the `--exclude-dirs` option. Multiple directories can be separated by commas and should be specified as relative paths from the repository root.
+- Added new parameters to `Scripts\analyze_git_repo_loc.ps1` to specify the output directory, date range, analysis interval, languages, author name, and cache clearing.
+- Added help descriptions for these parameters in  `Scripts\analyze_git_repo_loc.ps1`.
+
 ## [2.1.3] - 2024-10-18
 
 ### Added
@@ -136,6 +144,7 @@
 - Provided functionality to generate LOC trend charts by language and author.
 -
 
+[2.2.0](https://github.com/nobShinjo/AnalyzeGitRepoLoc/releases/tag/v2.2.0)
 [2.1.3](https://github.com/nobShinjo/AnalyzeGitRepoLoc/releases/tag/v2.1.3)
 [2.1.2](https://github.com/nobShinjo/AnalyzeGitRepoLoc/releases/tag/v2.1.2)
 [2.1.1](https://github.com/nobShinjo/AnalyzeGitRepoLoc/releases/tag/v2.1.1)
