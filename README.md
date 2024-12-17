@@ -74,6 +74,12 @@ Analyze Git repositories and visualize code LOC.
   python -m analyze_git_repo_loc [repository_path] --interval monthly -o ./out --author-name [author name] 
   ```
 
+### Example : Exclude directory
+
+  ```shell
+  python -m analyze_git_repo_loc [repository_path] --interval monthly -o ./out --author-name [author name] --exclude-dirs dir1,dir2
+  ```
+
 ### Example : Multi repository
 
   ```shell
@@ -93,32 +99,32 @@ Analyze Git repositories and visualize code LOC.
   ```
 
   ```text
-  usage: analyze_git_repo_loc [-h] [-o OUTPUT] [--since SINCE] [--until UNTIL] [-b BRANCH]
-                            [--interval {daily,weekly,monthly}] [--lang LANG] [--author-name AUTHOR_NAME]        
-                            [--clear-cache] [--no-plot-show]
+  usage: analyze_git_repo_loc [-h] [-o OUTPUT] [--since SINCE] [--until UNTIL] [--interval {daily,weekly,monthly}] [--lang LANG]
+                            [--author-name AUTHOR_NAME] [--exclude-dirs EXCLUDE_DIRS] [--clear-cache] [--no-plot-show]
                             repo_paths
 
-  Analyze Git repositories and visualize code LOC.
+Analyze Git repositories and visualize code LOC.
 
-  positional arguments:
-    repo_paths            Comma-separated list of Git repository paths
+positional arguments:
+  repo_paths            A text file containing a list of repositories, or a comma-separated list of Git repository paths or URLs, optionally followed by   
+                        a branch name separated with '#'. Examples: /path/to/repo1#branch-name orhttp://github.com/user/repo2.git#branch-name. If no       
+                        branch is specified, 'main' will be used as the default.
 
-  options:
-    -h, --help            show this help message and exit
-    -o OUTPUT, --output OUTPUT
-                          Output path
-    --since SINCE         Start Date yyyy-mm-dd
-    --until UNTIL         End Date yyyy-mm-dd
-    -b BRANCH, --branch BRANCH
-                          Branch name (default: main)
-    --interval {daily,weekly,monthly}
-                          Interval (default: monthly)
-    --lang LANG           Count only the given space separated, case-insensitive languages L1,L2,L3, etc. Use      
-                          'cloc --show-lang' to see the list of recognized languages.
-    --author-name AUTHOR_NAME
-                          Author name to filter commits
-    --clear-cache         If set, the cache will be cleared before executing the main function.
-    --no-plot-show        If set, the plots will not be shown.
+options:
+  -h, --help            show this help message and exit
+  -o OUTPUT, --output OUTPUT
+                        Output path
+  --since SINCE         Start Date yyyy-mm-dd
+  --until UNTIL         End Date yyyy-mm-dd
+  --interval {daily,weekly,monthly}
+                        Interval (default: monthly)
+  --lang LANG           Count only the given space separated, case-insensitive languages L1,L2,L3, etc.
+  --author-name AUTHOR_NAME
+                        Author name or comma-separated list of author names to filter commits
+  --exclude-dirs EXCLUDE_DIRS
+                        Exclude directories from analysis, specified as comma-separated paths relative to the repository root.
+  --clear-cache         If set, the cache will be cleared before executing the main function.
+  --no-plot-show        If set, the plots will not be shown.
   ```
 
 ## Author
