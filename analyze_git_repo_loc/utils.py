@@ -16,7 +16,7 @@ import argparse
 import sys
 import traceback
 from pathlib import Path
-from typing import List, Tuple, Union
+from typing import Union
 
 import pandas as pd
 from tqdm import tqdm
@@ -25,7 +25,7 @@ from analyze_git_repo_loc.colored_console_printer import ColoredConsolePrinter
 from analyze_git_repo_loc.git_repo_loc_analyzer import GitRepoLOCAnalyzer
 
 
-def parse_repos_paths(repo_paths_input: str) -> List[Tuple[Path, str, List[Path]]]:
+def parse_repos_paths(repo_paths_input: str) -> list[tuple[Path, str, list[Path]]]:
     """
     Parse repository paths, branches and excluded directories path from a string or file.
 
@@ -34,10 +34,10 @@ def parse_repos_paths(repo_paths_input: str) -> List[Tuple[Path, str, List[Path]
             Format for each line: "repo_path#branch,/path/to/exclude1,/path/to/exclude2,..."
 
     Returns:
-       List[Tuple[Path, str, List[Path]]]: A list of tuples containing:
+       list[tuple[Path, str, list[Path]]]: A list of tuples containing:
         - Path: Repository path
         - str: Branch name
-        - List[Path]: List of excluded directories as Path objects
+        - list[Path]: Excluded directories paths
     """
     path = Path(repo_paths_input)
     repo_entries = []
