@@ -123,7 +123,6 @@ def parse_arguments(parser: argparse.ArgumentParser) -> argparse.Namespace:
         "--exclude-dirs",
         default=[],
         type=lambda s: [item.strip() for item in s.split(",")],
-        action="append",
         help=(
             "Exclude directories from analysis, "
             "specified as comma-separated paths relative to the repository root."
@@ -276,6 +275,7 @@ def analyze_git_repositories(args: argparse.Namespace) -> list[pd.DataFrame]:
     for repo_path, branch_name, exclude_dirs in tqdm(
         args.repo_paths, desc="Analyzing repositories"
     ):
+        exclude_dirs = exclude_dirs or args.exclude_dirs
         repository_name = GitRepoLOCAnalyzer.get_repository_name(repo_path)
         console.print_h1("\n")
         console.print_h1(
