@@ -201,7 +201,7 @@ def save_repository_branch_info(repo_paths, output_file: Path) -> None:
             "\n".join(
                 [
                     f"repository: {repo_path}, branch: {branch_name}"
-                    for repo_path, branch_name in repo_paths
+                    for repo_path, branch_name, _ in repo_paths
                 ]
             )
         )
@@ -273,12 +273,16 @@ def analyze_git_repositories(args: argparse.Namespace) -> list[pd.DataFrame]:
 
     # Analyze the LOC in the Git repositories
     loc_data_repositories: list[pd.DataFrame] = []
-    for repo_path, branch_name in tqdm(args.repo_paths, desc="Analyzing repositories"):
+    for repo_path, branch_name, exclude_dirs in tqdm(
+        args.repo_paths, desc="Analyzing repositories"
+    ):
         repository_name = GitRepoLOCAnalyzer.get_repository_name(repo_path)
         console.print_h1("\n")
         console.print_h1(
             f"# Analysis of LOC in git repository: {repository_name} ({branch_name})",
         )
+        if exclude_dirs is not None:
+            console.print_h1(f"## Excluded directories:{exclude_dirs}")
 
         # Create GitRepoLOCAnalyzer
         try:
@@ -291,6 +295,7 @@ def analyze_git_repositories(args: argparse.Namespace) -> list[pd.DataFrame]:
                 to=args.until,
                 authors=args.author_name,
                 languages=args.lang,
+                exclude_dirs=exclude_dirs,
             )
         except OSError as ex:
             handle_exception(ex)
