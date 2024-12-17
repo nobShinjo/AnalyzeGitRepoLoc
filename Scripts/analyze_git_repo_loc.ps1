@@ -31,10 +31,10 @@ Comma-separated list of languages to include in the analysis. Default: "C#,Pytho
 Filter commits by author name. Default: "" (no filtering).
 
 .PARAMETER clear_cache
-Clear the cached results before analysis. Default: `$true`.
+Clear the cached results before analysis. Default: `$false`.
 
 .PARAMETER no_plot_show
-Disable plotting and display. Default: `$true`.
+Disable plotting and display. Default: `$false`.
 
 .EXAMPLE
 .\run_analysis.ps1 -repo_list ".\custom_repo_list.txt" -interval "weekly"
@@ -45,20 +45,21 @@ This command reads repositories from `custom_repo_list.txt` and performs weekly 
 
 # Parameters setting
 param(
-    [string]$repo_list = ".\repo_list.txt", 
+    [switch]$help,
+    [string]$repo_paths = ".\repo_list.txt", 
     [string]$out_dir = "..\out",
     [string]$since = "",
     [string]$until = "",
     [string]$interval = "daily",
     [string]$languages = "C#,Python,Markdown,PowerShell,C++",
     [string]$author_name = "",
-    [bool]$clear_cache = $true,
-    [bool]$no_plot_show = $true
+    [bool]$clear_cache = $false,
+    [bool]$no_plot_show = $false
 )
 
 # Show help if requested
-if ($PSCmdlet.MyInvocation.BoundParameters.ContainsKey("help")) {
-    Get-Help -Full $MyInvocation.MyCommand.Path
+if ($help) {
+    Get-Help $MyInvocation.MyCommand.Path -Detailed 
     exit
 }
 
@@ -70,8 +71,8 @@ $venv_path = Join-Path -Path (Get-Item -Path "..\").FullName -ChildPath ".venv\S
 $env:PYTHONPATH = "../"
 
 # Parse repo_list.txt and execute for each repository
-if (-Not (Test-Path $repo_list)) {
-    Write-Host "Error: repo_list file '$repo_list' not found." -ForegroundColor Red
+if (-Not (Test-Path $repo_paths)) {
+    Write-Host "Error: The specified repo_list file ($repo_paths) does not exist." -ForegroundColor Red
     exit 1
 }
 
