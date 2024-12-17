@@ -277,11 +277,14 @@ class GitRepoLOCAnalyzer:
                     continue
 
                 # Skip files in excluded directories
-                if self._exclude_dirs and any(
-                    (Path(self._repo_path) / mod.new_path).is_relative_to(d)
-                    for d in self._exclude_dirs
+                if (
+                    self._exclude_dirs
+                    and mod.new_path
+                    and any(
+                        (Path(self._repo_path) / mod.new_path).is_relative_to(d)
+                        for d in self._exclude_dirs
+                    )
                 ):
-                    print(f"Excluded: {mod.new_path}")
                     continue
 
                 # Skip if the file is not in the specified language
