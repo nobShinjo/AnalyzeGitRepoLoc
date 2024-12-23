@@ -44,6 +44,7 @@ This command reads repositories from `custom_repo_list.txt` and performs weekly 
 #>
 
 # Parameters setting
+[CmdletBinding()]
 param(
     [switch]$help,
     [string]$repo_paths = ".\repo_list.txt", 
@@ -78,16 +79,16 @@ if (-Not (Test-Path $repo_paths)) {
 
 # Build the command
 $command = "python -m analyze_git_repo_loc"
-$command += if ($out_dir) { " -o $out_dir" } else { "" }
+$command += if ($out_dir) { " -o `"$out_dir`"" } else { "" }
 $command += if ($interval) { " --interval $interval" } else { "" }
 $command += if ($languages) { " --lang $languages" } else { "" }
 $command += if ($since) { " --since $since" } else { "" }
 $command += if ($until) { " --until $until" } else { "" }
-$command += if ($author_name) { " --author-name $author_name" } else { "" }
+$command += if ($author_name) { " --author-name `"$author_name`"" } else { "" }
 $command += if ($clear_cache) { " --clear-cache" } else { "" }
 $command += if ($no_plot_show) { " --no-plot-show" } else { "" }
 $command += if ($exclude_dirs) { " --exclude-dirs `"$exclude_dirs`"" } else { "" }
-$command += " $repo_paths"
+$command += " `"$repo_paths`""
 
 # Display the command for debugging
 Write-Host "Command: $command" 
