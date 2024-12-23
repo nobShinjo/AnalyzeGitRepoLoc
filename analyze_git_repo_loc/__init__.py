@@ -2,7 +2,7 @@
 analyze_git_repo_loc package.
 """
 
-__version__ = "2.1.3"
+__version__ = "2.2.0"
 __author__ = "Nob Shinjo"
 __license__ = "MIT"
 __all__ = [
