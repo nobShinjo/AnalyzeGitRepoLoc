@@ -73,6 +73,10 @@ def main() -> None:
     console.print_h1(f"# Start {parser.prog}.")
     print(Style.DIM + f"- {parser.description}", end=os.linesep + os.linesep)
 
+    # Convert the since and until arguments to datetime objects
+    args.since = datetime.fromisoformat(args.since)
+    args.until = datetime.fromisoformat(args.until)
+
     # Analyze the LOC in the Git repositories
     loc_data_repositories = analyze_git_repositories(args)
     time_interval, time_period = get_time_interval_and_period(args.interval)
