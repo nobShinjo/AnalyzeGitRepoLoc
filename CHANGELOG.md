@@ -16,8 +16,8 @@
 
 ### Fixed
 
-- 33eacc7 Ensure paths and parameters are correctly quoted in `analyze_git_repo_loc.ps1` to handle spaces and special characters.
-- 8e0875e Convert date arguments to datetime objects. Converted 'since' and 'until' arguments from strings to datetime objects in the main function.
+- 8e0875e Ensure paths and parameters are correctly quoted in `analyze_git_repo_loc.ps1` to handle spaces and special characters.
+- 33eacc7 Convert date arguments to datetime objects. Converted 'since' and 'until' arguments from strings to datetime objects in the main function.
 -
 
 ## [2.2.0] - 2024-12-18
