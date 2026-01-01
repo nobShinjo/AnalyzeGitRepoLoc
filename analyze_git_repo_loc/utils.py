@@ -15,6 +15,7 @@ Functions:
 import argparse
 import sys
 import traceback
+from datetime import datetime
 from pathlib import Path
 from typing import Union
 
@@ -71,6 +72,78 @@ def parse_repos_paths(repo_paths_input: str) -> list[tuple[Path, str, list[Path]
     return result
 
 
+def _normalize_optional_text(value: str | None) -> str | None:
+    """
+    Normalize optional CLI text input by trimming whitespace.
+
+    Args:
+        value (str | None): The text input to normalize.
+
+    Returns:
+        str | None: The normalized string or None if empty/whitespace.
+    """
+    if value is None:
+        return None
+    normalized = value.strip()
+    return normalized or None
+
+
+def _normalize_optional_list(values: list[str] | None) -> list[str] | None:
+    """
+    Normalize optional list input by trimming items and dropping empties.
+
+    Args:
+        values (list[str] | None): The list input to normalize.
+
+    Returns:
+        list[str] | None: Normalized items or None when unset/empty.
+    """
+    if values is None:
+        return None
+    normalized = [item.strip() for item in values if item and item.strip()]
+    return normalized or None
+
+
+def _parse_optional_iso_date(value: str | None, label: str) -> datetime | None:
+    """
+    Parse an optional ISO date string into a datetime object.
+
+    Args:
+        value (str | None): The raw CLI input.
+    Returns:
+        datetime | None: Parsed datetime or None when unset/empty.
+
+    Raises:
+        ValueError: If the date format is invalid.
+    """
+    normalized = _normalize_optional_text(value)
+    if normalized is None:
+        return None
+    try:
+        return datetime.fromisoformat(normalized)
+    except ValueError as ex:
+        raise ValueError(
+            f"Invalid {label} date '{value}'. Use YYYY-MM-DD."
+        ) from ex
+
+
+def _validate_date_range(since: datetime | None, until: datetime | None) -> None:
+    """
+    Validate the date range for optional filters.
+
+    Args:
+        since (datetime | None): The start date.
+        until (datetime | None): The end date.
+
+    Raises:
+        ValueError: If since is after until.
+    """
+    if since is not None and until is not None and since > until:
+        raise ValueError(
+            "Invalid date range: --since must be on or before --until."
+        )
+
+
 def parse_arguments(parser: argparse.ArgumentParser) -> argparse.Namespace:
     """
     parse_arguments Parse command line arguments.
@@ -121,7 +194,7 @@ def parse_arguments(parser: argparse.ArgumentParser) -> argparse.Namespace:
     )
     parser.add_argument(
         "--exclude-dirs",
-        default=[],
+        default=None,
         type=lambda s: [item.strip() for item in s.split(",")],
         help=(
             "Exclude directories from analysis, "
@@ -139,7 +212,17 @@ def parse_arguments(parser: argparse.ArgumentParser) -> argparse.Namespace:
         action="store_true",
         help="If set, the plots will not be shown.",
     )
-    return parser.parse_args()
+    args = parser.parse_args()
+    try:
+        args.since = _parse_optional_iso_date(args.since, "--since")
+        args.until = _parse_optional_iso_date(args.until, "--until")
+        args.lang = _normalize_optional_list(args.lang)
+        args.author_name = _normalize_optional_list(args.author_name)
+        args.exclude_dirs = _normalize_optional_list(args.exclude_dirs)
+        _validate_date_range(args.since, args.until)
+    except ValueError as ex:
+        parser.error(str(ex))
+    return args
 
 
 def handle_exception(ex: Exception) -> None:

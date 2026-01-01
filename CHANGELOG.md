@@ -12,6 +12,12 @@
 
 ### Security
 
+## [2.2.3] - 2026-01-01
+
+### Fixed
+
+- Treat empty optional CLI filters as unset and validate open-ended date ranges.
+
 ## [2.2.2] - 2026-01-01
 
 ### Added
@@ -179,6 +185,7 @@
 - Provided functionality to generate LOC trend charts by language and author.
 -
 
+[2.2.3](https://github.com/nobShinjo/AnalyzeGitRepoLoc/releases/tag/v2.2.3)
 [2.2.2](https://github.com/nobShinjo/AnalyzeGitRepoLoc/releases/tag/v2.2.2)
 [2.2.1](https://github.com/nobShinjo/AnalyzeGitRepoLoc/releases/tag/v2.2.1)
 [2.2.0](https://github.com/nobShinjo/AnalyzeGitRepoLoc/releases/tag/v2.2.0)
