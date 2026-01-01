@@ -12,6 +12,21 @@
 
 ### Security
 
+## [2.2.2] - 2026-01-01
+
+### Added
+
+- Add `pip-licenses` as a required dependency and refresh `3rdPartyLicenses.md`.
+
+### Changed
+
+- Migrate dependency management to `uv` using `pyproject.toml` and `uv.lock`.
+- Update setup documentation to use repo-root `.venv` and `uv sync --active`.
+
+### Removed
+
+- Remove the requirements*.in/txt and pip-tools workflow.
+
 ## [2.2.1] - 2024-12-24
 
 ### Fixed
@@ -164,6 +179,7 @@
 - Provided functionality to generate LOC trend charts by language and author.
 -
 
+[2.2.2](https://github.com/nobShinjo/AnalyzeGitRepoLoc/releases/tag/v2.2.2)
 [2.2.1](https://github.com/nobShinjo/AnalyzeGitRepoLoc/releases/tag/v2.2.1)
 [2.2.0](https://github.com/nobShinjo/AnalyzeGitRepoLoc/releases/tag/v2.2.0)
 [2.1.3](https://github.com/nobShinjo/AnalyzeGitRepoLoc/releases/tag/v2.1.3)
