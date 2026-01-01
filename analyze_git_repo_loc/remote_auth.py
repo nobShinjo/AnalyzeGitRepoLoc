@@ -81,12 +81,11 @@ class RemoteAuthService:
             return parsed._replace(netloc=netloc).geturl()
         return repo_url
 
-    def log_auth_success(self, repo_url: str, candidate: str) -> None:
+    def log_auth_success(self, candidate: str) -> None:
         """
         Log the authentication method used to access a remote repository.
 
         Args:
-            repo_url (str): Original repository URL.
             candidate (str): Clone/fetch URL that succeeded.
         """
         sanitized = self.strip_credentials(candidate)

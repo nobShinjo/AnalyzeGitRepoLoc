@@ -11,7 +11,7 @@ requirements and proposal dependencies.
 - [x] 2. add-remote-auth
 - [x] 3. add-yaml-config
 - [x] 4. add-yaml-multi-repo-config
-- [ ] 5. add-cache-diff-analysis
+- [x] 5. add-cache-diff-analysis
 - [ ] 6. add-period-diff
 - [ ] 7. add-markdown-summary
 - [ ] 8. add-html-report
