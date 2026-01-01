@@ -115,7 +115,11 @@ class RemoteRepoManager:
             return
         origin_identity = self._parse_repo_identity(origin_url)
         requested_identity = self._parse_repo_identity(repo_url)
-        if origin_identity and requested_identity and origin_identity != requested_identity:
+        if (
+            origin_identity
+            and requested_identity
+            and origin_identity != requested_identity
+        ):
             raise ValueError(
                 f"Cached repository at {repo.working_tree_dir} does not match {repo_url}."
             )
@@ -130,7 +134,9 @@ class RemoteRepoManager:
         """
         origin = repo.remotes.origin if repo.remotes else None
         if origin is None:
-            origin = repo.create_remote("origin", self._auth.strip_credentials(repo_url))
+            origin = repo.create_remote(
+                "origin", self._auth.strip_credentials(repo_url)
+            )
         original_url = origin.url
         last_error: GitCommandError | None = None
         for candidate in self._auth.build_auth_candidates(repo_url):
