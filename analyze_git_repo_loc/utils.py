@@ -13,6 +13,7 @@ Functions:
 """
 
 import argparse
+import os
 import shutil
 import sys
 import traceback
@@ -22,11 +23,15 @@ from typing import Union
 from urllib.parse import urlparse
 
 import pandas as pd
+from git import GitCommandError, InvalidGitRepositoryError, NoSuchPathError, Repo
 from tqdm import tqdm
 
 from analyze_git_repo_loc.colored_console_printer import ColoredConsolePrinter
 from analyze_git_repo_loc.git_repo_loc_analyzer import GitRepoLOCAnalyzer
-from git import GitCommandError, InvalidGitRepositoryError, NoSuchPathError, Repo
+
+
+class RemoteAuthError(ValueError):
+    """Authentication failed while accessing a remote repository."""
 
 
 def _is_git_url(value: str) -> bool:
@@ -43,6 +48,287 @@ def _is_git_url(value: str) -> bool:
     if parsed.scheme in {"http", "https", "ssh", "git"}:
         return True
     return value.startswith("git@") and ":" in value
+
+
+def _parse_repo_identity(repo_url: str) -> tuple[str, str] | None:
+    """
+    Normalize a repository URL into a comparable (host, path) identity.
+
+    Args:
+        repo_url (str): Repository URL to normalize.
+
+    Returns:
+        tuple[str, str] | None: Normalized identity for comparison.
+    """
+    if repo_url.startswith("git@"):
+        host_path = repo_url.split("@", 1)[-1]
+        if ":" not in host_path:
+            return None
+        host, path = host_path.split(":", 1)
+        return host.lower(), path.lstrip("/")
+    parsed = urlparse(repo_url)
+    if parsed.hostname and parsed.path:
+        return parsed.hostname.lower(), parsed.path.lstrip("/")
+    return None
+
+
+def _get_token_for_host(host: str | None) -> tuple[str, str] | None:
+    """
+    Resolve a Git hosting token and username based on the host name.
+
+    Args:
+        host (str | None): Host name from the repository URL.
+
+    Returns:
+        tuple[str, str] | None: (token, username) pair when configured.
+    """
+    if not host:
+        return None
+    normalized = host.lower()
+    if "github" in normalized:
+        token = os.getenv("GITHUB_TOKEN")
+        if token:
+            return token, "x-access-token"
+    if "gitlab" in normalized:
+        token = os.getenv("GITLAB_TOKEN")
+        if token:
+            return token, "oauth2"
+    return None
+
+
+def _build_https_token_url(repo_url: str) -> str | None:
+    """
+    Build an HTTPS URL embedding a token for authentication.
+
+    Args:
+        repo_url (str): Repository URL.
+
+    Returns:
+        str | None: Token-authenticated URL when a token is available.
+    """
+    parsed = urlparse(repo_url)
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+        return None
+    token_info = _get_token_for_host(parsed.hostname)
+    if token_info is None:
+        return None
+    token, username = token_info
+    netloc = f"{username}:{token}@{parsed.hostname}"
+    if parsed.port:
+        netloc = f"{netloc}:{parsed.port}"
+    return parsed._replace(netloc=netloc).geturl()
+
+
+def _strip_credentials(repo_url: str) -> str:
+    """
+    Remove embedded credentials from an HTTPS URL.
+
+    Args:
+        repo_url (str): Repository URL.
+
+    Returns:
+        str: Sanitized URL without user info.
+    """
+    parsed = urlparse(repo_url)
+    if parsed.scheme in {"http", "https"} and parsed.hostname:
+        netloc = parsed.hostname
+        if parsed.port:
+            netloc = f"{netloc}:{parsed.port}"
+        return parsed._replace(netloc=netloc).geturl()
+    return repo_url
+
+
+def _build_auth_candidates(repo_url: str) -> list[str]:
+    """
+    Build ordered clone/fetch URLs based on the provided scheme.
+
+    Args:
+        repo_url (str): Repository URL.
+
+    Returns:
+        list[str]: Ordered list of URLs to try.
+    """
+    parsed = urlparse(repo_url)
+    candidates: list[str] = []
+    if repo_url.startswith("git@") or parsed.scheme in {"ssh", "git"}:
+        candidates.append(repo_url)
+    elif parsed.scheme in {"http", "https"}:
+        token_url = _build_https_token_url(repo_url)
+        if token_url:
+            candidates.append(token_url)
+        candidates.append(repo_url)
+    else:
+        candidates.append(repo_url)
+
+    unique: list[str] = []
+    seen: set[str] = set()
+    for candidate in candidates:
+        if candidate not in seen:
+            unique.append(candidate)
+            seen.add(candidate)
+    return unique
+
+
+def _describe_auth_method(candidate: str) -> str:
+    """
+    Describe the authentication method implied by a clone/fetch URL.
+
+    Args:
+        candidate (str): Clone/fetch URL used for authentication.
+
+    Returns:
+        str: Human-readable authentication method label.
+    """
+    if candidate.startswith("git@"):
+        return "SSH"
+    parsed = urlparse(candidate)
+    if parsed.scheme in {"ssh", "git"}:
+        return "SSH"
+    if parsed.scheme in {"http", "https"}:
+        return "HTTPS"
+    return "Unknown"
+
+
+def _log_auth_success(repo_url: str, candidate: str) -> None:
+    """
+    Log the authentication method used to access a remote repository.
+
+    Args:
+        repo_url (str): Original repository URL.
+        candidate (str): Clone/fetch URL that succeeded.
+    """
+    sanitized = _strip_credentials(candidate)
+    method = _describe_auth_method(candidate)
+    tqdm.write(f"Authentication succeeded: {method} ({sanitized})")
+
+
+def _raise_auth_failure(repo_url: str, error: GitCommandError) -> None:
+    """
+    Raise a friendly authentication error for a remote repository.
+
+    Args:
+        repo_url (str): Repository URL.
+        error (GitCommandError): Underlying Git error.
+    """
+    parsed = urlparse(repo_url)
+    if repo_url.startswith("git@") or parsed.scheme in {"ssh", "git"}:
+        hint = "Ensure your SSH keys have access to the repository."
+    elif parsed.scheme in {"http", "https"}:
+        hint = (
+            "For private repositories, set GITHUB_TOKEN or GITLAB_TOKEN, "
+            "or use an SSH URL."
+        )
+    else:
+        hint = "Provide valid credentials for the repository URL and retry."
+    message = f"Authentication failed for '{repo_url}'. {hint}"
+    raise RemoteAuthError(message) from error
+
+
+def _is_auth_failure(error: GitCommandError) -> bool:
+    """
+    Check whether a Git error looks like an authentication failure.
+
+    Args:
+        error (GitCommandError): Git error to inspect.
+
+    Returns:
+        bool: True when the error indicates authentication failure.
+    """
+    stderr = (error.stderr or "").lower()
+    return any(
+        phrase in stderr
+        for phrase in (
+            "authentication failed",
+            "invalid username or token",
+            "password authentication is not supported",
+            "could not read username",
+            "permission denied (publickey)",
+        )
+    )
+
+
+def _ensure_origin_matches(repo: Repo, repo_url: str) -> None:
+    """
+    Validate that the cached repository origin matches the requested repository.
+
+    Args:
+        repo (Repo): Cached repository.
+        repo_url (str): Requested repository URL.
+
+    Raises:
+        ValueError: If the cached repository points to a different origin.
+    """
+    origin_url = repo.remotes.origin.url if repo.remotes else None
+    if origin_url is None:
+        return
+    origin_identity = _parse_repo_identity(origin_url)
+    requested_identity = _parse_repo_identity(repo_url)
+    if origin_identity and requested_identity and origin_identity != requested_identity:
+        raise ValueError(
+            f"Cached repository at {repo.working_tree_dir} does not match {repo_url}."
+        )
+
+
+def _fetch_with_auth(repo: Repo, repo_url: str) -> None:
+    """
+    Fetch updates using SSH first, with HTTPS token fallback when configured.
+
+    Args:
+        repo (Repo): Cached repository.
+        repo_url (str): Requested repository URL.
+    """
+    origin = repo.remotes.origin if repo.remotes else None
+    if origin is None:
+        origin = repo.create_remote("origin", _strip_credentials(repo_url))
+    original_url = origin.url
+    last_error: GitCommandError | None = None
+    for candidate in _build_auth_candidates(repo_url):
+        try:
+            if origin.url != candidate:
+                origin.set_url(candidate)
+            repo.git.fetch("--all", "--prune")
+            _log_auth_success(repo_url, candidate)
+            return
+        except GitCommandError as ex:
+            last_error = ex
+        finally:
+            if origin.url != original_url:
+                origin.set_url(original_url)
+    if last_error is not None:
+        if _is_auth_failure(last_error):
+            _raise_auth_failure(repo_url, last_error)
+        raise last_error
+
+
+def _clone_with_auth(repo_url: str, repo_path: Path) -> Repo:
+    """
+    Clone a repository using SSH first and HTTPS token fallback.
+
+    Args:
+        repo_url (str): Requested repository URL.
+        repo_path (Path): Local clone path.
+
+    Returns:
+        Repo: Cloned repository.
+    """
+    last_error: GitCommandError | None = None
+    for candidate in _build_auth_candidates(repo_url):
+        try:
+            repo = Repo.clone_from(candidate, repo_path)
+            sanitized_candidate = _strip_credentials(candidate)
+            if repo.remotes and repo.remotes.origin.url != sanitized_candidate:
+                repo.remotes.origin.set_url(sanitized_candidate)
+            _log_auth_success(repo_url, candidate)
+            return repo
+        except GitCommandError as ex:
+            last_error = ex
+            if repo_path.exists():
+                shutil.rmtree(repo_path)
+    if last_error is not None:
+        if _is_auth_failure(last_error):
+            _raise_auth_failure(repo_url, last_error)
+        raise last_error
+    raise ValueError("No authentication candidates available for clone.")
 
 
 def _get_remote_cache_path(cache_dir: Path, repo_url: str) -> Path:
@@ -99,17 +385,16 @@ def _prepare_remote_repository(
     repo_path = _get_remote_cache_path(cache_dir, repo_url)
     try:
         repo = Repo(repo_path)
-        origin_url = repo.remotes.origin.url if repo.remotes else None
-        if origin_url and origin_url != repo_url:
-            raise ValueError(
-                f"Cached repository at {repo_path} does not match {repo_url}."
-            )
-        repo.git.fetch("--all", "--prune")
+        _ensure_origin_matches(repo, repo_url)
+        _fetch_with_auth(repo, repo_url)
     except (InvalidGitRepositoryError, NoSuchPathError):
         if repo_path.exists():
             shutil.rmtree(repo_path)
         repo_path.parent.mkdir(parents=True, exist_ok=True)
-        repo = Repo.clone_from(repo_url, repo_path)
+        try:
+            repo = _clone_with_auth(repo_url, repo_path)
+        except GitCommandError as ex:
+            raise ValueError(f"Failed to clone remote repository: {ex}") from ex
     except GitCommandError as ex:
         raise ValueError(f"Failed to update remote repository: {ex}") from ex
     _checkout_branch(repo, branch_name)
@@ -215,9 +500,7 @@ def _parse_optional_iso_date(value: str | None, label: str) -> datetime | None:
     try:
         return datetime.fromisoformat(normalized)
     except ValueError as ex:
-        raise ValueError(
-            f"Invalid {label} date '{value}'. Use YYYY-MM-DD."
-        ) from ex
+        raise ValueError(f"Invalid {label} date '{value}'. Use YYYY-MM-DD.") from ex
 
 
 def _validate_date_range(since: datetime | None, until: datetime | None) -> None:
@@ -232,9 +515,7 @@ def _validate_date_range(since: datetime | None, until: datetime | None) -> None
         ValueError: If since is after until.
     """
     if since is not None and until is not None and since > until:
-        raise ValueError(
-            "Invalid date range: --since must be on or before --until."
-        )
+        raise ValueError("Invalid date range: --since must be on or before --until.")
 
 
 def parse_arguments(parser: argparse.ArgumentParser) -> argparse.Namespace:
@@ -325,6 +606,9 @@ def handle_exception(ex: Exception) -> None:
     Args:
         ex (Exception): The exception to handle.
     """
+    if isinstance(ex, RemoteAuthError):
+        tqdm.write(str(ex))
+        sys.exit(1)
     print("An unexpected error occurred:", file=sys.stderr)
     print(f"Error type: {type(ex).__name__}", file=sys.stderr)
     print(f"Error message: {str(ex)}", file=sys.stderr)

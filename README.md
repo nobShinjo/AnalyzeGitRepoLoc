@@ -31,6 +31,16 @@ Analyze Git repositories and visualize code LOC.
 
 ## Usage
 
+### Remote authentication
+
+The CLI prefers SSH keys for remote repositories. When SSH access is unavailable,
+it can fall back to HTTPS token authentication for GitHub or GitLab.
+
+Set one of the following environment variables before running the CLI:
+
+- `GITHUB_TOKEN`: GitHub personal access token for HTTPS authentication.
+- `GITLAB_TOKEN`: GitLab personal access token for HTTPS authentication.
+
 ### Example : Monthly Analysis
 
   ```shell
