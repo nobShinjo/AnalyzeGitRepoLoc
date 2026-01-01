@@ -18,22 +18,15 @@ Analyze Git repositories and visualize code LOC.
     git clone https://github.com/nobShinjo/AnalyzeGitRepoLoc
     ```
 
-1. Creation of virtual environments.
-
+1. Create a virtual environment and install dependencies with `uv`.
     ```shell
     cd ./AnalyzeGitRepoLoc/
-    python -m venv .venv
-    python -m pip install --upgrade pip
-    pip install -r requirements.txt
-    ```
-
-    If you prefer to use `pip-tools`, you can use the following commands:
-
-    ```shell
-    cd ./AnalyzeGitRepoLoc/
-    python -m venv .venv
-    python -m pip install --upgrade pip
-    pip-sync --python-executable .venv/Scripts/python.exe
+    uv venv --python 3.14
+    # Windows PowerShell
+    .venv\Scripts\Activate.ps1
+    # macOS/Linux
+    # source .venv/bin/activate
+    uv sync --active
     ```
 
 ## Usage

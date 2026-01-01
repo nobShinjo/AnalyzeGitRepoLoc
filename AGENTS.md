@@ -46,20 +46,12 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 
 ## uv
 
-- Use `uv` for fast installs when available.
+- Use `uv` for dependency management.
 - Example:
-  - `uv pip install -r requirements.txt`
-  - `uv pip install -r dev-requirements.txt`
-
-## pip-tools
-
-- Source files: `requirements.in`, `dev-requirements.in`.
-- Compile with `pip-compile` to update lock files:
-  - `pip-compile requirements.in`
-  - `pip-compile dev-requirements.in`
-- Install with:
-  - `pip install -r requirements.txt`
-  - `pip install -r dev-requirements.txt`
+  - `uv venv --python 3.14`
+  - `.venv\\Scripts\\Activate.ps1` (PowerShell) or `source .venv/bin/activate`
+  - `uv sync --active`
+  - `uv lock`
 
 ## Conventional Commits
 

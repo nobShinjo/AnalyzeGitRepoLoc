@@ -7,7 +7,7 @@ The project should standardize on uv for faster, reproducible dependency managem
 ## What Changes
 
 - Replace requirements.in/requirements.txt and dev-requirements.* with pyproject.toml and uv.lock.
-- Make uv the primary workflow for installing dependencies.
+- Make uv the primary workflow for installing dependencies via a repo-root `.venv`, using `uv sync --active` after activating the venv.
 - Add pip-licenses as a required dependency for generating 3rd-party licenses.
 - Update documentation to reflect the uv-first workflow.
 
