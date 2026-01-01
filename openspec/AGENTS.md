@@ -496,3 +496,10 @@ openspec archive <change-id> [--yes|-y]  # Mark complete (add --yes for automati
 ```
 
 Remember: Specs are truth. Changes are proposals. Keep them in sync.
+
+## Markdown Formatting
+
+- Run `markdownlint --fix` on OpenSpec-created Markdown before validation.
+
+- If `markdownlint --fix` cannot automatically resolve some issues, leave those
+  files unchanged and proceed.
