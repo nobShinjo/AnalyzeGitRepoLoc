@@ -1,4 +1,5 @@
 ## 1. Implementation
+
 - [ ] 1.1 Create pyproject.toml with minimal project metadata and runtime dependencies
 - [ ] 1.2 Add pip-licenses to required dependencies
 - [ ] 1.3 Generate uv.lock with uv for Python 3.14+ resolution

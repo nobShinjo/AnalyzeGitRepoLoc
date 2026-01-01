@@ -1,4 +1,5 @@
 ## 1. Documentation
+
 - [ ] 1.1 Summarize existing behavior from README.md and docs/requirements.md
 - [ ] 1.2 Draft cli-interface spec delta
 - [ ] 1.3 Draft analysis-pipeline spec delta
