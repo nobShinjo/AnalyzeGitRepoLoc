@@ -1,0 +1,16 @@
+{
+  // Recommended baseline: enable all rules, tune a few for this repo.
+  "default": true,
+  "MD013": {
+    "line_length": 120,
+    "code_blocks": false,
+    "tables": false,
+    "severity": "warning"
+  },
+  "MD024": {
+    "siblings_only": true
+  },
+  "MD041": {
+    "severity": "warning"
+  }
+}
