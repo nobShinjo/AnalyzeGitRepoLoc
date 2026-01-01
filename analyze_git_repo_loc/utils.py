@@ -2,7 +2,7 @@
 This module provides utility functions for analyzing lines of code (LOC) in Git repositories.
 
 Functions:
-    parse_repos_paths(input_string: str) -> list[tuple[Path, str]]:
+    parse_repos_paths(input_string: str) -> list[tuple[Path | str, str]]:
     parse_arguments(parser: argparse.ArgumentParser) -> argparse.Namespace:
         Parse command line arguments.
     handle_exception(ex: Exception) -> None:
@@ -13,20 +13,112 @@ Functions:
 """
 
 import argparse
+import shutil
 import sys
 import traceback
 from datetime import datetime
 from pathlib import Path
 from typing import Union
+from urllib.parse import urlparse
 
 import pandas as pd
 from tqdm import tqdm
 
 from analyze_git_repo_loc.colored_console_printer import ColoredConsolePrinter
 from analyze_git_repo_loc.git_repo_loc_analyzer import GitRepoLOCAnalyzer
+from git import GitCommandError, InvalidGitRepositoryError, NoSuchPathError, Repo
 
 
-def parse_repos_paths(repo_paths_input: str) -> list[tuple[Path, str, list[Path]]]:
+def _is_git_url(value: str) -> bool:
+    """
+    Detect whether a string is a git URL.
+
+    Args:
+        value (str): The input string to inspect.
+
+    Returns:
+        bool: True if the input looks like a git URL.
+    """
+    parsed = urlparse(value)
+    if parsed.scheme in {"http", "https", "ssh", "git"}:
+        return True
+    return value.startswith("git@") and ":" in value
+
+
+def _get_remote_cache_path(cache_dir: Path, repo_url: str) -> Path:
+    """
+    Build a cache directory path for a remote repository clone.
+
+    Args:
+        cache_dir (Path): Base cache directory.
+        repo_url (str): Remote repository URL.
+
+    Returns:
+        Path: Path to the cached clone.
+    """
+    repo_name = GitRepoLOCAnalyzer.get_repository_name(repo_url)
+    return cache_dir / "remote-repos" / repo_name
+
+
+def _checkout_branch(repo: Repo, branch_name: str) -> None:
+    """
+    Ensure the target branch is checked out.
+
+    Args:
+        repo (Repo): GitPython repository instance.
+        branch_name (str): Branch to check out.
+
+    Raises:
+        ValueError: If the branch does not exist.
+    """
+    if branch_name in repo.heads:
+        repo.git.checkout(branch_name)
+        return
+    remote_ref = f"origin/{branch_name}"
+    remote_refs = [ref.name for ref in repo.remotes.origin.refs]
+    if remote_ref in remote_refs:
+        repo.git.checkout("-B", branch_name, remote_ref)
+        return
+    raise ValueError(f"Branch '{branch_name}' not found in remote repository.")
+
+
+def _prepare_remote_repository(
+    repo_url: str, branch_name: str, cache_dir: Path
+) -> Path:
+    """
+    Clone or update a remote repository in the local cache.
+
+    Args:
+        repo_url (str): Remote repository URL.
+        branch_name (str): Branch to check out.
+        cache_dir (Path): Base cache directory for clones.
+
+    Returns:
+        Path: Local path to the cached clone.
+    """
+    repo_path = _get_remote_cache_path(cache_dir, repo_url)
+    try:
+        repo = Repo(repo_path)
+        origin_url = repo.remotes.origin.url if repo.remotes else None
+        if origin_url and origin_url != repo_url:
+            raise ValueError(
+                f"Cached repository at {repo_path} does not match {repo_url}."
+            )
+        repo.git.fetch("--all", "--prune")
+    except (InvalidGitRepositoryError, NoSuchPathError):
+        if repo_path.exists():
+            shutil.rmtree(repo_path)
+        repo_path.parent.mkdir(parents=True, exist_ok=True)
+        repo = Repo.clone_from(repo_url, repo_path)
+    except GitCommandError as ex:
+        raise ValueError(f"Failed to update remote repository: {ex}") from ex
+    _checkout_branch(repo, branch_name)
+    return repo_path
+
+
+def parse_repos_paths(
+    repo_paths_input: str,
+) -> list[tuple[Path | str, str, list[Path]]]:
     """
     Parse repository paths, branches and excluded directories path from a string or file.
 
@@ -35,8 +127,8 @@ def parse_repos_paths(repo_paths_input: str) -> list[tuple[Path, str, list[Path]
             Format for each line: "repo_path#branch,/path/to/exclude1,/path/to/exclude2,..."
 
     Returns:
-       list[tuple[Path, str, list[Path]]]: A list of tuples containing:
-        - Path: Repository path
+       list[tuple[Path | str, str, list[Path]]]: A list of tuples containing:
+        - Path | str: Repository path (local path or remote URL)
         - str: Branch name
         - list[Path]: Excluded directories paths
     """
@@ -64,7 +156,8 @@ def parse_repos_paths(repo_paths_input: str) -> list[tuple[Path, str, list[Path]
         if len(parts) < 1:
             continue
         repo_and_branch = parts[0].split("#", 1)
-        repo_path = Path(repo_and_branch[0].strip())
+        raw_repo = repo_and_branch[0].strip()
+        repo_path = raw_repo if _is_git_url(raw_repo) else Path(raw_repo)
         branch_name = repo_and_branch[1].strip() if len(repo_and_branch) > 1 else "main"
         exclude_dirs = [Path(item.strip()) for item in parts[1:] if item.strip()]
         result.append((repo_path, branch_name, exclude_dirs))
@@ -360,6 +453,16 @@ def analyze_git_repositories(args: argparse.Namespace) -> list[pd.DataFrame]:
     ):
         exclude_dirs = exclude_dirs or args.exclude_dirs
         repository_name = GitRepoLOCAnalyzer.get_repository_name(repo_path)
+        analysis_repo_path = repo_path
+        if isinstance(repo_path, str) and _is_git_url(repo_path):
+            try:
+                analysis_repo_path = _prepare_remote_repository(
+                    repo_url=repo_path,
+                    branch_name=branch_name,
+                    cache_dir=args.output / ".cache",
+                )
+            except (OSError, ValueError) as ex:
+                handle_exception(ex)
         console.print_h1("\n")
         console.print_h1(
             f"# Analysis of LOC in git repository: {repository_name} ({branch_name})",
@@ -370,7 +473,7 @@ def analyze_git_repositories(args: argparse.Namespace) -> list[pd.DataFrame]:
         # Create GitRepoLOCAnalyzer
         try:
             analyzer = GitRepoLOCAnalyzer(
-                repo_path=repo_path,
+                repo_path=analysis_repo_path,
                 branch_name=branch_name,
                 cache_dir=args.output / ".cache",
                 output_dir=args.output,
