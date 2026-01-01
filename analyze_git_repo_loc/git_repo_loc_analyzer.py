@@ -102,7 +102,7 @@ class GitRepoLOCAnalyzer:
         """ List of author names to filter commits """
         self._languages = languages
         """ List of languages to filter commits """
-        self._language_extensions = LanguageExtensions.get_extensions(languages)
+        self._language_extensions = LanguageExtensions.get_extensions(languages) or None
         """ Language extensions to filter commits """
         self._exclude_dirs = [Path(repo_path).resolve() / d for d in exclude_dirs or []]
         """ List of directories to exclude from analysis """
@@ -384,6 +384,9 @@ class GitRepoLOCAnalyzer:
         if isinstance(repo_path, Path):
             return repo_path.name
 
+        # Handle scp-style URLs like git@host:org/repo.git
+        if "@" in repo_path and ":" in repo_path and "://" not in repo_path:
+            repo_path = repo_path.split(":", 1)[1]
         # Assume repo_path is a string (URL), process accordingly
         return repo_path.rsplit("/", 1)[-1].removesuffix(".git")
 

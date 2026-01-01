@@ -12,6 +12,16 @@
 
 ### Security
 
+## [2.2.4] - 2026-01-01
+
+### Added
+
+- Support analyzing remote git URLs by cloning into the cache.
+
+### Fixed
+
+- Ensure missing language filters do not exclude all commits.
+
 ## [2.2.3] - 2026-01-01
 
 ### Fixed
@@ -185,6 +195,7 @@
 - Provided functionality to generate LOC trend charts by language and author.
 -
 
+[2.2.4](https://github.com/nobShinjo/AnalyzeGitRepoLoc/releases/tag/v2.2.4)
 [2.2.3](https://github.com/nobShinjo/AnalyzeGitRepoLoc/releases/tag/v2.2.3)
 [2.2.2](https://github.com/nobShinjo/AnalyzeGitRepoLoc/releases/tag/v2.2.2)
 [2.2.1](https://github.com/nobShinjo/AnalyzeGitRepoLoc/releases/tag/v2.2.1)
