@@ -165,7 +165,15 @@ class GitRepoLOCAnalyzer:
         if self._cache_path.exists() and self._cache_path.is_dir():
             for file in tqdm(self._cache_path.glob("**/*")):
                 if file.is_file():
-                    file.unlink()
+                    try:
+                        file.unlink()
+                    except FileNotFoundError:
+                        continue
+                    except PermissionError:
+                        print(
+                            f"Warning: Unable to delete cache file: {file}",
+                            file=sys.stderr,
+                        )
 
     def is_branch_exists(self, repo_path: PathLike, branch_name: str) -> bool:
         """

@@ -45,6 +45,7 @@ from tqdm import tqdm
 
 from analyze_git_repo_loc.chart_builder import ChartBuilder, ChartStrategy
 from analyze_git_repo_loc.colored_console_printer import ColoredConsolePrinter
+from analyze_git_repo_loc.markdown_summary import generate_markdown_summary
 from analyze_git_repo_loc.utils import (
     analyze_git_repositories,
     analyze_trends,
@@ -148,6 +149,16 @@ def main() -> None:
     save_analysis_data(data_list=data_list, output_dir=output_dir)
     # Save the list of repositories and branch name
     save_repository_branch_info(args.repo_paths, output_dir / "repo_list.txt")
+    try:
+        generate_markdown_summary(
+            output_dir=output_dir,
+            time_interval=time_interval,
+            language_analysis=language_analysis,
+            author_analysis=author_analysis,
+            repository_trend_analysis=repository_trend_analysis,
+        )
+    except OSError as ex:
+        handle_exception(ex)
 
     # Generate charts
     console.print_h1("\n# Generate charts.")
