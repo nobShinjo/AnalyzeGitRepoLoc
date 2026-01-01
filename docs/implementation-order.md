@@ -9,7 +9,7 @@ requirements and proposal dependencies.
 
 - [x] 1. add-remote-repos
 - [x] 2. add-remote-auth
-- [ ] 3. add-yaml-config
+- [x] 3. add-yaml-config
 - [ ] 4. add-yaml-multi-repo-config
 - [ ] 5. add-cache-diff-analysis
 - [ ] 6. add-period-diff
@@ -25,6 +25,5 @@ requirements and proposal dependencies.
 
 ## Open Questions
 
-- YAML schema strictness: required fields and defaults need definition.
 - Cache-diff: when search filters/options change, existing cache may be invalid.
 - HTML: prefer adopting an existing template or OSS report UI if available.
