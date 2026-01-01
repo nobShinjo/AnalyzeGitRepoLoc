@@ -26,7 +26,7 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 
 ## Python Project Basics
 
-- Target runtime: Python 3.12+.
+- Target runtime: Python 3.14+.
 - Use `python -m analyze_git_repo_loc` to run the CLI.
 - Keep dependencies minimal and explicit.
 - Prefer clear, testable functions with small scopes.

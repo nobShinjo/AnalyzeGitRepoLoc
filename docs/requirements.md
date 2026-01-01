@@ -33,7 +33,7 @@ Git リポジトリのコミット履歴から LOC（実質的なコード行数
 
 ## 非機能要件
 
-- NFR-01: Python 3.12 以上で動作すること。
+- NFR-01: Python 3.14 以上で動作すること。
 - NFR-02: 依存関係は `requirements.txt` に基づく（例: pandas, plotly, pydriller, gitpython, tqdm, colorama）。
 - NFR-03: 大規模リポジトリでも実行可能なよう、コミット解析は CPU コア数を用いた並列処理を活用すること。
 - NFR-04: 同一入力に対して再実行時の結果が再現可能であること（同一リポジトリ状態・同一期間）。
