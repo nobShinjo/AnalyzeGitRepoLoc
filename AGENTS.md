@@ -37,6 +37,7 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 
 ## Virtual Environments (venv)
 
+- Use `.venv` for running commands and tests in this project.
 - Create a local environment in `.venv`.
 - Use `python -m venv .venv`.
 - Activate:
@@ -67,6 +68,10 @@ Use Conventional Commits for all changes:
 ## Commit Language
 
 All commit messages MUST be written in English.
+
+## Response Language
+
+- All assistant responses MUST be written in Japanese.
 
 ## Docstrings
 

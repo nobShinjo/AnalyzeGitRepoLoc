@@ -13,107 +13,21 @@ Functions:
 """
 
 import argparse
-import shutil
 import sys
 import traceback
 from datetime import datetime
 from pathlib import Path
 from typing import Union
-from urllib.parse import urlparse
 
 import pandas as pd
 from tqdm import tqdm
 
 from analyze_git_repo_loc.colored_console_printer import ColoredConsolePrinter
 from analyze_git_repo_loc.git_repo_loc_analyzer import GitRepoLOCAnalyzer
-from git import GitCommandError, InvalidGitRepositoryError, NoSuchPathError, Repo
+from analyze_git_repo_loc.remote_auth import RemoteAuthError
+from analyze_git_repo_loc.remote_repos import RemoteRepoManager
 
-
-def _is_git_url(value: str) -> bool:
-    """
-    Detect whether a string is a git URL.
-
-    Args:
-        value (str): The input string to inspect.
-
-    Returns:
-        bool: True if the input looks like a git URL.
-    """
-    parsed = urlparse(value)
-    if parsed.scheme in {"http", "https", "ssh", "git"}:
-        return True
-    return value.startswith("git@") and ":" in value
-
-
-def _get_remote_cache_path(cache_dir: Path, repo_url: str) -> Path:
-    """
-    Build a cache directory path for a remote repository clone.
-
-    Args:
-        cache_dir (Path): Base cache directory.
-        repo_url (str): Remote repository URL.
-
-    Returns:
-        Path: Path to the cached clone.
-    """
-    repo_name = GitRepoLOCAnalyzer.get_repository_name(repo_url)
-    return cache_dir / "remote-repos" / repo_name
-
-
-def _checkout_branch(repo: Repo, branch_name: str) -> None:
-    """
-    Ensure the target branch is checked out.
-
-    Args:
-        repo (Repo): GitPython repository instance.
-        branch_name (str): Branch to check out.
-
-    Raises:
-        ValueError: If the branch does not exist.
-    """
-    if branch_name in repo.heads:
-        repo.git.checkout(branch_name)
-        return
-    remote_ref = f"origin/{branch_name}"
-    remote_refs = [ref.name for ref in repo.remotes.origin.refs]
-    if remote_ref in remote_refs:
-        repo.git.checkout("-B", branch_name, remote_ref)
-        return
-    raise ValueError(f"Branch '{branch_name}' not found in remote repository.")
-
-
-def _prepare_remote_repository(
-    repo_url: str, branch_name: str, cache_dir: Path
-) -> Path:
-    """
-    Clone or update a remote repository in the local cache.
-
-    Args:
-        repo_url (str): Remote repository URL.
-        branch_name (str): Branch to check out.
-        cache_dir (Path): Base cache directory for clones.
-
-    Returns:
-        Path: Local path to the cached clone.
-    """
-    repo_path = _get_remote_cache_path(cache_dir, repo_url)
-    try:
-        repo = Repo(repo_path)
-        origin_url = repo.remotes.origin.url if repo.remotes else None
-        if origin_url and origin_url != repo_url:
-            raise ValueError(
-                f"Cached repository at {repo_path} does not match {repo_url}."
-            )
-        repo.git.fetch("--all", "--prune")
-    except (InvalidGitRepositoryError, NoSuchPathError):
-        if repo_path.exists():
-            shutil.rmtree(repo_path)
-        repo_path.parent.mkdir(parents=True, exist_ok=True)
-        repo = Repo.clone_from(repo_url, repo_path)
-    except GitCommandError as ex:
-        raise ValueError(f"Failed to update remote repository: {ex}") from ex
-    _checkout_branch(repo, branch_name)
-    return repo_path
+_REMOTE_REPO_MANAGER = RemoteRepoManager()
 
 
 def parse_repos_paths(
@@ -157,7 +71,11 @@ def parse_repos_paths(
             continue
         repo_and_branch = parts[0].split("#", 1)
         raw_repo = repo_and_branch[0].strip()
-        repo_path = raw_repo if _is_git_url(raw_repo) else Path(raw_repo)
+        repo_path = (
+            raw_repo
+            if _REMOTE_REPO_MANAGER.is_git_url(raw_repo)
+            else Path(raw_repo)
+        )
         branch_name = repo_and_branch[1].strip() if len(repo_and_branch) > 1 else "main"
         exclude_dirs = [Path(item.strip()) for item in parts[1:] if item.strip()]
         result.append((repo_path, branch_name, exclude_dirs))
@@ -215,9 +133,7 @@ def _parse_optional_iso_date(value: str | None, label: str) -> datetime | None:
     try:
         return datetime.fromisoformat(normalized)
     except ValueError as ex:
-        raise ValueError(
-            f"Invalid {label} date '{value}'. Use YYYY-MM-DD."
-        ) from ex
+        raise ValueError(f"Invalid {label} date '{value}'. Use YYYY-MM-DD.") from ex
 
 
 def _validate_date_range(since: datetime | None, until: datetime | None) -> None:
@@ -232,9 +148,7 @@ def _validate_date_range(since: datetime | None, until: datetime | None) -> None
         ValueError: If since is after until.
     """
     if since is not None and until is not None and since > until:
-        raise ValueError(
-            "Invalid date range: --since must be on or before --until."
-        )
+        raise ValueError("Invalid date range: --since must be on or before --until.")
 
 
 def parse_arguments(parser: argparse.ArgumentParser) -> argparse.Namespace:
@@ -325,6 +239,9 @@ def handle_exception(ex: Exception) -> None:
     Args:
         ex (Exception): The exception to handle.
     """
+    if isinstance(ex, RemoteAuthError):
+        tqdm.write(str(ex))
+        sys.exit(1)
     print("An unexpected error occurred:", file=sys.stderr)
     print(f"Error type: {type(ex).__name__}", file=sys.stderr)
     print(f"Error message: {str(ex)}", file=sys.stderr)
@@ -454,9 +371,9 @@ def analyze_git_repositories(args: argparse.Namespace) -> list[pd.DataFrame]:
         exclude_dirs = exclude_dirs or args.exclude_dirs
         repository_name = GitRepoLOCAnalyzer.get_repository_name(repo_path)
         analysis_repo_path = repo_path
-        if isinstance(repo_path, str) and _is_git_url(repo_path):
+        if isinstance(repo_path, str) and _REMOTE_REPO_MANAGER.is_git_url(repo_path):
             try:
-                analysis_repo_path = _prepare_remote_repository(
+                analysis_repo_path = _REMOTE_REPO_MANAGER.prepare_remote_repository(
                     repo_url=repo_path,
                     branch_name=branch_name,
                     cache_dir=args.output / ".cache",
