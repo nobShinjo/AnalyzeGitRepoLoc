@@ -31,6 +31,10 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 - Keep dependencies minimal and explicit.
 - Prefer clear, testable functions with small scopes.
 
+## Markdownlint
+
+- Ensure `AGENTS.md` follows Markdownlint rules: <https://github.com/DavidAnson/markdownlint/tree/v0.40.0>.
+
 ## Virtual Environments (venv)
 
 - Create a local environment in `.venv`.
