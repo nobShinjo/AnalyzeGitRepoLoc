@@ -15,17 +15,18 @@ Functions:
 import argparse
 import sys
 import traceback
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from typing import Union
 
 import pandas as pd
 from tqdm import tqdm
 
-from analyze_git_repo_loc.colored_console_printer import ColoredConsolePrinter
-from analyze_git_repo_loc.git_repo_loc_analyzer import GitRepoLOCAnalyzer
+from analyze_git_repo_loc.colored_console_printer import ColoredConsolePrinter  
+from analyze_git_repo_loc.git_repo_loc_analyzer import GitRepoLOCAnalyzer       
 from analyze_git_repo_loc.remote_auth import RemoteAuthError
 from analyze_git_repo_loc.remote_repos import RemoteRepoManager
+from analyze_git_repo_loc.yaml_config import merge_yaml_config
 
 _REMOTE_REPO_MANAGER = RemoteRepoManager()
 
@@ -99,34 +100,55 @@ def _normalize_optional_text(value: str | None) -> str | None:
     return normalized or None
 
 
-def _normalize_optional_list(values: list[str] | None) -> list[str] | None:
+def _normalize_optional_list(values: list[str] | None) -> list[str] | None:     
     """
     Normalize optional list input by trimming items and dropping empties.
 
     Args:
-        values (list[str] | None): The list input to normalize.
+        values (list[str] | str | None): The list input to normalize.
 
     Returns:
         list[str] | None: Normalized items or None when unset/empty.
     """
     if values is None:
         return None
-    normalized = [item.strip() for item in values if item and item.strip()]
+    if isinstance(values, str):
+        values = [item.strip() for item in values.split(",")]
+    if not isinstance(values, list):
+        raise ValueError("Invalid list input; expected a list of strings.")
+    normalized: list[str] = []
+    for item in values:
+        if item is None:
+            continue
+        if not isinstance(item, str):
+            raise ValueError("List entries must be strings.")
+        trimmed = item.strip()
+        if trimmed:
+            normalized.append(trimmed)
     return normalized or None
 
 
-def _parse_optional_iso_date(value: str | None, label: str) -> datetime | None:
+def _parse_optional_iso_date(
+    value: str | date | datetime | None,
+    label: str,
+) -> datetime | None:
     """
     Parse an optional ISO date string into a datetime object.
 
     Args:
-        value (str | None): The raw CLI input.
+        value (str | date | datetime | None): The raw input.
     Returns:
         datetime | None: Parsed datetime or None when unset/empty.
 
     Raises:
         ValueError: If the date format is invalid.
     """
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, date):
+        return datetime.combine(value, datetime.min.time())
+    if value is not None and not isinstance(value, str):
+        raise ValueError(f"Invalid {label} date '{value}'. Use YYYY-MM-DD.")
     normalized = _normalize_optional_text(value)
     if normalized is None:
         return None
@@ -164,7 +186,15 @@ def parse_arguments(parser: argparse.ArgumentParser) -> argparse.Namespace:
 
     # pylint: enable=line-too-long
     parser.add_argument(
+        "--config",
+        type=Path,
+        default=None,
+        help="YAML configuration file path",
+    )
+
+    parser.add_argument(
         "repo_paths",
+        nargs="?",
         type=parse_repos_paths,
         help=(
             "A text file containing a list of repositories, "
@@ -176,15 +206,13 @@ def parse_arguments(parser: argparse.ArgumentParser) -> argparse.Namespace:
         ),
     )
 
-    parser.add_argument(
-        "-o", "--output", type=Path, default="./out", help="Output path"
-    )
+    parser.add_argument("-o", "--output", type=Path, default=None, help="Output path")
     parser.add_argument("--since", type=str, default=None, help="Start Date yyyy-mm-dd")
     parser.add_argument("--until", type=str, default=None, help="End Date yyyy-mm-dd")
     parser.add_argument(
         "--interval",
         choices=["daily", "weekly", "monthly"],
-        default="monthly",
+        default=None,
         help="Interval (default: monthly)",
     )
     parser.add_argument(
@@ -221,6 +249,19 @@ def parse_arguments(parser: argparse.ArgumentParser) -> argparse.Namespace:
     )
     args = parser.parse_args()
     try:
+        if args.config is not None:
+            args = merge_yaml_config(
+                args=args,
+                repo_manager=_REMOTE_REPO_MANAGER,
+                normalize_list=_normalize_optional_list,
+            )
+        else:
+            if args.repo_paths is None:
+                raise ValueError("repo_paths is required when --config is not provided.")
+            if args.output is None:
+                args.output = Path("./out")
+            if args.interval is None:
+                args.interval = "monthly"
         args.since = _parse_optional_iso_date(args.since, "--since")
         args.until = _parse_optional_iso_date(args.until, "--until")
         args.lang = _normalize_optional_list(args.lang)

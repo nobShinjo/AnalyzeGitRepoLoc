@@ -13,5 +13,6 @@ dependencies = [
   "plotly>=5.24.1",
   "tqdm>=4.66.5",
   "PyDriller==2.6",
+  "PyYAML>=6.0.2",
   "pip-licenses>=5.0.0"
 ]

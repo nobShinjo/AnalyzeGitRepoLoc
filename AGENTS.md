@@ -77,3 +77,9 @@ All commit messages MUST be written in English.
 
 - Add docstrings to all public modules, classes, and functions.
 - Use a consistent style (Google or NumPy) and keep it concise.
+
+## Module Responsibilities
+
+- Keep modules focused on a single responsibility. When a file grows to include
+  multiple concerns, split the code into dedicated modules and keep `utils.py`
+  minimal.
