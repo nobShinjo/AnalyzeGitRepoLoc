@@ -409,7 +409,7 @@ def analyze_git_repositories(args: argparse.Namespace) -> list[pd.DataFrame]:
     for repo_path, branch_name, exclude_dirs in tqdm(
         args.repo_paths, desc="Analyzing repositories"
     ):
-        exclude_dirs = exclude_dirs or args.exclude_dirs
+        exclude_dirs = args.exclude_dirs if args.exclude_dirs is not None else exclude_dirs
         repository_name = GitRepoLOCAnalyzer.get_repository_name(repo_path)
         analysis_repo_path = repo_path
         if isinstance(repo_path, str) and _REMOTE_REPO_MANAGER.is_git_url(repo_path):

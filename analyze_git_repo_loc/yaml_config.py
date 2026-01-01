@@ -6,14 +6,13 @@ Functions:
     merge_yaml_config
 
 Overview:
-    Loads the YAML configuration structure and merges settings into parsed CLI
-    arguments with CLI precedence.
+    Loads the YAML configuration structure for multiple repositories and merges
+    settings into parsed CLI arguments with CLI precedence.
 """
 
 from __future__ import annotations
 
 import argparse
-from datetime import datetime
 from pathlib import Path
 from typing import Callable
 
@@ -22,7 +21,7 @@ import yaml
 from analyze_git_repo_loc.remote_repos import RemoteRepoManager
 
 
-def load_yaml_config(config_path: Path) -> tuple[dict, dict]:
+def load_yaml_config(config_path: Path) -> tuple[dict, list[dict]]:
     """
     Load YAML configuration data and validate required structure.
 
@@ -30,7 +29,7 @@ def load_yaml_config(config_path: Path) -> tuple[dict, dict]:
         config_path (Path): Path to the YAML configuration file.
 
     Returns:
-        tuple[dict, dict]: (settings, repository) dictionaries.
+        tuple[dict, list[dict]]: (settings, repositories) dictionaries.
     """
     if not config_path.exists():
         raise ValueError(f"Config file not found: {config_path}")
@@ -49,18 +48,18 @@ def load_yaml_config(config_path: Path) -> tuple[dict, dict]:
     repositories = data.get("repositories")
     if not isinstance(repositories, list) or not repositories:
         raise ValueError("YAML config 'repositories' must be a non-empty list.")
-    if len(repositories) != 1:
-        raise ValueError("YAML config currently supports a single repository entry.")
+    normalized_repositories: list[dict] = []
+    for entry in repositories:
+        repository = entry
+        if isinstance(repository, str):
+            repository = {"path": repository}
+        if not isinstance(repository, dict):
+            raise ValueError("YAML config repository entry must be a mapping.")
+        if not repository.get("path"):
+            raise ValueError("YAML config repository entry requires 'path'.")
+        normalized_repositories.append(repository)
 
-    repository = repositories[0]
-    if isinstance(repository, str):
-        repository = {"path": repository}
-    if not isinstance(repository, dict):
-        raise ValueError("YAML config repository entry must be a mapping.")
-    if not repository.get("path"):
-        raise ValueError("YAML config repository entry requires 'path'.")
-
-    return settings, repository
+    return settings, normalized_repositories
 
 
 def merge_yaml_config(
@@ -79,14 +78,12 @@ def merge_yaml_config(
     Returns:
         argparse.Namespace: Updated arguments with YAML config applied.
     """
-    settings, repository = load_yaml_config(args.config)
+    settings, repositories = load_yaml_config(args.config)
 
     def _pick_value(key: str):
         cli_value = getattr(args, key)
         if cli_value is not None:
             return cli_value
-        if key in repository and repository[key] is not None:
-            return repository[key]
         return settings.get(key)
 
     output_value = _pick_value("output")
@@ -107,14 +104,17 @@ def merge_yaml_config(
     args.exclude_dirs = _pick_value("exclude_dirs")
 
     if args.repo_paths is None:
-        repo_path_value = repository["path"]
-        branch_name = repository.get("branch") or "main"
-        exclude_dirs = normalize_list(repository.get("exclude_dirs"))
-        repo_path = (
-            repo_path_value
-            if repo_manager.is_git_url(repo_path_value)
-            else Path(repo_path_value)
-        )
-        args.repo_paths = [(repo_path, branch_name, exclude_dirs or [])]
+        repo_entries = []
+        for repository in repositories:
+            repo_path_value = repository["path"]
+            branch_name = repository.get("branch") or "main"
+            exclude_dirs = normalize_list(repository.get("exclude_dirs"))
+            repo_path = (
+                repo_path_value
+                if repo_manager.is_git_url(repo_path_value)
+                else Path(repo_path_value)
+            )
+            repo_entries.append((repo_path, branch_name, exclude_dirs or []))
+        args.repo_paths = repo_entries
 
     return args
