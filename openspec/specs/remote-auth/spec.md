@@ -19,3 +19,14 @@ HTTPS authentication is required.
 - **WHEN** the repository URL uses HTTPS and a token environment variable is set
 - **THEN** the system uses the token for HTTPS authentication
 
+### Requirement: Authentication module isolation
+
+The system SHALL encapsulate remote authentication helpers in a dedicated module
+separate from general-purpose utilities.
+
+#### Scenario: Remote auth maintenance
+
+- **WHEN** authentication logic is updated or debugged
+- **THEN** changes are localized to the authentication module without modifying
+  unrelated utilities
+
