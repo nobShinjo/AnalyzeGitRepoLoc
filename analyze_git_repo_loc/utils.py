@@ -17,13 +17,12 @@ import sys
 import traceback
 from datetime import date, datetime
 from pathlib import Path
-from typing import Union
 
 import pandas as pd
 from tqdm import tqdm
 
-from analyze_git_repo_loc.colored_console_printer import ColoredConsolePrinter  
-from analyze_git_repo_loc.git_repo_loc_analyzer import GitRepoLOCAnalyzer       
+from analyze_git_repo_loc.colored_console_printer import ColoredConsolePrinter
+from analyze_git_repo_loc.git_repo_loc_analyzer import GitRepoLOCAnalyzer
 from analyze_git_repo_loc.remote_auth import RemoteAuthError
 from analyze_git_repo_loc.remote_repos import RemoteRepoManager
 from analyze_git_repo_loc.yaml_config import merge_yaml_config
@@ -73,9 +72,7 @@ def parse_repos_paths(
         repo_and_branch = parts[0].split("#", 1)
         raw_repo = repo_and_branch[0].strip()
         repo_path = (
-            raw_repo
-            if _REMOTE_REPO_MANAGER.is_git_url(raw_repo)
-            else Path(raw_repo)
+            raw_repo if _REMOTE_REPO_MANAGER.is_git_url(raw_repo) else Path(raw_repo)
         )
         branch_name = repo_and_branch[1].strip() if len(repo_and_branch) > 1 else "main"
         exclude_dirs = [Path(item.strip()) for item in parts[1:] if item.strip()]
@@ -100,7 +97,7 @@ def _normalize_optional_text(value: str | None) -> str | None:
     return normalized or None
 
 
-def _normalize_optional_list(values: list[str] | None) -> list[str] | None:     
+def _normalize_optional_list(values: list[str] | None) -> list[str] | None:
     """
     Normalize optional list input by trimming items and dropping empties.
 
@@ -257,7 +254,9 @@ def parse_arguments(parser: argparse.ArgumentParser) -> argparse.Namespace:
             )
         else:
             if args.repo_paths is None:
-                raise ValueError("repo_paths is required when --config is not provided.")
+                raise ValueError(
+                    "repo_paths is required when --config is not provided."
+                )
             if args.output is None:
                 args.output = Path("./out")
             if args.interval is None:
@@ -291,7 +290,7 @@ def handle_exception(ex: Exception) -> None:
     sys.exit(1)
 
 
-def get_time_interval_and_period(interval: str) -> Union[str, str]:
+def get_time_interval_and_period(interval: str) -> tuple[str, str]:
     """
     Determines the time interval and period based on the provided arguments.
 
@@ -314,6 +313,87 @@ def get_time_interval_and_period(interval: str) -> Union[str, str]:
     period_dict = {"monthly": "M", "weekly": "W", "daily": "D"}
     period = period_dict[interval]
     return time_interval, period
+
+
+def _resolve_analysis_repo_path(
+    repo_path: Path | str, branch_name: str, cache_dir: Path
+) -> Path | str:
+    """
+    Resolve the analysis path for a repository, cloning if needed.
+
+    Args:
+        repo_path (Path | str): Repository path or URL.
+        branch_name (str): Branch to analyze.
+        cache_dir (Path): Cache directory for remote clones.
+
+    Returns:
+        Path | str: Local path to analyze.
+    """
+    if isinstance(repo_path, str) and _REMOTE_REPO_MANAGER.is_git_url(repo_path):
+        return _REMOTE_REPO_MANAGER.prepare_remote_repository(
+            repo_url=repo_path,
+            branch_name=branch_name,
+            cache_dir=cache_dir,
+        )
+    return repo_path
+
+
+def _create_analyzer(
+    *,
+    analysis_repo_path: Path | str,
+    repo_ref: Path | str,
+    branch_name: str,
+    cache_dir: Path,
+    output_dir: Path,
+    since: datetime | None,
+    until: datetime | None,
+    authors: list[str] | None,
+    languages: list[str] | None,
+    exclude_dirs: list[Path] | None,
+) -> GitRepoLOCAnalyzer:
+    """
+    Build a GitRepoLOCAnalyzer with common arguments.
+
+    Returns:
+        GitRepoLOCAnalyzer: Configured analyzer.
+    """
+    return GitRepoLOCAnalyzer(
+        repo_path=analysis_repo_path,
+        branch_name=branch_name,
+        cache_dir=cache_dir,
+        output_dir=output_dir,
+        since=since,
+        to=until,
+        authors=authors,
+        languages=languages,
+        exclude_dirs=exclude_dirs,
+        repo_ref=repo_ref,
+    )
+
+
+def _maybe_clear_cache(
+    *, analyzer: GitRepoLOCAnalyzer, console: ColoredConsolePrinter, clear_cache: bool
+) -> None:
+    """
+    Clear cache files when requested.
+    """
+    if not clear_cache:
+        return
+    console.print_h1("# Remove cache files.")
+    analyzer.clear_cache_files()
+    console.print_ok(up=2, forward=50)
+
+
+def _ensure_repo_output_dir(output_dir: Path, repository_name: str) -> Path:
+    """
+    Ensure the output directory exists for a repository.
+
+    Returns:
+        Path: Created output directory.
+    """
+    repo_output_dir = output_dir / repository_name
+    repo_output_dir.mkdir(parents=True, exist_ok=True)
+    return repo_output_dir
 
 
 def save_repository_branch_info(repo_paths, output_file: Path) -> None:
@@ -409,18 +489,18 @@ def analyze_git_repositories(args: argparse.Namespace) -> list[pd.DataFrame]:
     for repo_path, branch_name, exclude_dirs in tqdm(
         args.repo_paths, desc="Analyzing repositories"
     ):
-        exclude_dirs = args.exclude_dirs if args.exclude_dirs is not None else exclude_dirs
+        exclude_dirs = (
+            args.exclude_dirs if args.exclude_dirs is not None else exclude_dirs
+        )
         repository_name = GitRepoLOCAnalyzer.get_repository_name(repo_path)
-        analysis_repo_path = repo_path
-        if isinstance(repo_path, str) and _REMOTE_REPO_MANAGER.is_git_url(repo_path):
-            try:
-                analysis_repo_path = _REMOTE_REPO_MANAGER.prepare_remote_repository(
-                    repo_url=repo_path,
-                    branch_name=branch_name,
-                    cache_dir=args.output / ".cache",
-                )
-            except (OSError, ValueError) as ex:
-                handle_exception(ex)
+        try:
+            analysis_repo_path = _resolve_analysis_repo_path(
+                repo_path=repo_path,
+                branch_name=branch_name,
+                cache_dir=args.output / ".cache",
+            )
+        except (OSError, ValueError) as ex:
+            handle_exception(ex)
         console.print_h1("\n")
         console.print_h1(
             f"# Analysis of LOC in git repository: {repository_name} ({branch_name})",
@@ -430,13 +510,14 @@ def analyze_git_repositories(args: argparse.Namespace) -> list[pd.DataFrame]:
 
         # Create GitRepoLOCAnalyzer
         try:
-            analyzer = GitRepoLOCAnalyzer(
-                repo_path=analysis_repo_path,
+            analyzer = _create_analyzer(
+                analysis_repo_path=analysis_repo_path,
+                repo_ref=repo_path,
                 branch_name=branch_name,
                 cache_dir=args.output / ".cache",
                 output_dir=args.output,
                 since=args.since,
-                to=args.until,
+                until=args.until,
                 authors=args.author_name,
                 languages=args.lang,
                 exclude_dirs=exclude_dirs,
@@ -445,13 +526,14 @@ def analyze_git_repositories(args: argparse.Namespace) -> list[pd.DataFrame]:
             handle_exception(ex)
 
         # Remove cache files
-        if args.clear_cache:
-            console.print_h1("# Remove cache files.")
-            try:
-                analyzer.clear_cache_files()
-                console.print_ok(up=2, forward=50)
-            except FileNotFoundError as ex:
-                handle_exception(ex)
+        try:
+            _maybe_clear_cache(
+                analyzer=analyzer,
+                console=console,
+                clear_cache=args.clear_cache,
+            )
+        except FileNotFoundError as ex:
+            handle_exception(ex)
 
         # Analyze the repository
         loc_data = analyzer.get_commit_analysis()
@@ -463,9 +545,8 @@ def analyze_git_repositories(args: argparse.Namespace) -> list[pd.DataFrame]:
             handle_exception(ex)
 
         # Create output directory for the repository
-        repo_output_dir = args.output / repository_name
         try:
-            repo_output_dir.mkdir(parents=True, exist_ok=True)
+            repo_output_dir = _ensure_repo_output_dir(args.output, repository_name)
         except OSError as ex:
             handle_exception(ex)
         # Save the LOC data

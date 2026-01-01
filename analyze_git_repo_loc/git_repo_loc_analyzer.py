@@ -16,7 +16,7 @@ Functions:
     load_cache() -> pd.DataFrame:
         Loads the cached commit data from the cache directory.
     get_commit_analysis() -> pd.DataFrame:
-        Analyzes the commits in the repository and returns a DataFrame with 
+        Analyzes the commits in the repository and returns a DataFrame with
         the analyzed commit data.
     save_cache() -> None:
     get_repository_name(repo_path: Union[Path, str]) -> str:
@@ -24,11 +24,13 @@ Functions:
 
 """
 
+import json
 import os
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Union
+from urllib.parse import urlparse
 
 import pandas as pd
 from git import GitCommandError, PathLike, Repo
@@ -57,6 +59,7 @@ class GitRepoLOCAnalyzer:
         authors: list[str] = None,
         languages: list[str] = None,
         exclude_dirs: list[str] = None,
+        repo_ref: Union[Path, str, None] = None,
     ):
         """
         Initialize the Git repository Lines of Code (LOC) Analyzer.
@@ -73,6 +76,7 @@ class GitRepoLOCAnalyzer:
             authors (list[str]): A list of author names to filter commits.
             languages (list[str]): A list of languages to filter commits.
             exclude_dirs (list[str]): A list of directories to exclude from analysis.
+            repo_ref (Union[Path, str, None]): Original repository path or URL for cache identity.
 
         Raises:
             OSError: If there is an error creating the cache or output directories.
@@ -82,6 +86,8 @@ class GitRepoLOCAnalyzer:
         """ Git repository path """
         self._branch_name = branch_name
         """ Branch name to analyze """
+        self._repo_ref = repo_ref if repo_ref is not None else repo_path
+        """ Repository path or URL used for cache identity """
 
         # Make output directory.
         self._cache_path = self.make_output_dir(cache_dir / repo_path.name).resolve()
@@ -115,6 +121,12 @@ class GitRepoLOCAnalyzer:
         # Analyzed data
         self._commit_data = None
         """ DataFrame containing the analyzed commit data """
+        self._latest_commit_hash = None
+        """ Latest commit hash observed during analysis """
+        self._cache_key = self._build_cache_key()
+        """ Cache key for cache compatibility checks """
+        self._cache_metadata = self._load_cache_metadata()
+        """ Cache metadata loaded from disk """
         self._cache_commit_data = self.load_cache()
         """ DataFrame containing the cached commit data """
 
@@ -202,11 +214,143 @@ class GitRepoLOCAnalyzer:
         Returns:
             pd.DataFrame: The cached commit data, if available, otherwise an empty DataFrame.
         """
+        if not self._is_cache_metadata_compatible(self._cache_metadata):
+            return None
         try:
             return pd.read_pickle(self._cache_path / "commit_data.pkl")
         except (FileNotFoundError, pd.errors.EmptyDataError):
             print("No cache file found. it does nothing, and continue.")
             return None
+
+    def _build_repository(self) -> Repository:
+        """
+        Build a configured pydriller Repository instance.
+
+        Returns:
+            Repository: Configured repository traversal helper.
+        """
+        return Repository(
+            str(self._repo_path),
+            only_in_branch=self._branch_name,
+            since=self._since,
+            to=self._to,
+            from_tag=self._from_tag,
+            to_tag=self._to_tag,
+            only_authors=self._authors,
+            only_modifications_with_file_types=self._language_extensions,
+            only_no_merge=True,
+            histogram_diff=True,
+            num_workers=os.cpu_count(),
+        )
+
+    def _get_commits(self, repository: Repository) -> list:
+        """
+        Collect commits from the repository traversal.
+
+        Args:
+            repository (Repository): Configured pydriller repository.
+
+        Returns:
+            list: List of commit objects.
+        """
+        return list(
+            tqdm(repository.traverse_commits(), desc="Getting commits", unit="commit")
+        )
+
+    @staticmethod
+    def _find_commit_index(commits: list, target_hash: str | None) -> int | None:
+        """
+        Find the index of a commit hash within a list of commits.
+
+        Args:
+            commits (list): Commit list.
+            target_hash (str | None): Commit hash to locate.
+
+        Returns:
+            int | None: Index when found, otherwise None.
+        """
+        if not target_hash:
+            return None
+        for index, commit in enumerate(commits):
+            if commit.hash == target_hash:
+                return index
+        return None
+
+    def _prepare_cache_state(
+        self, commits: list
+    ) -> tuple[list, dict[str, list[dict]] | None, bool]:
+        """
+        Prepare cache state for incremental analysis.
+
+        Args:
+            commits (list): Commit list.
+
+        Returns:
+            tuple[list, dict | None, bool]: Commits to analyze, cache lookup, and
+            whether to append cached results after analysis.
+        """
+        if self._cache_commit_data is None:
+            return commits, None, False
+        cache_resume_hash = (
+            self._cache_metadata.get("last_commit_hash")
+            if self._cache_metadata
+            else None
+        )
+        resume_index = self._find_commit_index(commits, cache_resume_hash)
+        if resume_index is None:
+            return commits, self._build_cache_lookup(self._cache_commit_data), False
+        return commits[:resume_index], None, True
+
+    @staticmethod
+    def _apply_cached_commit(
+        commit_hash: str,
+        cache_lookup: dict[str, list[dict]] | None,
+        commit_data_list: list[dict],
+    ) -> bool:
+        """
+        Append cached rows for a commit when available.
+
+        Args:
+            commit_hash (str): Commit hash to check.
+            cache_lookup (dict | None): Cache lookup.
+            commit_data_list (list[dict]): Aggregated commit data rows.
+
+        Returns:
+            bool: True when cached rows were appended.
+        """
+        if cache_lookup is None:
+            return False
+        cached_rows = cache_lookup.get(commit_hash)
+        if not cached_rows:
+            return False
+        commit_data_list.extend(cached_rows)
+        return True
+
+    def _should_skip_modification(self, mod: object, language: str) -> bool:
+        """
+        Determine whether a file modification should be skipped.
+
+        Args:
+            mod (object): Modification entry from pydriller.
+            language (str): Language name.
+
+        Returns:
+            bool: True when the modification should be skipped.
+        """
+        if language == "Unknown":
+            return True
+        if (
+            self._exclude_dirs
+            and getattr(mod, "new_path", None)
+            and any(
+                (Path(self._repo_path) / mod.new_path).resolve().is_relative_to(d)
+                for d in self._exclude_dirs
+            )
+        ):
+            return True
+        if self._languages and language not in self._languages:
+            return True
+        return False
 
     def get_commit_analysis(self) -> pd.DataFrame:
         """
@@ -223,33 +367,23 @@ class GitRepoLOCAnalyzer:
         Returns:
             pd.DataFrame: A DataFrame containing the analyzed commit data.
         """
-        # Initialize the repository object for pydriller
-        repository = Repository(
-            str(self._repo_path),
-            only_in_branch=self._branch_name,
-            since=self._since,
-            to=self._to,
-            from_tag=self._from_tag,
-            to_tag=self._to_tag,
-            only_authors=self._authors,
-            only_modifications_with_file_types=self._language_extensions,
-            only_no_merge=True,
-            histogram_diff=True,
-            num_workers=os.cpu_count(),
-        )
+        repository = self._build_repository()
 
         # temporary list to store commit data
         commit_data_list = []
-        commits = list(
-            tqdm(repository.traverse_commits(), desc="Getting commits", unit="commit")
-        )
-        total_commits = len(commits)
+        commits = self._get_commits(repository)
+        self._latest_commit_hash = commits[0].hash if commits else None
+        (
+            commits_to_analyze,
+            cache_lookup,
+            use_cache_resume,
+        ) = self._prepare_cache_state(commits)
 
         # Traverse commits
         for commit in tqdm(
-            commits,
+            commits_to_analyze,
             desc="Analyzing commits",
-            total=total_commits,
+            total=len(commits_to_analyze),
             unit="commit",
         ):
             commit_datetime = commit.committer_date
@@ -257,40 +391,14 @@ class GitRepoLOCAnalyzer:
             commit_hash = commit.hash
             commit_author = commit.author.name
 
-            # Skip if the commit is already analyzed
-            if self._cache_commit_data is not None:
-                # Check for the presence of commit_hash in the "Commit_hash" column
-                # of the cached commit data. If found, append the matching rows to
-                # the commit_data_list and continue to the next commit.
-                matching_rows = self._cache_commit_data[
-                    self._cache_commit_data["Commit_hash"] == commit_hash
-                ]
-                if not matching_rows.empty:
-                    commit_data_list.extend(matching_rows.to_dict("records"))
-                    continue
+            if self._apply_cached_commit(commit_hash, cache_lookup, commit_data_list):
+                continue
 
             # Traverse modified files
             for mod in commit.modified_files:
                 # Get the programming language of the modified file
                 language = LanguageExtensions.get_language(mod.filename)
-                if language == "Unknown":
-                    continue
-
-                # Skip files in excluded directories
-                if (
-                    self._exclude_dirs
-                    and mod.new_path
-                    and any(
-                        (Path(self._repo_path) / mod.new_path)
-                        .resolve()
-                        .is_relative_to(d)
-                        for d in self._exclude_dirs
-                    )
-                ):
-                    continue
-
-                # Skip if the file is not in the specified language
-                if self._languages and language not in self._languages:
+                if self._should_skip_modification(mod, language):
                     continue
 
                 # Calculate add LOC, delete LOC, net LOC
@@ -320,6 +428,8 @@ class GitRepoLOCAnalyzer:
                         "NLOC": nloc,
                     }
                 )
+        if use_cache_resume and self._cache_commit_data is not None:
+            commit_data_list.extend(self._cache_commit_data.to_dict("records"))
         # Create DataFrame from list in a single operation
         commit_data = pd.DataFrame(
             commit_data_list,
@@ -364,6 +474,7 @@ class GitRepoLOCAnalyzer:
             raise ValueError("No data to save. Run get_commit_analysis() first.")
 
         self._commit_data.to_pickle(self._cache_path / "commit_data.pkl")
+        self._write_cache_metadata()
 
     @classmethod
     def get_repository_name(cls, repo_path: Union[Path, str]) -> str:
@@ -425,3 +536,176 @@ class GitRepoLOCAnalyzer:
                 if capitalized_lang in LanguageExtensions.language_to_extensions:
                     valid_languages.append(capitalized_lang)
         return valid_languages
+
+    @staticmethod
+    def _looks_like_url(value: str) -> bool:
+        """
+        Determine whether a string looks like a Git URL.
+
+        Args:
+            value (str): Input value to inspect.
+
+        Returns:
+            bool: True when the value looks like a URL.
+        """
+        parsed = urlparse(value)
+        if parsed.scheme in {"http", "https", "ssh", "git"}:
+            return True
+        return value.startswith("git@") and ":" in value
+
+    @staticmethod
+    def _strip_url_credentials(value: str) -> str:
+        """
+        Strip user info from HTTPS URLs when present.
+
+        Args:
+            value (str): URL string.
+
+        Returns:
+            str: URL without embedded credentials.
+        """
+        parsed = urlparse(value)
+        if parsed.scheme in {"http", "https"} and parsed.hostname:
+            netloc = parsed.hostname
+            if parsed.port:
+                netloc = f"{netloc}:{parsed.port}"
+            return parsed._replace(netloc=netloc).geturl()
+        return value
+
+    def _normalize_repo_ref(self) -> str:
+        """
+        Normalize the repository identifier for cache keys.
+
+        Returns:
+            str: Normalized repo identity string.
+        """
+        if isinstance(self._repo_ref, Path):
+            return self._repo_ref.resolve().as_posix()
+        if isinstance(self._repo_ref, str):
+            value = self._repo_ref.strip()
+            if self._looks_like_url(value):
+                return self._strip_url_credentials(value)
+            return Path(value).resolve().as_posix()
+        return str(self._repo_ref)
+
+    @staticmethod
+    def _normalize_cache_list(values: list[str] | None) -> list[str]:
+        """
+        Normalize list values for cache keys by trimming and sorting.
+
+        Args:
+            values (list[str] | None): Raw list values.
+
+        Returns:
+            list[str]: Normalized list.
+        """
+        if not values:
+            return []
+        return sorted([item.strip() for item in values if item and item.strip()])
+
+    @staticmethod
+    def _normalize_cache_date(value: datetime | None) -> str | None:
+        """
+        Normalize datetime values into ISO format for cache keys.
+
+        Args:
+            value (datetime | None): Datetime value.
+
+        Returns:
+            str | None: ISO formatted string or None.
+        """
+        if value is None:
+            return None
+        return value.isoformat()
+
+    def _normalize_cache_paths(self, paths: list[Path] | None) -> list[str]:
+        """
+        Normalize path list values for cache keys.
+
+        Args:
+            paths (list[Path] | None): Path list.
+
+        Returns:
+            list[str]: Sorted list of normalized paths.
+        """
+        if not paths:
+            return []
+        normalized = [path.resolve().as_posix() for path in paths]
+        return sorted(normalized)
+
+    def _build_cache_key(self) -> dict[str, object]:
+        """
+        Build the cache key based on repository and filter inputs.
+
+        Returns:
+            dict[str, object]: Cache key dictionary.
+        """
+        return {
+            "repo": self._normalize_repo_ref(),
+            "branch": self._branch_name,
+            "since": self._normalize_cache_date(self._since),
+            "until": self._normalize_cache_date(self._to),
+            "languages": self._normalize_cache_list(self._languages),
+            "authors": self._normalize_cache_list(self._authors),
+            "exclude_dirs": self._normalize_cache_paths(self._exclude_dirs),
+        }
+
+    def _load_cache_metadata(self) -> dict | None:
+        """
+        Load cache metadata from disk if present.
+
+        Returns:
+            dict | None: Parsed metadata, or None when unavailable.
+        """
+        metadata_path = self._cache_path / "cache_metadata.json"
+        try:
+            with open(metadata_path, "r", encoding="utf-8") as file:
+                return json.load(file)
+        except (json.JSONDecodeError, OSError):
+            return None
+
+    def _is_cache_metadata_compatible(self, metadata: dict | None) -> bool:
+        """
+        Check whether cache metadata matches the current cache key/version.
+
+        Args:
+            metadata (dict | None): Cached metadata.
+
+        Returns:
+            bool: True when compatible.
+        """
+        if not metadata:
+            return False
+        if metadata.get("version") != 1:
+            return False
+        return metadata.get("key") == self._cache_key
+
+    def _write_cache_metadata(self) -> None:
+        """
+        Persist cache metadata for later reuse.
+        """
+        metadata = {
+            "version": 1,
+            "key": self._cache_key,
+            "last_commit_hash": self._latest_commit_hash,
+            "saved_at": datetime.now(tz=timezone.utc).isoformat(),
+        }
+        metadata_path = self._cache_path / "cache_metadata.json"
+        with open(metadata_path, "w", encoding="utf-8") as file:
+            json.dump(metadata, file, indent=2)
+
+    @staticmethod
+    def _build_cache_lookup(cache_data: pd.DataFrame) -> dict[str, list[dict]]:
+        """
+        Build a lookup of cached rows by commit hash.
+
+        Args:
+            cache_data (pd.DataFrame): Cached commit data.
+
+        Returns:
+            dict[str, list[dict]]: Commit hash to cached row mapping.
+        """
+        lookup: dict[str, list[dict]] = {}
+        for row in cache_data.to_dict("records"):
+            lookup.setdefault(row["Commit_hash"], []).append(row)
+        return lookup

@@ -62,6 +62,45 @@ def load_yaml_config(config_path: Path) -> tuple[dict, list[dict]]:
     return settings, normalized_repositories
 
 
+def _pick_value(args: argparse.Namespace, settings: dict, key: str):
+    cli_value = getattr(args, key)
+    if cli_value is not None:
+        return cli_value
+    return settings.get(key)
+
+
+def _resolve_output_path(output_value) -> Path:
+    if output_value is None:
+        return Path("./out")
+    return output_value if isinstance(output_value, Path) else Path(output_value)
+
+
+def _resolve_interval(interval_value) -> str:
+    interval = interval_value or "monthly"
+    if interval not in {"daily", "weekly", "monthly"}:
+        raise ValueError(f"Invalid interval: {interval}")
+    return interval
+
+
+def _build_repo_entries(
+    repositories: list[dict],
+    repo_manager: RemoteRepoManager,
+    normalize_list: Callable[[list[str] | str | None], list[str] | None],
+) -> list[tuple[Path | str, str, list[str]]]:
+    repo_entries = []
+    for repository in repositories:
+        repo_path_value = repository["path"]
+        branch_name = repository.get("branch") or "main"
+        exclude_dirs = normalize_list(repository.get("exclude_dirs")) or []
+        repo_path = (
+            repo_path_value
+            if repo_manager.is_git_url(repo_path_value)
+            else Path(repo_path_value)
+        )
+        repo_entries.append((repo_path, branch_name, exclude_dirs))
+    return repo_entries
+
+
 def merge_yaml_config(
     args: argparse.Namespace,
     repo_manager: RemoteRepoManager,
@@ -80,41 +119,19 @@ def merge_yaml_config(
     """
     settings, repositories = load_yaml_config(args.config)
 
-    def _pick_value(key: str):
-        cli_value = getattr(args, key)
-        if cli_value is not None:
-            return cli_value
-        return settings.get(key)
-
-    output_value = _pick_value("output")
-    if output_value is None:
-        args.output = Path("./out")
-    else:
-        args.output = output_value if isinstance(output_value, Path) else Path(output_value)
-
-    interval_value = _pick_value("interval")
-    args.interval = interval_value or "monthly"
-    if args.interval not in {"daily", "weekly", "monthly"}:
-        raise ValueError(f"Invalid interval: {args.interval}")
-
-    args.since = _pick_value("since")
-    args.until = _pick_value("until")
-    args.lang = _pick_value("lang")
-    args.author_name = _pick_value("author_name")
-    args.exclude_dirs = _pick_value("exclude_dirs")
+    args.output = _resolve_output_path(_pick_value(args, settings, "output"))
+    args.interval = _resolve_interval(_pick_value(args, settings, "interval"))
+    args.since = _pick_value(args, settings, "since")
+    args.until = _pick_value(args, settings, "until")
+    args.lang = _pick_value(args, settings, "lang")
+    args.author_name = _pick_value(args, settings, "author_name")
+    args.exclude_dirs = _pick_value(args, settings, "exclude_dirs")
 
     if args.repo_paths is None:
-        repo_entries = []
-        for repository in repositories:
-            repo_path_value = repository["path"]
-            branch_name = repository.get("branch") or "main"
-            exclude_dirs = normalize_list(repository.get("exclude_dirs"))
-            repo_path = (
-                repo_path_value
-                if repo_manager.is_git_url(repo_path_value)
-                else Path(repo_path_value)
-            )
-            repo_entries.append((repo_path, branch_name, exclude_dirs or []))
-        args.repo_paths = repo_entries
+        args.repo_paths = _build_repo_entries(
+            repositories,
+            repo_manager,
+            normalize_list,
+        )
 
     return args

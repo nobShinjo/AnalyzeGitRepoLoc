@@ -144,7 +144,7 @@ class RemoteRepoManager:
                 if origin.url != candidate:
                     origin.set_url(candidate)
                 repo.git.fetch("--all", "--prune")
-                self._auth.log_auth_success(repo_url, candidate)
+                self._auth.log_auth_success(candidate)
                 return
             except GitCommandError as ex:
                 last_error = ex
@@ -174,7 +174,7 @@ class RemoteRepoManager:
                 sanitized_candidate = self._auth.strip_credentials(candidate)
                 if repo.remotes and repo.remotes.origin.url != sanitized_candidate:
                     repo.remotes.origin.set_url(sanitized_candidate)
-                self._auth.log_auth_success(repo_url, candidate)
+                self._auth.log_auth_success(candidate)
                 return repo
             except GitCommandError as ex:
                 last_error = ex
