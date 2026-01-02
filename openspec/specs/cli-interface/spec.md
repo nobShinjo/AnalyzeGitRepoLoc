@@ -75,25 +75,20 @@ The system SHALL treat omitted filter options or empty filter values as unset.
 
 The system SHALL display progress to the console for major pipeline phases,
 including HTML report generation, and SHALL terminate with an error message on
-fatal errors. For HTML report generation, the system SHALL display a parent
-progress bar that advances per report step and SHALL render child progress bars
-for sub-steps. The parent progress bar SHALL surface the current step in its
-description and SHALL NOT use postfix text. Child progress bars SHALL not remain
-visible after completion.
+fatal errors. For chart generation, the system SHALL display a parent progress
+bar that advances once per chart step, with five steps corresponding to the
+language trend, author trend, repository trend, author contribution, and author
+aggregate charts. The parent progress bar SHALL surface the active chart step in
+its description while per-repository progress bars remain unchanged.
 
 #### Scenario: Fatal error
 
 - **WHEN** an unrecoverable error occurs
 - **THEN** the system prints an error message and exits.
 
-#### Scenario: HTML report generation progress
+#### Scenario: Chart generation progress
 
-- **WHEN** the CLI starts generating the HTML report
-- **THEN** the console displays a parent progress bar with step descriptions and
-  child progress bars for sub-steps, without postfix output.
-
-#### Scenario: HTML report child progress cleanup
-
-- **WHEN** a report sub-step completes
-- **THEN** the child progress bar is cleared from the console.
+- **WHEN** the CLI starts generating charts
+- **THEN** the console displays a five-step parent progress bar that updates its
+  description to the active chart step while preserving per-repository progress bars.
 
