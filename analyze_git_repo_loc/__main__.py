@@ -23,6 +23,7 @@ Functions:
 import argparse
 import os
 import sys
+import webbrowser
 from datetime import datetime
 from pathlib import Path
 
@@ -71,6 +72,9 @@ def main() -> None:
     # Analyze the LOC in the Git repositories
     loc_data_repositories = analyze_git_repositories(args)
     time_interval, time_period = get_time_interval_and_period(args.interval)
+
+    repo_count = len(loc_data_repositories)
+    suppress_plot_show = args.no_plot_show or repo_count > 1
 
     # Dataframe declaration
     language_analysis = pd.DataFrame()
@@ -163,7 +167,7 @@ def main() -> None:
             category_column="Language",
             time_interval=time_interval,
             output_path=Path(args.output),
-            no_plot_show=args.no_plot_show,
+            no_plot_show=suppress_plot_show,
         )
         progress_bar.update(1)
 
@@ -173,7 +177,7 @@ def main() -> None:
             category_column="Author",
             time_interval=time_interval,
             output_path=Path(args.output),
-            no_plot_show=args.no_plot_show,
+            no_plot_show=suppress_plot_show,
         )
         progress_bar.update(1)
 
@@ -183,7 +187,7 @@ def main() -> None:
             time_interval=time_interval,
             category_column="Repository",
             output_path=output_dir,
-            no_plot_show=args.no_plot_show,
+            no_plot_show=suppress_plot_show,
         )
         progress_bar.update(1)
 
@@ -191,7 +195,7 @@ def main() -> None:
         generate_author_contribution_chart(
             data=author_analysis,
             output_path=output_dir,
-            no_plot_show=args.no_plot_show,
+            no_plot_show=suppress_plot_show,
         )
         progress_bar.update(1)
 
@@ -201,25 +205,44 @@ def main() -> None:
             time_interval=time_interval,
             category_column="Author",
             output_path=output_dir,
-            no_plot_show=args.no_plot_show,
+            no_plot_show=suppress_plot_show,
         )
 
-    try:
-        generate_html_report(
-            output_dir=output_dir,
-            charts_root=Path(args.output),
-            time_interval=time_interval,
-            language_analysis=language_analysis,
-            author_analysis=author_analysis,
-            repository_trend_analysis=repository_trend_analysis,
-            detail_analysis=(
-                pd.concat(loc_data_repositories, ignore_index=True)
-                if loc_data_repositories
-                else pd.DataFrame()
-            ),
-        )
-    except OSError as ex:
-        handle_exception(ex)
+    console.print_h1("\n# Generate HTML report.")
+    with tqdm(desc="Generating HTML report") as progress_bar:
+        def report_progress(
+            step: str, advance: int = 0, total: int | None = None
+        ) -> None:
+            if total is not None:
+                progress_bar.total = total
+                progress_bar.refresh()
+            if step:
+                progress_bar.set_postfix_str(step)
+            if advance:
+                progress_bar.update(advance)
+
+        try:
+            generate_html_report(
+                output_dir=output_dir,
+                charts_root=Path(args.output),
+                time_interval=time_interval,
+                language_analysis=language_analysis,
+                author_analysis=author_analysis,
+                repository_trend_analysis=repository_trend_analysis,
+                detail_analysis=(
+                    pd.concat(loc_data_repositories, ignore_index=True)
+                    if loc_data_repositories
+                    else pd.DataFrame()
+                ),
+                progress_callback=report_progress,
+            )
+        except OSError as ex:
+            handle_exception(ex)
+
+    if repo_count > 1 and not args.no_plot_show:
+        report_path = output_dir / "report.html"
+        if report_path.exists():
+            webbrowser.open(report_path.resolve().as_uri())
 
     console.print_h1("\n# LOC Analyze")
     print(Cursor.UP() + Cursor.FORWARD(50) + Fore.GREEN + "FINISH")
