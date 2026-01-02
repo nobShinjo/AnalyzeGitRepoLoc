@@ -6,18 +6,111 @@
   <title>LOC Analysis Report</title>
   <link rel="stylesheet" href="{{ assets_dir }}/tabler.min.css">
   <script src="{{ assets_dir }}/plotly.min.js"></script>
+  <style>
+    :root {
+      --report-navbar-height: 3.5rem;
+    }
+    html,
+    body {
+      height: 100%;
+    }
+    body {
+      overflow: hidden;
+    }
+    .page {
+      height: 100%;
+    }
+    .report-layout {
+      display: flex;
+      flex-direction: column;
+      height: calc(100vh - var(--report-navbar-height));
+      min-height: 0;
+    }
+    .report-header {
+      flex: 0 0 auto;
+    }
+    .report-tabs {
+      display: flex;
+      flex-direction: column;
+      flex: 1 1 auto;
+      min-height: 0;
+    }
+    .report-tabs .nav-tabs {
+      flex: 0 0 auto;
+      background: #fff;
+      z-index: 2;
+    }
+    .report-content {
+      flex: 1 1 auto;
+      overflow-y: auto;
+      min-height: 0;
+      padding-top: 1rem;
+      padding-bottom: 1rem;
+    }
+    .report-content .row > [class*="col-"] {
+      min-width: 0;
+    }
+    .report-content .table {
+      table-layout: fixed;
+    }
+    .report-content .table th,
+    .report-content .table td {
+      word-break: break-word;
+    }
+    .tag-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.35rem;
+      max-height: none;
+      overflow-y: auto;
+      padding-right: 0.25rem;
+    }
+    .tag-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      font-size: 0.75rem;
+      cursor: pointer;
+      user-select: none;
+      padding: 0.25rem 0.5rem;
+      border: 1px solid #dfe3e8;
+      border-radius: 999px;
+      background: #fff;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+    }
+    .tag-item.is-inactive {
+      opacity: 0.45;
+      text-decoration: line-through;
+    }
+    .tag-addon.tag-action {
+      font-size: 0.75rem;
+      line-height: 1;
+      padding-left: 0.35rem;
+      border-left: 1px solid #dfe3e8;
+      cursor: pointer;
+      color: #a0a6ad;
+    }
+    .tag-item.is-inactive .tag-addon {
+      border-left-color: #e6e8eb;
+    }
+    .report-sum-row td {
+      font-weight: 600;
+      background: #f3f4f6;
+      border-top: 2px solid #d5dae0;
+    }
+  </style>
 </head>
 <body>
   <div class="page">
     <div class="navbar">
       <div class="navbar-brand">Analyze Git Repo LOC</div>
     </div>
-    <main class="container">
-      <div class="page-header">
+    <main class="container report-layout">
+      <div class="page-header report-header">
         <h1 class="page-title">LOC Analysis Report</h1>
         <div class="text-muted">Generated at {{ generated_at }}</div>
       </div>
-      <div data-tab-container="true">
+      <div class="report-tabs" data-tab-container="true">
         <ul class="nav-tabs">
           {% for tab in tabs %}
           <li>
@@ -25,15 +118,787 @@
           </li>
           {% endfor %}
         </ul>
-        <div class="tab-content">
-          {% include "overview.html.j2" %}
-          {% for repo_tab in repo_tabs %}
-          {% include "repo_tab.html.j2" %}
-          {% endfor %}
+        <div class="report-content">
+          <div class="tab-content">
+            {% include "overview.html.j2" %}
+            {% for repo_tab in repo_tabs %}
+            {% include "repo_tab.html.j2" %}
+            {% endfor %}
+          </div>
         </div>
       </div>
     </main>
   </div>
+  <script>
+    window.reportFilterData = {{ filter_data_json | safe }};
+  </script>
   <script src="{{ assets_dir }}/tabler.min.js"></script>
+  <script>
+    (() => {
+      const reportData = window.reportFilterData || { rows: [], repo_tabs: [] };
+      const rows = Array.isArray(reportData.rows) ? reportData.rows : [];
+      const repoTabs = Array.isArray(reportData.repo_tabs) ? reportData.repo_tabs : [];
+      const noDataMessage = '<p class="text-muted">No data available.</p>';
+      const tabStates = new Map();
+
+      const escapeHtml = (value) =>
+        String(value)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/\"/g, "&quot;")
+          .replace(/'/g, "&#39;");
+
+      const uniqueSorted = (values) => {
+        const set = new Set(values.filter((value) => value));
+        return Array.from(set).sort((a, b) => String(a).localeCompare(String(b)));
+      };
+
+      const parseNumber = (value) => {
+        const parsed = Number(value);
+        return Number.isFinite(parsed) ? parsed : 0;
+      };
+
+      const summarizeTotals = (dataRows) => {
+        const totals = { added: 0, deleted: 0, nloc: 0 };
+        dataRows.forEach((row) => {
+          totals.added += parseNumber(row.nloc_added);
+          totals.deleted += parseNumber(row.nloc_deleted);
+          totals.nloc += parseNumber(row.nloc);
+        });
+        return totals;
+      };
+
+      const buildTable = (headers, dataRows, alignRight) => {
+        if (!dataRows.length) {
+          return noDataMessage;
+        }
+        const alignRightSet = new Set(alignRight || []);
+        const headerCells = headers
+          .map((header, index) => {
+            const alignClass = alignRightSet.has(index) ? "text-end" : "";
+            return `<th class="${alignClass}">${escapeHtml(header)}</th>`;
+          })
+          .join("");
+        const bodyRows = dataRows
+          .map((row) => {
+            const rowData = Array.isArray(row) ? { cells: row } : row;
+            const cells = (rowData.cells || [])
+              .map((cell, index) => {
+                const alignClass = alignRightSet.has(index) ? "text-end" : "";
+                return `<td class="${alignClass}">${escapeHtml(cell)}</td>`;
+              })
+              .join("");
+            const className = rowData.className ? ` class="${rowData.className}"` : "";
+            return `<tr${className}>${cells}</tr>`;
+          })
+          .join("");
+        return [
+          '<div class="table-responsive">',
+          '  <table class="table">',
+          `    <thead><tr>${headerCells}</tr></thead>`,
+          `    <tbody>${bodyRows}</tbody>`,
+          "  </table>",
+          "</div>",
+        ].join("");
+      };
+
+      const summarizeCategory = (dataRows, key, topN = 10) => {
+        const summary = new Map();
+        dataRows.forEach((row) => {
+          const name = row[key] || "Unknown";
+          if (!summary.has(name)) {
+            summary.set(name, { added: 0, deleted: 0, nloc: 0 });
+          }
+          const entry = summary.get(name);
+          entry.added += parseNumber(row.nloc_added);
+          entry.deleted += parseNumber(row.nloc_deleted);
+          entry.nloc += parseNumber(row.nloc);
+        });
+        return Array.from(summary.entries())
+          .map(([name, values]) => ({ name, ...values }))
+          .sort((a, b) => b.nloc - a.nloc)
+          .slice(0, topN);
+      };
+
+      const appendSumRow = (rows, totals, label) => {
+        if (!rows.length) {
+          return rows;
+        }
+        const sumLabel = label || "Sum";
+        return [
+          ...rows,
+          {
+            name: sumLabel,
+            added: totals.added,
+            deleted: totals.deleted,
+            nloc: totals.nloc,
+            isSum: true,
+          },
+        ];
+      };
+
+      const applyFilters = (dataRows, filters) => {
+        const languageSet = filters.language || null;
+        const authorSet = filters.author || null;
+        const repositorySet = filters.repository || null;
+        return dataRows.filter((row) => {
+          if (languageSet) {
+            if (!languageSet.size || !languageSet.has(row.language)) {
+              return false;
+            }
+          }
+          if (authorSet) {
+            if (!authorSet.size || !authorSet.has(row.author)) {
+              return false;
+            }
+          }
+          if (repositorySet) {
+            if (!repositorySet.size || !repositorySet.has(row.repository)) {
+              return false;
+            }
+          }
+          return true;
+        });
+      };
+
+      const buildBaseRowsByTab = () => {
+        const baseRowsByTab = new Map();
+        baseRowsByTab.set("overview", rows);
+        repoTabs.forEach((tab) => {
+          baseRowsByTab.set(
+            tab.id,
+            rows.filter((row) => row.repository === tab.name)
+          );
+        });
+        return baseRowsByTab;
+      };
+
+      const buildTagItems = (baseRows, group) => {
+        const totals = new Map();
+        baseRows.forEach((row) => {
+          const value = String(row[group] || "Unknown");
+          const current = totals.get(value) || 0;
+          totals.set(value, current + parseNumber(row.nloc));
+        });
+        return Array.from(totals.entries())
+          .map(([value, total]) => ({ value, total }))
+          .sort((a, b) => b.total - a.total);
+      };
+
+      const createTagAction = (label, action, title) => {
+        const addon = document.createElement("span");
+        addon.className = "tag-addon tag-action";
+        addon.dataset.tagAction = action;
+        addon.textContent = label;
+        if (title) {
+          addon.title = title;
+        }
+        return addon;
+      };
+
+      const renderTagGroup = (tabId, group) => {
+        const tabState = tabStates.get(tabId);
+        if (!tabState) {
+          return;
+        }
+        const groupState = tabState.groups[group];
+        if (!groupState) {
+          return;
+        }
+        const list = groupState.container.querySelector("[data-tag-list]");
+        if (!list) {
+          return;
+        }
+        list.innerHTML = "";
+        const term = groupState.search.trim().toLowerCase();
+        const items = groupState.items.filter((item) =>
+          item.value.toLowerCase().includes(term)
+        );
+        if (!items.length) {
+          const empty = document.createElement("span");
+          empty.className = "text-muted small";
+          empty.textContent = "No tags";
+          list.appendChild(empty);
+          return;
+        }
+        items.forEach((item) => {
+          const tag = document.createElement("span");
+          const isActive = groupState.active.has(item.value);
+          tag.className = `tag tag-item${isActive ? "" : " is-inactive"}`;
+          tag.dataset.tagValue = item.value;
+          tag.dataset.tagGroup = group;
+          tag.dataset.tagTab = tabId;
+          const label = document.createElement("span");
+          label.className = "tag-text";
+          label.textContent = item.value;
+          tag.appendChild(label);
+          if (isActive) {
+            tag.appendChild(createTagAction("x", "disable", "Disable"));
+          }
+          list.appendChild(tag);
+        });
+      };
+
+      const handleTagClick = (event, tabId, group) => {
+        const tagEl = event.target.closest("[data-tag-value]");
+        if (!tagEl || tagEl.dataset.tagGroup !== group) {
+          return;
+        }
+        const tabState = tabStates.get(tabId);
+        if (!tabState || !tabState.groups[group]) {
+          return;
+        }
+        const groupState = tabState.groups[group];
+        const value = tagEl.dataset.tagValue;
+        const actionEl = event.target.closest("[data-tag-action]");
+        if (actionEl) {
+          const action = actionEl.dataset.tagAction;
+          if (action === "disable") {
+            groupState.active.delete(value);
+          }
+        } else if (!groupState.active.has(value)) {
+          groupState.active.add(value);
+        } else if (groupState.active.size === groupState.items.length) {
+          groupState.active = new Set([value]);
+        } else {
+          return;
+        }
+        renderTagGroup(tabId, group);
+        renderTablesForTab(tabId);
+      };
+
+      const setupTabFilters = () => {
+        const baseRowsByTab = buildBaseRowsByTab();
+        const groupContainers = Array.from(
+          document.querySelectorAll("[data-filter-tab][data-filter-group]")
+        );
+        groupContainers.forEach((container) => {
+          const tabId = container.dataset.filterTab;
+          const group = container.dataset.filterGroup;
+          if (!tabId || !group) {
+            return;
+          }
+          const baseRows = baseRowsByTab.get(tabId) || [];
+          if (!tabStates.has(tabId)) {
+            tabStates.set(tabId, { baseRows, groups: {} });
+          }
+          const tabState = tabStates.get(tabId);
+          tabState.baseRows = baseRows;
+          const items = buildTagItems(baseRows, group);
+          const groupState = {
+            items,
+            active: new Set(items.map((item) => item.value)),
+            search: "",
+            container,
+          };
+          tabState.groups[group] = groupState;
+          const searchInput = container.querySelector("[data-tag-search]");
+          if (searchInput) {
+            searchInput.addEventListener("input", () => {
+              groupState.search = searchInput.value || "";
+              renderTagGroup(tabId, group);
+            });
+          }
+          const clearButton = container.querySelector("[data-tag-clear]");
+          if (clearButton) {
+            clearButton.addEventListener("click", () => {
+              groupState.active = new Set(
+                groupState.items.map((item) => item.value)
+              );
+              renderTagGroup(tabId, group);
+              renderTablesForTab(tabId);
+            });
+          }
+          container.addEventListener("click", (event) => {
+            handleTagClick(event, tabId, group);
+          });
+          renderTagGroup(tabId, group);
+        });
+      };
+
+      const getFiltersForTab = (tabId) => {
+        const state = tabStates.get(tabId);
+        if (!state) {
+          return {};
+        }
+        const filters = {};
+        Object.entries(state.groups || {}).forEach(([group, groupState]) => {
+          filters[group] = groupState.active;
+        });
+        return filters;
+      };
+
+      const getFilteredRowsForTab = (tabId) => {
+        const state = tabStates.get(tabId);
+        if (!state) {
+          return [];
+        }
+        const filters = getFiltersForTab(tabId);
+        return applyFilters(state.baseRows, filters);
+      };
+
+      const getTickConfig = (intervalLabel) => {
+        const label = String(intervalLabel || "").toLowerCase();
+        if (label === "month") {
+          return { tickformat: "%b %Y", dtick: "M1" };
+        }
+        if (label === "week") {
+          return { tickformat: "%b %d, %Y", dtick: "W1" };
+        }
+        if (label === "date") {
+          return { tickformat: "%b %d, %Y", dtick: "D1" };
+        }
+        return { tickformat: "%b %d, %Y", dtick: "M1" };
+      };
+
+      const renderNoData = (container) => {
+        if (!container) {
+          return;
+        }
+        if (window.Plotly && container) {
+          Plotly.purge(container);
+        }
+        container.innerHTML = noDataMessage;
+      };
+
+      const renderPlot = (container, traces, layout) => {
+        if (!container) {
+          return;
+        }
+        if (!traces.length || !window.Plotly) {
+          renderNoData(container);
+          return;
+        }
+        Plotly.react(container, traces, layout, { responsive: true });
+      };
+
+      const getTabLinks = () =>
+        Array.from(document.querySelectorAll(".nav-tabs .nav-link"));
+
+      const getActiveTabId = () => {
+        const activeLink = document.querySelector(".nav-tabs .nav-link.active");
+        if (!activeLink) {
+          return "overview";
+        }
+        const target =
+          activeLink.getAttribute("data-tab-target") ||
+          activeLink.getAttribute("href");
+        return target ? target.replace("#", "") : "overview";
+      };
+
+
+      const resizeChartsInTab = (tabId) => {
+        if (!window.Plotly) {
+          return;
+        }
+        const tabPane = document.getElementById(tabId);
+        if (!tabPane) {
+          return;
+        }
+        const plots = tabPane.querySelectorAll(".js-plotly-plot");
+        plots.forEach((plot) => {
+          if (plot._fullLayout) {
+            Plotly.Plots.resize(plot);
+          }
+        });
+      };
+
+      const scheduleResize = (tabId) => {
+        if (!tabId) {
+          return;
+        }
+        window.setTimeout(() => resizeChartsInTab(tabId), 0);
+      };
+
+      const attachTabResizeHandlers = () => {
+        const links = getTabLinks();
+        links.forEach((link) => {
+          link.addEventListener("click", () => {
+            const target =
+              link.getAttribute("data-tab-target") ||
+              link.getAttribute("href");
+            if (target) {
+              scheduleResize(target.replace("#", ""));
+            }
+          });
+        });
+      };
+
+      const buildTrendChart = (containerId, dataRows, categoryKey, title) => {
+        const container = document.getElementById(containerId);
+        if (!container) {
+          return;
+        }
+        if (!dataRows.length) {
+          renderNoData(container);
+          return;
+        }
+        const intervalValues = uniqueSorted(
+          dataRows.map((row) => row.interval)
+        );
+        intervalValues.sort((a, b) => new Date(a) - new Date(b));
+        if (!intervalValues.length) {
+          renderNoData(container);
+          return;
+        }
+        const intervalIndex = new Map(
+          intervalValues.map((value, index) => [value, index])
+        );
+        const categorySeries = new Map();
+        const summary = intervalValues.map(() => ({
+          added: 0,
+          deleted: 0,
+          nloc: 0,
+        }));
+        dataRows.forEach((row) => {
+          const interval = row.interval;
+          if (!intervalIndex.has(interval)) {
+            return;
+          }
+          const index = intervalIndex.get(interval);
+          const categoryValue = row[categoryKey] || "Unknown";
+          if (!categorySeries.has(categoryValue)) {
+            categorySeries.set(
+              categoryValue,
+              Array(intervalValues.length).fill(0)
+            );
+          }
+          categorySeries.get(categoryValue)[index] += parseNumber(row.nloc);
+          summary[index].added += parseNumber(row.nloc_added);
+          summary[index].deleted += parseNumber(row.nloc_deleted);
+          summary[index].nloc += parseNumber(row.nloc);
+        });
+        const trendSeries = Array.from(categorySeries.entries()).map(
+          ([name, values]) => {
+            const cumulative = [];
+            let total = 0;
+            values.forEach((value) => {
+              total += value;
+              cumulative.push(total);
+            });
+            return { name, values: cumulative };
+          }
+        );
+        trendSeries.sort(
+          (a, b) => b.values[b.values.length - 1] - a.values[a.values.length - 1]
+        );
+        const sumLine = [];
+        let cumulativeTotal = 0;
+        summary.forEach((entry) => {
+          cumulativeTotal += entry.nloc;
+          sumLine.push(cumulativeTotal);
+        });
+        const traces = trendSeries.map((series) => ({
+          x: intervalValues,
+          y: series.values,
+          type: "scatter",
+          mode: "lines",
+          stackgroup: "one",
+          name: series.name,
+        }));
+        traces.push({
+          x: intervalValues,
+          y: sumLine,
+          type: "scatter",
+          mode: "lines+markers",
+          name: "SUM",
+          line: { width: 2, color: "#636EFA" },
+          marker: { size: 8, color: "#636EFA" },
+        });
+        traces.push({
+          x: intervalValues,
+          y: summary.map((entry) => entry.added),
+          type: "bar",
+          name: "Added",
+          marker: { color: "rgba(0,204,150,0.6)" },
+        });
+        traces.push({
+          x: intervalValues,
+          y: summary.map((entry) => entry.deleted),
+          type: "bar",
+          name: "Deleted",
+          marker: { color: "rgba(239,85,59,0.6)" },
+        });
+        const tickConfig = getTickConfig(reportData.time_interval);
+        const layout = {
+          title: { text: title, x: 0.5, xanchor: "center", font: { size: 20 } },
+          font: { family: "Open Sans" },
+          plot_bgcolor: "white",
+          barmode: "relative",
+          xaxis: {
+            title: "Date",
+            tickangle: -45,
+            tickformat: tickConfig.tickformat,
+            automargin: true,
+            showline: true,
+            linecolor: "grey",
+            gridcolor: "lightgrey",
+          },
+          yaxis: {
+            title: "NLOC",
+            rangemode: "tozero",
+            automargin: true,
+            showline: true,
+            linecolor: "grey",
+            gridcolor: "lightgrey",
+          },
+          legend: { font: { size: 12 } },
+        };
+        if (tickConfig.dtick) {
+          layout.xaxis.dtick = tickConfig.dtick;
+        }
+        renderPlot(container, traces, layout);
+      };
+
+      const buildAuthorContributionChart = (containerId, dataRows, title) => {
+        const container = document.getElementById(containerId);
+        if (!container) {
+          return;
+        }
+        if (!dataRows.length) {
+          renderNoData(container);
+          return;
+        }
+        const authors = new Map();
+        const repositories = uniqueSorted(
+          dataRows.map((row) => row.repository)
+        );
+        dataRows.forEach((row) => {
+          const author = row.author || "Unknown";
+          const repo = row.repository || "Unknown";
+          if (!authors.has(author)) {
+            authors.set(author, { total: 0, values: new Map() });
+          }
+          const entry = authors.get(author);
+          const value = parseNumber(row.nloc);
+          entry.total += value;
+          entry.values.set(repo, (entry.values.get(repo) || 0) + value);
+        });
+        const authorList = Array.from(authors.entries())
+          .map(([name, entry]) => ({ name, total: entry.total, values: entry.values }))
+          .sort((a, b) => b.total - a.total);
+        if (!authorList.length) {
+          renderNoData(container);
+          return;
+        }
+        const authorNames = authorList.map((entry) => entry.name);
+        const traces = repositories.map((repo) => ({
+          x: authorList.map((entry) => entry.values.get(repo) || 0),
+          y: authorNames,
+          type: "bar",
+          orientation: "h",
+          name: repo,
+        }));
+        const layout = {
+          title: { text: title, x: 0.5, xanchor: "center", font: { size: 20 } },
+          font: { family: "Open Sans" },
+          plot_bgcolor: "white",
+          barmode: "relative",
+          xaxis: {
+            title: "NLOC",
+            automargin: true,
+            showline: true,
+            linecolor: "grey",
+            gridcolor: "lightgrey",
+          },
+          yaxis: {
+            title: "Author",
+            automargin: true,
+            showline: true,
+            linecolor: "grey",
+            gridcolor: "lightgrey",
+            categoryorder: "total ascending",
+          },
+          legend: { font: { size: 12 } },
+        };
+        renderPlot(container, traces, layout);
+      };
+
+      const renderOverviewCharts = (dataRows) => {
+        buildTrendChart(
+          "overview-repo-trend-chart",
+          dataRows,
+          "repository",
+          "NLOC trend by repository"
+        );
+        buildAuthorContributionChart(
+          "overview-author-contrib-chart",
+          dataRows,
+          "Author contribution by repository"
+        );
+      };
+
+      const renderRepoTabCharts = (tab, dataRows) => {
+        buildTrendChart(
+          `repo-${tab.id}-language-chart`,
+          dataRows,
+          "language",
+          `NLOC trend by language - ${tab.name}`
+        );
+        buildTrendChart(
+          `repo-${tab.id}-author-chart`,
+          dataRows,
+          "author",
+          `NLOC trend by author - ${tab.name}`
+        );
+      };
+
+      const renderOverviewTables = (dataRows) => {
+        const totals = summarizeTotals(dataRows);
+        const languageRows = appendSumRow(
+          summarizeCategory(dataRows, "language"),
+          totals,
+          "Sum"
+        );
+        const authorRows = summarizeCategory(dataRows, "author");
+        const repoRows = summarizeCategory(dataRows, "repository");
+        const languageTable = buildTable(
+          ["Name", "Added", "Deleted", "NLOC"],
+          languageRows.map((row) => {
+            const cells = [
+              row.name,
+              String(Math.trunc(row.added)),
+              String(Math.trunc(row.deleted)),
+              String(Math.trunc(row.nloc)),
+            ];
+            return row.isSum ? { cells, className: "report-sum-row" } : cells;
+          }),
+          [1, 2, 3]
+        );
+        const authorTable = buildTable(
+          ["Name", "Added", "Deleted", "NLOC"],
+          authorRows.map((row) => [
+            row.name,
+            String(Math.trunc(row.added)),
+            String(Math.trunc(row.deleted)),
+            String(Math.trunc(row.nloc)),
+          ]),
+          [1, 2, 3]
+        );
+        const repoTable = buildTable(
+          ["Name", "Added", "Deleted", "NLOC"],
+          repoRows.map((row) => [
+            row.name,
+            String(Math.trunc(row.added)),
+            String(Math.trunc(row.deleted)),
+            String(Math.trunc(row.nloc)),
+          ]),
+          [1, 2, 3]
+        );
+        const languageContainer = document.getElementById("overview-language-table");
+        const authorContainer = document.getElementById("overview-author-table");
+        const repoContainer = document.getElementById("overview-repo-table");
+        if (languageContainer) {
+          languageContainer.innerHTML = languageTable;
+        }
+        if (authorContainer) {
+          authorContainer.innerHTML = authorTable;
+        }
+        if (repoContainer) {
+          repoContainer.innerHTML = repoTable;
+        }
+      };
+
+      const renderRepoTab = (tab, dataRows) => {
+        const totals = summarizeTotals(dataRows);
+        const languageRows = appendSumRow(
+          summarizeCategory(dataRows, "language"),
+          totals,
+          "Sum"
+        );
+        const authorRows = summarizeCategory(dataRows, "author");
+        const repoRows = summarizeCategory(dataRows, "repository");
+        const languageTable = buildTable(
+          ["Name", "Added", "Deleted", "NLOC"],
+          languageRows.map((row) => {
+            const cells = [
+              row.name,
+              String(Math.trunc(row.added)),
+              String(Math.trunc(row.deleted)),
+              String(Math.trunc(row.nloc)),
+            ];
+            return row.isSum ? { cells, className: "report-sum-row" } : cells;
+          }),
+          [1, 2, 3]
+        );
+        const authorTable = buildTable(
+          ["Name", "Added", "Deleted", "NLOC"],
+          authorRows.map((row) => [
+            row.name,
+            String(Math.trunc(row.added)),
+            String(Math.trunc(row.deleted)),
+            String(Math.trunc(row.nloc)),
+          ]),
+          [1, 2, 3]
+        );
+        const repoTable = buildTable(
+          ["Name", "Added", "Deleted", "NLOC"],
+          repoRows.map((row) => [
+            row.name,
+            String(Math.trunc(row.added)),
+            String(Math.trunc(row.deleted)),
+            String(Math.trunc(row.nloc)),
+          ]),
+          [1, 2, 3]
+        );
+        const languageContainer = document.getElementById(
+          `repo-${tab.id}-language-table`
+        );
+        const authorContainer = document.getElementById(
+          `repo-${tab.id}-author-table`
+        );
+        const repoContainer = document.getElementById(
+          `repo-${tab.id}-repo-table`
+        );
+        if (languageContainer) {
+          languageContainer.innerHTML = languageTable;
+        }
+        if (authorContainer) {
+          authorContainer.innerHTML = authorTable;
+        }
+        if (repoContainer) {
+          repoContainer.innerHTML = repoTable;
+        }
+      };
+
+      const renderTablesForTab = (tabId) => {
+        if (tabId === "overview") {
+          renderOverviewTables(getFilteredRowsForTab("overview"));
+          return;
+        }
+        const tab = repoTabs.find((item) => item.id === tabId);
+        if (tab) {
+          renderRepoTab(tab, getFilteredRowsForTab(tabId));
+        }
+      };
+
+      const renderAllTables = () => {
+        renderOverviewTables(getFilteredRowsForTab("overview"));
+        repoTabs.forEach((tab) => {
+          renderRepoTab(tab, getFilteredRowsForTab(tab.id));
+        });
+      };
+
+      const renderAllCharts = () => {
+        const overviewState = tabStates.get("overview");
+        if (overviewState) {
+          renderOverviewCharts(overviewState.baseRows);
+        }
+        repoTabs.forEach((tab) => {
+          const state = tabStates.get(tab.id);
+          if (state) {
+            renderRepoTabCharts(tab, state.baseRows);
+          }
+        });
+      };
+
+      setupTabFilters();
+      renderAllCharts();
+      renderAllTables();
+      attachTabResizeHandlers();
+      scheduleResize(getActiveTabId());
+    })();
+  </script>
 </body>
 </html>
