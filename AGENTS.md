@@ -77,6 +77,13 @@ All commit messages MUST be written in English.
 
 - Add docstrings to all public modules, classes, and functions.
 - Use a consistent style (Google or NumPy) and keep it concise.
+- File header docstrings MUST include:
+  - A one-line summary.
+  - A Description section (up to ~5 lines).
+  - Classes/Functions/Methods sections only when public items exist
+    (omit the section entirely when none).
+  - Classes/Functions/Methods list only public items and add a few-line summary
+    with a tab indentation for each item.
 
 ## Module Responsibilities
 
