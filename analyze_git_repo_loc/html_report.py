@@ -19,6 +19,7 @@ Methods:
 from __future__ import annotations
 
 import html
+import json
 import re
 from datetime import datetime
 from pathlib import Path
@@ -57,6 +58,7 @@ class HtmlReportBuilder:
         language_analysis: pd.DataFrame,
         author_analysis: pd.DataFrame,
         repository_trend_analysis: pd.DataFrame,
+        detail_analysis: pd.DataFrame,
     ) -> None:
         """
         Initialize the report builder with analysis data.
@@ -67,6 +69,7 @@ class HtmlReportBuilder:
         self.language_analysis = language_analysis
         self.author_analysis = author_analysis
         self.repository_trend_analysis = repository_trend_analysis
+        self.detail_analysis = detail_analysis
         self._repo_chart_dirs = self._resolve_repo_chart_dirs()
         self.repositories = list(self._repo_chart_dirs.keys())
         self._template_dir = Path(__file__).resolve().parent / "templates"
@@ -180,6 +183,9 @@ class HtmlReportBuilder:
         """
         generated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         tab_ids = self._build_tab_ids(self.repositories)
+        repo_tabs_meta = [
+            {"id": tab_id, "name": repo} for repo, tab_id in tab_ids
+        ]
         tabs = [
             {"id": "overview", "label": "Overview", "active": True},
             *[
@@ -189,13 +195,99 @@ class HtmlReportBuilder:
         ]
         overview = self._build_overview_context()
         repo_tabs = self._build_repo_tab_contexts(tab_ids)
+        filter_payload = self._build_filter_payload(repo_tabs_meta)
         return {
             "assets_dir": _ASSETS_DIR_NAME,
             "generated_at": generated_at,
             "tabs": tabs,
             "overview": overview,
             "repo_tabs": repo_tabs,
+            "filter_data_json": self._serialize_filter_payload(filter_payload),
         }
+
+    def _build_filter_payload(
+        self, repo_tabs: list[dict[str, str]]
+    ) -> dict[str, object]:
+        """
+        Build the payload used for client-side report filtering.
+        """
+        detail_data = self._aggregate_detail_analysis()
+        rows = self._serialize_filter_rows(detail_data)
+        languages = sorted({row["language"] for row in rows})
+        authors = sorted({row["author"] for row in rows})
+        repositories = sorted({row["repository"] for row in rows})
+        return {
+            "time_interval": self.time_interval,
+            "rows": rows,
+            "languages": languages,
+            "authors": authors,
+            "repositories": repositories,
+            "repo_tabs": repo_tabs,
+        }
+
+    def _aggregate_detail_analysis(self) -> pd.DataFrame:
+        """
+        Aggregate detailed analysis data for filter-driven reporting.
+        """
+        if self.detail_analysis.empty:
+            return pd.DataFrame()
+        required_columns = [
+            self.time_interval,
+            "Repository",
+            "Author",
+            "Language",
+            "NLOC_Added",
+            "NLOC_Deleted",
+            "NLOC",
+        ]
+        if not set(required_columns).issubset(self.detail_analysis.columns):
+            return pd.DataFrame()
+        detail = self.detail_analysis[required_columns].copy()
+        detail["Repository"] = detail["Repository"].fillna("Unknown").astype(str)
+        detail["Author"] = detail["Author"].fillna("Unknown").astype(str)
+        detail["Language"] = detail["Language"].fillna("Unknown").astype(str)
+        grouped = (
+            detail.groupby(
+                [self.time_interval, "Repository", "Author", "Language"],
+                as_index=False,
+            )[["NLOC_Added", "NLOC_Deleted", "NLOC"]]
+            .sum()
+            .reset_index(drop=True)
+        )
+        grouped[self.time_interval] = grouped[self.time_interval].astype(str)
+        return grouped
+
+    def _serialize_filter_rows(
+        self, detail_data: pd.DataFrame
+    ) -> list[dict[str, object]]:
+        """
+        Serialize filter rows for embedding in the HTML report.
+        """
+        if detail_data.empty:
+            return []
+        interval_col = self.time_interval
+        rows: list[dict[str, object]] = []
+        for _, row in detail_data.iterrows():
+            rows.append(
+                {
+                    "interval": str(row[interval_col]),
+                    "repository": str(row["Repository"]),
+                    "author": str(row["Author"]),
+                    "language": str(row["Language"]),
+                    "nloc_added": self._to_int(row["NLOC_Added"]),
+                    "nloc_deleted": self._to_int(row["NLOC_Deleted"]),
+                    "nloc": self._to_int(row["NLOC"]),
+                }
+            )
+        return rows
+
+    @staticmethod
+    def _serialize_filter_payload(payload: dict[str, object]) -> str:
+        """
+        Serialize the filter payload for safe embedding into HTML.
+        """
+        raw = json.dumps(payload, ensure_ascii=False)
+        return raw.replace("</", "<\\/")
 
     def _build_tab_ids(self, repositories: list[str]) -> list[tuple[str, str]]:
         """
@@ -515,17 +607,19 @@ def generate_html_report(
     language_analysis: pd.DataFrame,
     author_analysis: pd.DataFrame,
     repository_trend_analysis: pd.DataFrame,
+    detail_analysis: pd.DataFrame,
 ) -> None:
     """
     Generate a single HTML report in the run output directory.
 
     Args:
         output_dir (Path): The output directory for the run.
-        charts_root (Path | None): Root directory containing per-repo charts.
-        time_interval (str): The time interval label used for aggregation.
+        charts_root (Path | None): Root directory containing per-repo charts.   
+        time_interval (str): The time interval label used for aggregation.      
         language_analysis (pd.DataFrame): Language analysis data.
         author_analysis (pd.DataFrame): Author analysis data.
-        repository_trend_analysis (pd.DataFrame): Repository trend data.
+        repository_trend_analysis (pd.DataFrame): Repository trend data.        
+        detail_analysis (pd.DataFrame): Detailed data used for report filters.  
     """
     builder = HtmlReportBuilder(
         output_dir=output_dir,
@@ -534,5 +628,6 @@ def generate_html_report(
         language_analysis=language_analysis,
         author_analysis=author_analysis,
         repository_trend_analysis=repository_trend_analysis,
+        detail_analysis=detail_analysis,
     )
     builder.generate()

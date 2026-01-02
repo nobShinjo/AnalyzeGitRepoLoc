@@ -212,6 +212,11 @@ def main() -> None:
             language_analysis=language_analysis,
             author_analysis=author_analysis,
             repository_trend_analysis=repository_trend_analysis,
+            detail_analysis=(
+                pd.concat(loc_data_repositories, ignore_index=True)
+                if loc_data_repositories
+                else pd.DataFrame()
+            ),
         )
     except OSError as ex:
         handle_exception(ex)
