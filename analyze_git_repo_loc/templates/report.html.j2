@@ -159,6 +159,11 @@
         return Number.isFinite(parsed) ? parsed : 0;
       };
 
+      const formatNumber = (value) => {
+        const parsed = parseNumber(value);
+        return Math.trunc(parsed).toLocaleString("en-US");
+      };
+
       const summarizeTotals = (dataRows) => {
         const totals = { added: 0, deleted: 0, nloc: 0 };
         dataRows.forEach((row) => {
@@ -758,9 +763,9 @@
           languageRows.map((row) => {
             const cells = [
               row.name,
-              String(Math.trunc(row.added)),
-              String(Math.trunc(row.deleted)),
-              String(Math.trunc(row.nloc)),
+              formatNumber(row.added),
+              formatNumber(row.deleted),
+              formatNumber(row.nloc),
             ];
             return row.isSum ? { cells, className: "report-sum-row" } : cells;
           }),
@@ -770,9 +775,9 @@
           ["Name", "Added", "Deleted", "NLOC"],
           authorRows.map((row) => [
             row.name,
-            String(Math.trunc(row.added)),
-            String(Math.trunc(row.deleted)),
-            String(Math.trunc(row.nloc)),
+            formatNumber(row.added),
+            formatNumber(row.deleted),
+            formatNumber(row.nloc),
           ]),
           [1, 2, 3]
         );
@@ -780,9 +785,9 @@
           ["Name", "Added", "Deleted", "NLOC"],
           repoRows.map((row) => [
             row.name,
-            String(Math.trunc(row.added)),
-            String(Math.trunc(row.deleted)),
-            String(Math.trunc(row.nloc)),
+            formatNumber(row.added),
+            formatNumber(row.deleted),
+            formatNumber(row.nloc),
           ]),
           [1, 2, 3]
         );
@@ -814,9 +819,9 @@
           languageRows.map((row) => {
             const cells = [
               row.name,
-              String(Math.trunc(row.added)),
-              String(Math.trunc(row.deleted)),
-              String(Math.trunc(row.nloc)),
+              formatNumber(row.added),
+              formatNumber(row.deleted),
+              formatNumber(row.nloc),
             ];
             return row.isSum ? { cells, className: "report-sum-row" } : cells;
           }),
@@ -826,9 +831,9 @@
           ["Name", "Added", "Deleted", "NLOC"],
           authorRows.map((row) => [
             row.name,
-            String(Math.trunc(row.added)),
-            String(Math.trunc(row.deleted)),
-            String(Math.trunc(row.nloc)),
+            formatNumber(row.added),
+            formatNumber(row.deleted),
+            formatNumber(row.nloc),
           ]),
           [1, 2, 3]
         );
@@ -836,9 +841,9 @@
           ["Name", "Added", "Deleted", "NLOC"],
           repoRows.map((row) => [
             row.name,
-            String(Math.trunc(row.added)),
-            String(Math.trunc(row.deleted)),
-            String(Math.trunc(row.nloc)),
+            formatNumber(row.added),
+            formatNumber(row.deleted),
+            formatNumber(row.nloc),
           ]),
           [1, 2, 3]
         );

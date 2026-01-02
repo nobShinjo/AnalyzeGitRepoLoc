@@ -587,9 +587,9 @@ class HtmlReportBuilder:
         rows = [
             [
                 str(row[category_column]),
-                str(self._to_int(row["NLOC_Added"])),
-                str(self._to_int(row["NLOC_Deleted"])),
-                str(self._to_int(row["NLOC"])),
+                self._format_number(row["NLOC_Added"]),
+                self._format_number(row["NLOC_Deleted"]),
+                self._format_number(row["NLOC"]),
             ]
             for _, row in summary.iterrows()
         ]
@@ -608,9 +608,9 @@ class HtmlReportBuilder:
         totals = repository_trend_analysis[["NLOC_Added", "NLOC_Deleted", "NLOC"]].sum()
         rows = [
             [
-                str(self._to_int(totals.get("NLOC_Added", 0))),
-                str(self._to_int(totals.get("NLOC_Deleted", 0))),
-                str(self._to_int(totals.get("NLOC", 0))),
+                self._format_number(totals.get("NLOC_Added", 0)),
+                self._format_number(totals.get("NLOC_Deleted", 0)),
+                self._format_number(totals.get("NLOC", 0)),
             ]
         ]
         return self._build_table(
@@ -661,6 +661,13 @@ class HtmlReportBuilder:
             return int(value)
         except (TypeError, ValueError):
             return 0
+
+    @classmethod
+    def _format_number(cls, value: object) -> str:
+        """
+        Format numeric values with a thousands separator.
+        """
+        return f"{cls._to_int(value):,}"
 
     @staticmethod
     def _safe_id(value: str, used_ids: set[str]) -> str:
