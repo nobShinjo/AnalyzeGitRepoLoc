@@ -39,7 +39,7 @@ from analyze_git_repo_loc.analysis_helpers import (
 )
 from analyze_git_repo_loc.chart_builder import ChartBuilder, ChartStrategy      
 from analyze_git_repo_loc.colored_console_printer import ColoredConsolePrinter  
-from analyze_git_repo_loc.html_report import generate_html_report
+from analyze_git_repo_loc.html_report import ProgressEvent, generate_html_report
 from analyze_git_repo_loc.markdown_summary import generate_markdown_summary     
 from analyze_git_repo_loc.utils import (
     analyze_git_repositories,
@@ -210,16 +210,45 @@ def main() -> None:
 
     console.print_h1("\n# Generate HTML report.")
     with tqdm(desc="Generating HTML report") as progress_bar:
-        def report_progress(
-            step: str, advance: int = 0, total: int | None = None
-        ) -> None:
-            if total is not None:
-                progress_bar.total = total
-                progress_bar.refresh()
-            if step:
-                progress_bar.set_postfix_str(step)
-            if advance:
-                progress_bar.update(advance)
+        child_bar: tqdm | None = None
+        child_label: str | None = None
+
+        def report_progress(event: ProgressEvent) -> None:
+            nonlocal child_bar, child_label
+            if event.kind == "parent":
+                if child_bar is not None:
+                    child_bar.close()
+                    child_bar = None
+                    child_label = None
+                if event.total is not None:
+                    progress_bar.total = event.total
+                    progress_bar.refresh()
+                if event.label:
+                    progress_bar.set_description_str(event.label)
+                if event.advance:
+                    progress_bar.update(event.advance)
+                return
+
+            if (
+                child_bar is None
+                or event.total is not None
+                or event.label != child_label
+            ):
+                if child_bar is not None:
+                    child_bar.close()
+                child_label = event.label
+                child_bar = tqdm(
+                    total=event.total or 0,
+                    desc=event.label,
+                    leave=False,
+                    position=progress_bar.pos + 1,
+                )
+            if event.advance:
+                child_bar.update(event.advance)
+            if event.done and child_bar is not None:
+                child_bar.close()
+                child_bar = None
+                child_label = None
 
         try:
             generate_html_report(
