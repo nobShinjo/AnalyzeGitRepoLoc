@@ -6,6 +6,8 @@ Description:
     Renders a Tabler-style layout with overview and repository tabs.
     Writes report.html and assets into the analysis output directory.
 Classes:
+        ProgressEvent: Progress update for HTML report generation.
+                Carries parent/child progress bar details.
         HtmlReportBuilder: Build HTML reports for a single analysis run.
                 Prepares assets and renders templates with analysis data.
 Functions:
@@ -21,13 +23,16 @@ from __future__ import annotations
 import html
 import json
 import re
+from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from typing import TypeAlias
 
 import pandas as pd
 import plotly.io as pio
-from plotly.offline import get_plotlyjs
 from jinja2 import Environment, FileSystemLoader, select_autoescape
+from plotly.offline import get_plotlyjs
 
 from analyze_git_repo_loc.analysis_helpers import (
     prepare_author_contribution_data,
@@ -42,6 +47,24 @@ _LANGUAGE_CHART_FILENAME = "language_chart.html"
 _AUTHOR_CHART_FILENAME = "author_chart.html"
 _REPOSITORY_CHART_FILENAME = "repository_chart.html"
 _AUTHOR_CONTRIBUTION_CHART_FILENAME = "author_contribution_contribution_chart.html"
+_FILTER_PROGRESS_CHUNK = 1000
+_PARENT_PROGRESS_STEPS = 4
+
+
+@dataclass(frozen=True)
+class ProgressEvent:
+    """
+    Progress update for HTML report generation.
+    """
+
+    label: str
+    advance: int = 0
+    total: int | None = None
+    kind: str = "parent"
+    done: bool = False
+
+
+ProgressCallback: TypeAlias = Callable[[ProgressEvent], None]
 
 
 class HtmlReportBuilder:
@@ -78,14 +101,22 @@ class HtmlReportBuilder:
             autoescape=select_autoescape(["html", "xml"]),
         )
 
-    def generate(self) -> None:
+    def generate(self, progress_callback: ProgressCallback | None = None) -> None:
         """
         Generate the HTML report and write it to the output directory.
+
+        Args:
+            progress_callback (ProgressCallback | None): Optional callback
+                invoked after each report generation step.
         """
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self._ensure_assets()
-        report_html = self._build_report_html()
+        report_html = self._build_report_html(progress_callback=progress_callback)
         (self.output_dir / "report.html").write_text(report_html, encoding="utf-8")
+        if progress_callback is not None:
+            progress_callback(
+                ProgressEvent(label="Report file written", advance=1)
+            )
 
     def _ensure_assets(self) -> None:
         """
@@ -169,23 +200,39 @@ class HtmlReportBuilder:
                 mapping[only_repo] = default_dir
         return mapping
 
-    def _build_report_html(self) -> str:
+    def _build_report_html(
+        self, *, progress_callback: ProgressCallback | None = None
+    ) -> str:
         """
         Build the HTML report contents.
         """
+        detail_data = self._aggregate_detail_analysis()
         template = self._template_env.get_template("report.html.j2")
-        context = self._build_template_context()
-        return template.render(**context)
+        context = self._build_template_context(
+            detail_data=detail_data,
+            progress_callback=progress_callback,
+            filter_chunk_size=_FILTER_PROGRESS_CHUNK,
+        )
+        if progress_callback is not None:
+            progress_callback(ProgressEvent(label="Render template", advance=0))
+        rendered = template.render(**context)
+        if progress_callback is not None:
+            progress_callback(ProgressEvent(label="Render template", advance=1))
+        return rendered
 
-    def _build_template_context(self) -> dict[str, object]:
+    def _build_template_context(
+        self,
+        *,
+        detail_data: pd.DataFrame,
+        progress_callback: ProgressCallback | None = None,
+        filter_chunk_size: int = _FILTER_PROGRESS_CHUNK,
+    ) -> dict[str, object]:
         """
         Build the template context for rendering.
         """
         generated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         tab_ids = self._build_tab_ids(self.repositories)
-        repo_tabs_meta = [
-            {"id": tab_id, "name": repo} for repo, tab_id in tab_ids
-        ]
+        repo_tabs_meta = [{"id": tab_id, "name": repo} for repo, tab_id in tab_ids]
         tabs = [
             {"id": "overview", "label": "Overview", "active": True},
             *[
@@ -194,8 +241,28 @@ class HtmlReportBuilder:
             ],
         ]
         overview = self._build_overview_context()
-        repo_tabs = self._build_repo_tab_contexts(tab_ids)
-        filter_payload = self._build_filter_payload(repo_tabs_meta)
+        if progress_callback is not None:
+            progress_callback(
+                ProgressEvent(
+                    label="Repo tabs",
+                    advance=0,
+                    total=_PARENT_PROGRESS_STEPS,
+                )
+            )
+        repo_tabs = self._build_repo_tab_contexts(
+            tab_ids, progress_callback=progress_callback
+        )
+        if progress_callback is not None:
+            progress_callback(ProgressEvent(label="Repo tabs", advance=1))
+            progress_callback(ProgressEvent(label="Filter rows", advance=0))
+        filter_payload = self._build_filter_payload(
+            repo_tabs_meta,
+            detail_data=detail_data,
+            progress_callback=progress_callback,
+            chunk_size=filter_chunk_size,
+        )
+        if progress_callback is not None:
+            progress_callback(ProgressEvent(label="Filter rows", advance=1))
         return {
             "assets_dir": _ASSETS_DIR_NAME,
             "generated_at": generated_at,
@@ -206,13 +273,21 @@ class HtmlReportBuilder:
         }
 
     def _build_filter_payload(
-        self, repo_tabs: list[dict[str, str]]
+        self,
+        repo_tabs: list[dict[str, str]],
+        *,
+        detail_data: pd.DataFrame,
+        progress_callback: ProgressCallback | None = None,
+        chunk_size: int = _FILTER_PROGRESS_CHUNK,
     ) -> dict[str, object]:
         """
         Build the payload used for client-side report filtering.
         """
-        detail_data = self._aggregate_detail_analysis()
-        rows = self._serialize_filter_rows(detail_data)
+        rows = self._serialize_filter_rows(
+            detail_data,
+            progress_callback=progress_callback,
+            chunk_size=chunk_size,
+        )
         languages = sorted({row["language"] for row in rows})
         authors = sorted({row["author"] for row in rows})
         repositories = sorted({row["repository"] for row in rows})
@@ -258,15 +333,40 @@ class HtmlReportBuilder:
         return grouped
 
     def _serialize_filter_rows(
-        self, detail_data: pd.DataFrame
+        self,
+        detail_data: pd.DataFrame,
+        *,
+        progress_callback: ProgressCallback | None = None,
+        chunk_size: int = _FILTER_PROGRESS_CHUNK,
     ) -> list[dict[str, object]]:
         """
         Serialize filter rows for embedding in the HTML report.
         """
         if detail_data.empty:
+            if progress_callback is not None:
+                progress_callback(
+                    ProgressEvent(
+                        label="Filter rows",
+                        advance=0,
+                        total=0,
+                        kind="child",
+                        done=True,
+                    )
+                )
             return []
         interval_col = self.time_interval
         rows: list[dict[str, object]] = []
+        total_rows = len(detail_data)
+        processed = 0
+        if progress_callback is not None:
+            progress_callback(
+                ProgressEvent(
+                    label="Filter rows",
+                    advance=0,
+                    total=total_rows,
+                    kind="child",
+                )
+            )
         for _, row in detail_data.iterrows():
             rows.append(
                 {
@@ -278,6 +378,28 @@ class HtmlReportBuilder:
                     "nloc_deleted": self._to_int(row["NLOC_Deleted"]),
                     "nloc": self._to_int(row["NLOC"]),
                 }
+            )
+            processed += 1
+            if progress_callback is not None and processed % chunk_size == 0:
+                progress_callback(
+                    ProgressEvent(
+                        label="Filter rows",
+                        advance=chunk_size,
+                        kind="child",
+                    )
+                )
+        if progress_callback is not None and processed % chunk_size:
+            remainder = processed % chunk_size
+            progress_callback(
+                ProgressEvent(
+                    label="Filter rows",
+                    advance=remainder,
+                    kind="child",
+                )
+            )
+        if progress_callback is not None:
+            progress_callback(
+                ProgressEvent(label="Filter rows", kind="child", done=True)
             )
         return rows
 
@@ -341,13 +463,26 @@ class HtmlReportBuilder:
         }
 
     def _build_repo_tab_contexts(
-        self, tab_ids: list[tuple[str, str]]
+        self,
+        tab_ids: list[tuple[str, str]],
+        *,
+        progress_callback: ProgressCallback | None = None,
     ) -> list[dict[str, object]]:
         """
         Build template contexts for repository tabs.
         """
         contexts: list[dict[str, object]] = []
-        for repo, tab_id in tab_ids:
+        total_repos = len(tab_ids)
+        if progress_callback is not None:
+            progress_callback(
+                ProgressEvent(
+                    label="Repo tabs",
+                    advance=0,
+                    total=total_repos,
+                    kind="child",
+                )
+            )
+        for index, (repo, tab_id) in enumerate(tab_ids, start=1):
             repo_lang = self._subset_by_repo(self.language_analysis, repo)
             repo_author = self._subset_by_repo(self.author_analysis, repo)
             repo_trend = self._subset_by_repo(self.repository_trend_analysis, repo)
@@ -382,6 +517,18 @@ class HtmlReportBuilder:
                         ),
                     ),
                 }
+            )
+            if progress_callback is not None:
+                progress_callback(
+                    ProgressEvent(
+                        label="Repo tabs",
+                        advance=1,
+                        kind="child",
+                    )
+                )
+        if progress_callback is not None:
+            progress_callback(
+                ProgressEvent(label="Repo tabs", kind="child", done=True)
             )
         return contexts
 
@@ -506,9 +653,9 @@ class HtmlReportBuilder:
         rows = [
             [
                 str(row[category_column]),
-                str(self._to_int(row["NLOC_Added"])),
-                str(self._to_int(row["NLOC_Deleted"])),
-                str(self._to_int(row["NLOC"])),
+                self._format_number(row["NLOC_Added"]),
+                self._format_number(row["NLOC_Deleted"]),
+                self._format_number(row["NLOC"]),
             ]
             for _, row in summary.iterrows()
         ]
@@ -527,9 +674,9 @@ class HtmlReportBuilder:
         totals = repository_trend_analysis[["NLOC_Added", "NLOC_Deleted", "NLOC"]].sum()
         rows = [
             [
-                str(self._to_int(totals.get("NLOC_Added", 0))),
-                str(self._to_int(totals.get("NLOC_Deleted", 0))),
-                str(self._to_int(totals.get("NLOC", 0))),
+                self._format_number(totals.get("NLOC_Added", 0)),
+                self._format_number(totals.get("NLOC_Deleted", 0)),
+                self._format_number(totals.get("NLOC", 0)),
             ]
         ]
         return self._build_table(
@@ -581,6 +728,13 @@ class HtmlReportBuilder:
         except (TypeError, ValueError):
             return 0
 
+    @classmethod
+    def _format_number(cls, value: object) -> str:
+        """
+        Format numeric values with a thousands separator.
+        """
+        return f"{cls._to_int(value):,}"
+
     @staticmethod
     def _safe_id(value: str, used_ids: set[str]) -> str:
         """
@@ -608,18 +762,21 @@ def generate_html_report(
     author_analysis: pd.DataFrame,
     repository_trend_analysis: pd.DataFrame,
     detail_analysis: pd.DataFrame,
+    progress_callback: ProgressCallback | None = None,
 ) -> None:
     """
     Generate a single HTML report in the run output directory.
 
     Args:
         output_dir (Path): The output directory for the run.
-        charts_root (Path | None): Root directory containing per-repo charts.   
-        time_interval (str): The time interval label used for aggregation.      
+        charts_root (Path | None): Root directory containing per-repo charts.
+        time_interval (str): The time interval label used for aggregation.
         language_analysis (pd.DataFrame): Language analysis data.
         author_analysis (pd.DataFrame): Author analysis data.
-        repository_trend_analysis (pd.DataFrame): Repository trend data.        
-        detail_analysis (pd.DataFrame): Detailed data used for report filters.  
+        repository_trend_analysis (pd.DataFrame): Repository trend data.
+        detail_analysis (pd.DataFrame): Detailed data used for report filters.
+        progress_callback (ProgressCallback | None): Optional callback
+            invoked after each report generation step.
     """
     builder = HtmlReportBuilder(
         output_dir=output_dir,
@@ -630,4 +787,4 @@ def generate_html_report(
         repository_trend_analysis=repository_trend_analysis,
         detail_analysis=detail_analysis,
     )
-    builder.generate()
+    builder.generate(progress_callback=progress_callback)

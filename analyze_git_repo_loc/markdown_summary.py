@@ -75,6 +75,19 @@ def _to_int(value: object) -> int:
         return 0
 
 
+def _format_number(value: object) -> str:
+    """
+    Format numeric values with a thousands separator.
+
+    Args:
+        value (object): Value to format.
+
+    Returns:
+        str: Formatted number string.
+    """
+    return f"{_to_int(value):,}"
+
+
 def _summarize_category(
     analysis: pd.DataFrame, category_column: str, top_n: int = 10
 ) -> str:
@@ -101,9 +114,9 @@ def _summarize_category(
     rows = [
         [
             str(row[category_column]),
-            str(_to_int(row["NLOC_Added"])),
-            str(_to_int(row["NLOC_Deleted"])),
-            str(_to_int(row["NLOC"])),
+            _format_number(row["NLOC_Added"]),
+            _format_number(row["NLOC_Deleted"]),
+            _format_number(row["NLOC"]),
         ]
         for _, row in summary.iterrows()
     ]
@@ -129,9 +142,9 @@ def _summarize_totals(repository_trend_analysis: pd.DataFrame) -> str:
     totals = repository_trend_analysis[["NLOC_Added", "NLOC_Deleted", "NLOC"]].sum()
     rows = [
         [
-            str(_to_int(totals["NLOC_Added"])),
-            str(_to_int(totals["NLOC_Deleted"])),
-            str(_to_int(totals["NLOC"])),
+            _format_number(totals["NLOC_Added"]),
+            _format_number(totals["NLOC_Deleted"]),
+            _format_number(totals["NLOC"]),
         ]
     ]
     return _format_markdown_table(
