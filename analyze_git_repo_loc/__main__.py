@@ -160,7 +160,7 @@ def main() -> None:
 
     # Generate charts
     console.print_h1("\n# Generate charts.")
-    with tqdm(total=4, desc="Generating charts") as progress_bar:
+    with tqdm(total=5, desc="Charts: Language trend") as progress_bar:
         # 1. Stacked area trend chart of code volume by programming language per repository,
         generate_trend_chart(
             data=language_analysis,
@@ -172,6 +172,7 @@ def main() -> None:
         progress_bar.update(1)
 
         # 2. Stacked area trend chart by author per repository
+        progress_bar.set_description_str("Charts: Author trend")
         generate_trend_chart(
             data=author_analysis,
             category_column="Author",
@@ -182,6 +183,7 @@ def main() -> None:
         progress_bar.update(1)
 
         # 3. Stacked trend chart of code volume per repository
+        progress_bar.set_description_str("Charts: Repository trend")
         generate_all_repositories_trend_chart(
             data=repository_trend_analysis,
             time_interval=time_interval,
@@ -192,6 +194,7 @@ def main() -> None:
         progress_bar.update(1)
 
         # 4. Stacked bar chart of author contribution per repository
+        progress_bar.set_description_str("Charts: Author contribution")
         generate_author_contribution_chart(
             data=author_analysis,
             output_path=output_dir,
@@ -200,6 +203,7 @@ def main() -> None:
         progress_bar.update(1)
 
         # 5. Stack trend chart of code volume per author
+        progress_bar.set_description_str("Charts: Author aggregate")
         generate_all_repositories_trend_chart(
             data=repository_trend_analysis,
             time_interval=time_interval,
@@ -207,6 +211,7 @@ def main() -> None:
             output_path=output_dir,
             no_plot_show=suppress_plot_show,
         )
+        progress_bar.update(1)
 
     console.print_h1("\n# Generate HTML report.")
     with tqdm(desc="Generating HTML report") as progress_bar:
