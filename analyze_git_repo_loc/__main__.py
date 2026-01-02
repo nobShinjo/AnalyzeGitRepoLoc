@@ -1,35 +1,23 @@
 """
-Analyzing Git Repositories and Visualizing Code LOC.
+Analyze Git repositories and generate LOC charts and reports.
 
-This script analyzes the lines of code (LOC) in Git repositories
-and visualizes the data through various charts.
-It processes the LOC data, categorizes it by programming language, author,
- and repository, and generates trend charts to show the evolution of code volume over time.
-
+Description:
+    Runs the CLI workflow: parse arguments, analyze repositories, save CSVs, and
+    generate charts and reports for each run.
+    Handles argument parsing, data aggregation, and output layout.
 Functions:
-    main() -> None:
-        Main function to execute the program. It parses command line arguments,
-        initializes the console printer,
-        analyzes the LOC data, forms dataframes, saves the analyzed data, and generates charts.
-    save_analysis_data(language_analysis: pd.DataFrame, author_analysis: pd.DataFrame,
-    repository_analysis: pd.DataFrame, output_dir: Path) -> None:
-        Saves the analyzed data to CSV files in the specified output directory.
-    prepare_trend_data(data: pd.DataFrame, time_interval: str, category_column: str)
-      -> pd.DataFrame:
-        Prepares trend data for the trend chart by pivoting the data and sorting the columns.
-    prepare_summary_data(data: pd.DataFrame, time_interval: str) -> pd.DataFrame:
-        Prepares summary data for the trend chart by aggregating the data and calculating
-        cumulative sums and differences.
-    generate_trend_chart(data: pd.DataFrame, category_column: str, time_interval: str,
-        output_path: Path, title: str = "") -> None:
-        Generates trend charts for each repository and saves the data and charts
-        to the specified output path.
-    save_chart_data(trend_data: pd.DataFrame, summary_data: pd.DataFrame, trend_chart: go.Figure,
-         output_prefix: str, output_path: Path):
-        Saves the trend data and chart to CSV and HTML files in the specified output path.
-    generate_repository_trend_chart(data: pd.DataFrame, time_interval: str, output_path: Path) -> None:
-        Generates a trend chart for all repositories and saves the data and chart
-        to the specified output path.
+	main: Run the CLI workflow for analysis and reporting.
+		Coordinates parsing, analysis, charting, and report outputs.
+	save_analysis_data: Persist analysis CSV outputs for the run.
+		Writes aggregated analysis dataframes to CSV files.
+	generate_trend_chart: Create per-repository trend charts.
+		Builds and saves language/author trend charts per repository.
+	save_chart_data: Write chart data and HTML outputs to disk.
+		Serializes trend data, summaries, and Plotly HTML outputs.
+	generate_all_repositories_trend_chart: Create aggregate trend charts.
+		Builds combined charts across all repositories.
+	generate_author_contribution_chart: Create author contribution charts.
+		Builds stacked contribution charts by repository.
 """
 
 import argparse
@@ -43,9 +31,15 @@ import plotly.graph_objects as go
 from colorama import Cursor, Fore, Style
 from tqdm import tqdm
 
-from analyze_git_repo_loc.chart_builder import ChartBuilder, ChartStrategy
-from analyze_git_repo_loc.colored_console_printer import ColoredConsolePrinter
-from analyze_git_repo_loc.markdown_summary import generate_markdown_summary
+from analyze_git_repo_loc.analysis_helpers import (
+    prepare_author_contribution_data,
+    prepare_summary_data,
+    prepare_trend_data,
+)
+from analyze_git_repo_loc.chart_builder import ChartBuilder, ChartStrategy      
+from analyze_git_repo_loc.colored_console_printer import ColoredConsolePrinter  
+from analyze_git_repo_loc.html_report import generate_html_report
+from analyze_git_repo_loc.markdown_summary import generate_markdown_summary     
 from analyze_git_repo_loc.utils import (
     analyze_git_repositories,
     analyze_trends,
@@ -58,7 +52,7 @@ from analyze_git_repo_loc.utils import (
 
 def main() -> None:
     """
-    main function to execute the program.
+    Main function to execute the program.
     """
     # Parsing command line arguments
     parser = argparse.ArgumentParser(
@@ -210,6 +204,18 @@ def main() -> None:
             no_plot_show=args.no_plot_show,
         )
 
+    try:
+        generate_html_report(
+            output_dir=output_dir,
+            charts_root=Path(args.output),
+            time_interval=time_interval,
+            language_analysis=language_analysis,
+            author_analysis=author_analysis,
+            repository_trend_analysis=repository_trend_analysis,
+        )
+    except OSError as ex:
+        handle_exception(ex)
+
     console.print_h1("\n# LOC Analyze")
     print(Cursor.UP() + Cursor.FORWARD(50) + Fore.GREEN + "FINISH")
 
@@ -233,112 +239,6 @@ def save_analysis_data(
     # dictからname key, data valueを取り出して、name.csvとして保存
     for name, data in tqdm(data_list.items(), desc="Saving analyzed data"):
         data.to_csv(output_dir / f"{name}.csv", index=False)
-
-
-def prepare_trend_data(
-    data: pd.DataFrame, time_interval: str, category_column: str
-) -> pd.DataFrame:
-    """
-    Prepare trend data for the trend chart.
-
-    Args:
-        data (pd.DataFrame): The data to prepare the trend.
-        time_interval (str): The interval to group by.
-        category_column (str): The column name to group by.
-
-    Returns:
-        pd.DataFrame: The trend data for the trend chart.
-    """
-    # Sort and group the data
-    grouped_data = (
-        data.sort_values(by=[time_interval, category_column])
-        .groupby([time_interval, category_column], as_index=False)["NLOC"]
-        .sum()
-    )
-    # Calculate cumulative sum
-    grouped_data["SUM"] = grouped_data.groupby(category_column)["NLOC"].cumsum()
-
-    # Pivot the data
-    trend_data = (
-        grouped_data.pivot(index=time_interval, columns=category_column, values="SUM")
-        .reset_index()
-        .ffill()
-    )
-    # Sort the columns by the last value
-    sorted_columns = (
-        trend_data.iloc[-1, 1:]
-        .infer_objects(copy=False)
-        .sort_values(ascending=False)
-        .index.tolist()
-    )
-    trend_data = trend_data.loc[:, [time_interval] + sorted_columns]
-
-    return trend_data
-
-
-def prepare_summary_data(data: pd.DataFrame, time_interval: str) -> pd.DataFrame:
-    """
-    Prepare summary data for the trend chart.
-
-    Args:
-        data (pd.DataFrame): The data to prepare the summary.
-        time_interval (str): The interval to group by.
-
-    Returns:
-        pd.DataFrame: The summary data for the trend chart.
-    """
-    # Group by the specified time interval and aggregate required columns
-    summary_data = (
-        data.groupby(time_interval)
-        .agg(
-            Added=pd.NamedAgg(column="NLOC_Added", aggfunc="sum"),
-            Deleted=pd.NamedAgg(column="NLOC_Deleted", aggfunc="sum"),
-            NLOC=pd.NamedAgg(column="NLOC", aggfunc="sum"),
-        )
-        .reset_index()
-    )
-    summary_data["SUM"] = summary_data["NLOC"].cumsum()
-    summary_data["Diff"] = summary_data["SUM"].diff()
-    summary_data["Mean"] = summary_data["Diff"].mean()
-    return summary_data
-
-
-def prepare_author_contribution_data(data: pd.DataFrame) -> pd.DataFrame:
-    """
-    Prepare author contribution data for the bar chart.
-
-    Args:
-        data (pd.DataFrame): The data to prepare the author contribution.
-
-    Returns:
-        pd.DataFrame: The author contribution data for the trend chart.
-    """
-    contribution_data = data.groupby(["Author", "Repository"], as_index=False)[
-        "NLOC"
-    ].sum()
-    # Pivot the data to create a summary with Authors as index
-    summary_data = contribution_data.pivot(
-        index="Author", columns="Repository", values="NLOC"
-    ).fillna(0)
-
-    # Sort the columns by the last value
-    sorted_columns = (
-        summary_data.iloc[-1]
-        .infer_objects(copy=False)
-        .sort_values(ascending=False)
-        .index.tolist()
-    )
-    # Reorder the summary_data
-    summary_data = summary_data[sorted_columns].reset_index()
-    # Sort the rows by total contributions across repositories in descending order
-    summary_data["Total"] = summary_data.iloc[:, 1:].sum(axis=1)
-    summary_data = (
-        summary_data.sort_values(by="Total", ascending=False)
-        .drop(columns="Total")
-        .reset_index(drop=True)
-    )
-
-    return summary_data
 
 
 def generate_trend_chart(

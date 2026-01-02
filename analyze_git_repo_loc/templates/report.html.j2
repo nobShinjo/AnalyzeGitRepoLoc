@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LOC Analysis Report</title>
+  <link rel="stylesheet" href="{{ assets_dir }}/tabler.min.css">
+  <script src="{{ assets_dir }}/plotly.min.js"></script>
+</head>
+<body>
+  <div class="page">
+    <div class="navbar">
+      <div class="navbar-brand">Analyze Git Repo LOC</div>
+    </div>
+    <main class="container">
+      <div class="page-header">
+        <h1 class="page-title">LOC Analysis Report</h1>
+        <div class="text-muted">Generated at {{ generated_at }}</div>
+      </div>
+      <div data-tab-container="true">
+        <ul class="nav-tabs">
+          {% for tab in tabs %}
+          <li>
+            <a class="nav-link{% if tab.active %} active{% endif %}" href="#{{ tab.id }}" data-tab-target="#{{ tab.id }}">{{ tab.label }}</a>
+          </li>
+          {% endfor %}
+        </ul>
+        <div class="tab-content">
+          {% include "overview.html.j2" %}
+          {% for repo_tab in repo_tabs %}
+          {% include "repo_tab.html.j2" %}
+          {% endfor %}
+        </div>
+      </div>
+    </main>
+  </div>
+  <script src="{{ assets_dir }}/tabler.min.js"></script>
+</body>
+</html>
