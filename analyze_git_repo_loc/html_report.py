@@ -22,7 +22,6 @@ from __future__ import annotations
 
 import html
 import json
-import math
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -48,8 +47,7 @@ _LANGUAGE_CHART_FILENAME = "language_chart.html"
 _AUTHOR_CHART_FILENAME = "author_chart.html"
 _REPOSITORY_CHART_FILENAME = "repository_chart.html"
 _AUTHOR_CONTRIBUTION_CHART_FILENAME = "author_contribution_contribution_chart.html"
-_FILTER_PROGRESS_TARGET_UPDATES = 50
-_FILTER_PROGRESS_MIN_CHUNK = 200
+_FILTER_PROGRESS_CHUNK = 1000
 _PARENT_PROGRESS_STEPS = 4
 
 
@@ -209,12 +207,11 @@ class HtmlReportBuilder:
         Build the HTML report contents.
         """
         detail_data = self._aggregate_detail_analysis()
-        filter_chunk_size = self._compute_filter_chunk_size(len(detail_data))
         template = self._template_env.get_template("report.html.j2")
         context = self._build_template_context(
             detail_data=detail_data,
             progress_callback=progress_callback,
-            filter_chunk_size=filter_chunk_size,
+            filter_chunk_size=_FILTER_PROGRESS_CHUNK,
         )
         if progress_callback is not None:
             progress_callback(ProgressEvent(label="Render template", advance=0))
@@ -228,7 +225,7 @@ class HtmlReportBuilder:
         *,
         detail_data: pd.DataFrame,
         progress_callback: ProgressCallback | None = None,
-        filter_chunk_size: int = _FILTER_PROGRESS_MIN_CHUNK,
+        filter_chunk_size: int = _FILTER_PROGRESS_CHUNK,
     ) -> dict[str, object]:
         """
         Build the template context for rendering.
@@ -281,7 +278,7 @@ class HtmlReportBuilder:
         *,
         detail_data: pd.DataFrame,
         progress_callback: ProgressCallback | None = None,
-        chunk_size: int = _FILTER_PROGRESS_MIN_CHUNK,
+        chunk_size: int = _FILTER_PROGRESS_CHUNK,
     ) -> dict[str, object]:
         """
         Build the payload used for client-side report filtering.
@@ -340,7 +337,7 @@ class HtmlReportBuilder:
         detail_data: pd.DataFrame,
         *,
         progress_callback: ProgressCallback | None = None,
-        chunk_size: int = _FILTER_PROGRESS_MIN_CHUNK,
+        chunk_size: int = _FILTER_PROGRESS_CHUNK,
     ) -> list[dict[str, object]]:
         """
         Serialize filter rows for embedding in the HTML report.
@@ -534,15 +531,6 @@ class HtmlReportBuilder:
                 ProgressEvent(label="Repo tabs", kind="child", done=True)
             )
         return contexts
-
-    def _compute_filter_chunk_size(self, total_rows: int) -> int:
-        """
-        Compute filter row progress chunk size based on total rows.
-        """
-        if total_rows <= 0:
-            return _FILTER_PROGRESS_MIN_CHUNK
-        chunk_size = math.ceil(total_rows / _FILTER_PROGRESS_TARGET_UPDATES)
-        return max(_FILTER_PROGRESS_MIN_CHUNK, chunk_size)
 
     def _subset_by_repo(self, data: pd.DataFrame, repository: str) -> pd.DataFrame:
         """
