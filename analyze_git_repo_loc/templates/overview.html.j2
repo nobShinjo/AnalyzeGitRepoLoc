@@ -1,0 +1,72 @@
+<div class="tab-pane active" id="overview">
+  <div class="row">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-header">Run Overview</div>
+        <div class="card-body">
+          <ul class="meta-list">
+            {% for item in overview.meta_items %}
+            <li>{{ item.label }}: {{ item.value }}</li>
+            {% endfor %}
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="row">
+    <div class="col">
+      <div class="card">
+        <div class="card-header">Totals</div>
+        <div class="card-body">
+          {{ overview.totals_table | safe }}
+        </div>
+      </div>
+    </div>
+    <div class="col">
+      <div class="card">
+        <div class="card-header">Languages (Top 10)</div>
+        <div class="card-body">
+          {{ overview.language_table | safe }}
+        </div>
+      </div>
+    </div>
+    <div class="col">
+      <div class="card">
+        <div class="card-header">Authors (Top 10)</div>
+        <div class="card-body">
+          {{ overview.author_table | safe }}
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="row">
+    <div class="col">
+      <div class="card">
+        <div class="card-header">Repositories (Top 10)</div>
+        <div class="card-body">
+          {{ overview.repo_table | safe }}
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="row">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-header">Repository Trend</div>
+        <div class="card-body">
+          {{ overview.repo_trend_chart | safe }}
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="row">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-header">Author Contribution</div>
+        <div class="card-body">
+          {{ overview.author_contrib_chart | safe }}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

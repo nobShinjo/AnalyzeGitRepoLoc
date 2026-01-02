@@ -503,3 +503,13 @@ Remember: Specs are truth. Changes are proposals. Keep them in sync.
 
 - If `markdownlint --fix` cannot automatically resolve some issues, leave those
   files unchanged and proceed.
+
+## Docstrings
+
+- File header docstrings MUST include:
+  - A one-line summary.
+  - A Description section (up to ~5 lines).
+  - Classes/Functions/Methods sections only when public items exist
+    (omit the section entirely when none).
+  - Classes/Functions/Methods list only public items and add a few-line summary
+    with a tab indentation for each item.

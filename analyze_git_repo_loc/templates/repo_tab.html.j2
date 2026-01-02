@@ -1,0 +1,57 @@
+<div class="tab-pane" id="{{ repo_tab.id }}">
+  <div class="row">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-header">Repository: {{ repo_tab.name }}</div>
+        <div class="card-body">
+          <div class="row">
+            <div class="col">
+              <div class="card">
+                <div class="card-header">Totals</div>
+                <div class="card-body">
+                  {{ repo_tab.totals_table | safe }}
+                </div>
+              </div>
+            </div>
+            <div class="col">
+              <div class="card">
+                <div class="card-header">Languages (Top 10)</div>
+                <div class="card-body">
+                  {{ repo_tab.language_table | safe }}
+                </div>
+              </div>
+            </div>
+            <div class="col">
+              <div class="card">
+                <div class="card-header">Authors (Top 10)</div>
+                <div class="card-body">
+                  {{ repo_tab.author_table | safe }}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="row">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-header">Language Trend</div>
+        <div class="card-body">
+          {{ repo_tab.language_chart | safe }}
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="row">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-header">Author Trend</div>
+        <div class="card-body">
+          {{ repo_tab.author_chart | safe }}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
