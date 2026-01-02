@@ -14,8 +14,10 @@ requirements and proposal dependencies.
 - [x] 5. add-cache-diff-analysis
 - [x] ~~6. add-period-diff~~
 - [x] 7. add-markdown-summary
-- [ ] 8. add-html-report
-- [ ] 9. add-report-filters
+- [x] 8. add-html-report
+- [x] 9. add-report-filters
+- [ ] 10. update-plot-display-behavior
+- [ ] 11. add-html-report-progress
 
 ## Dependency Notes
 
