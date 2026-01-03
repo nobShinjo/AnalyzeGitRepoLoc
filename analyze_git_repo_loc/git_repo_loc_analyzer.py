@@ -15,7 +15,9 @@ Functions:
         Checks if a line is a comment or an empty line.
     load_cache() -> pd.DataFrame:
         Loads the cached commit data from the cache directory.
-    get_commit_analysis() -> pd.DataFrame:
+    get_commit_analysis(
+        progress_callback: Callable[[str, int], None] | None = None
+    ) -> pd.DataFrame:
         Analyzes the commits in the repository and returns a DataFrame with
         the analyzed commit data.
     save_cache() -> None:
@@ -27,6 +29,7 @@ Functions:
 import json
 import os
 import sys
+from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Union
@@ -372,7 +375,92 @@ class GitRepoLOCAnalyzer:
             return True
         return False
 
-    def get_commit_analysis(self) -> pd.DataFrame:
+    @staticmethod
+    def _create_progress_tracker(
+        progress_callback: Callable[[str, int], None] | None,
+        total_commits: int,
+    ) -> tuple[Callable[[int], None], Callable[[], None]]:
+        """
+        Build a progress tracker for commit analysis.
+        """
+        if progress_callback is None:
+            return (lambda _step: None), (lambda: None)
+
+        def safe_progress(kind: str, value: int) -> None:
+            try:
+                progress_callback(kind, value)
+            except (AttributeError, EOFError, OSError, TypeError, ValueError):
+                # Ignore callback errors to avoid breaking analysis.
+                return
+
+        safe_progress("total", total_commits)
+        update_interval = max(1, total_commits // 100)
+        pending_updates = 0
+
+        def record(step: int) -> None:
+            nonlocal pending_updates
+            pending_updates += step
+            if pending_updates >= update_interval:
+                safe_progress("advance", pending_updates)
+                pending_updates = 0
+
+        def flush() -> None:
+            if pending_updates:
+                safe_progress("advance", pending_updates)
+
+        return record, flush
+
+    def _append_commit_rows(
+        self,
+        commit: object,
+        repository_name: str,
+        cache_lookup: dict[str, list[dict]] | None,
+        commit_data_list: list[dict],
+    ) -> bool:
+        """
+        Append commit data rows for a single commit.
+        """
+        commit_hash = commit.hash
+        if self._apply_cached_commit(commit_hash, cache_lookup, commit_data_list):
+            return True
+        commit_datetime = commit.committer_date
+        commit_author = commit.author.name
+        for mod in commit.modified_files:
+            language = LanguageExtensions.get_language(mod.filename)
+            if self._should_skip_modification(mod, language):
+                continue
+
+            # NOTE: diff_parsed is a list of tuples (line_number, line)
+            nloc_added = sum(
+                1
+                for _, diff in mod.diff_parsed.get("added", [])
+                if not self.is_comment_or_empty_line(diff, language)
+            )
+            nloc_deleted = sum(
+                1
+                for _, diff in mod.diff_parsed.get("deleted", [])
+                if not self.is_comment_or_empty_line(diff, language)
+            )
+            nloc = nloc_added - nloc_deleted
+
+            commit_data_list.append(
+                {
+                    "Datetime": commit_datetime,
+                    "Repository": repository_name,
+                    "Branch": self._branch_name,
+                    "Commit_hash": commit_hash,
+                    "Author": commit_author,
+                    "Language": language,
+                    "NLOC_Added": nloc_added,
+                    "NLOC_Deleted": nloc_deleted,
+                    "NLOC": nloc,
+                }
+            )
+        return False
+
+    def get_commit_analysis(
+        self, progress_callback: Callable[[str, int], None] | None = None
+    ) -> pd.DataFrame:
         """
         Analyzes the commits in the repository and returns a DataFrame with the following columns:
         - Datetime: The date of the commit.
@@ -384,9 +472,16 @@ class GitRepoLOCAnalyzer:
         - NLOC_Deleted: The number of net lines of code deleted.
         - NLOC: The net lines of code (NLOC_Added - NLOC_Deleted).
 
+        Args:
+            progress_callback (Callable[[str, int], None] | None): Optional
+                callback that receives progress events. The callback is called
+                with ("total", commit_count) once and ("advance", step) as
+                commits are processed.
+
         Returns:
             pd.DataFrame: A DataFrame containing the analyzed commit data.
         """
+
         repository = self._build_repository()
 
         # temporary list to store commit data
@@ -399,6 +494,13 @@ class GitRepoLOCAnalyzer:
             use_cache_resume,
         ) = self._prepare_cache_state(commits)
 
+        total_commits = len(commits_to_analyze)
+        record_progress, flush_progress = self._create_progress_tracker(
+            progress_callback,
+            total_commits,
+        )
+        repository_name = GitRepoLOCAnalyzer.get_repository_name(self._repo_path)
+
         # Traverse commits
         for commit in tqdm(
             commits_to_analyze,
@@ -407,48 +509,14 @@ class GitRepoLOCAnalyzer:
             unit="commit",
             disable=not self._show_progress,
         ):
-            commit_datetime = commit.committer_date
-            repository_name = GitRepoLOCAnalyzer.get_repository_name(self._repo_path)
-            commit_hash = commit.hash
-            commit_author = commit.author.name
-
-            if self._apply_cached_commit(commit_hash, cache_lookup, commit_data_list):
-                continue
-
-            # Traverse modified files
-            for mod in commit.modified_files:
-                # Get the programming language of the modified file
-                language = LanguageExtensions.get_language(mod.filename)
-                if self._should_skip_modification(mod, language):
-                    continue
-
-                # Calculate add LOC, delete LOC, net LOC
-                # NOTE: diff_parsed is a list of tuples (line_number, line)
-                nloc_added = sum(
-                    1
-                    for _, diff in mod.diff_parsed.get("added", [])
-                    if not self.is_comment_or_empty_line(diff, language)
-                )
-                nloc_deleted = sum(
-                    1
-                    for _, diff in mod.diff_parsed.get("deleted", [])
-                    if not self.is_comment_or_empty_line(diff, language)
-                )
-                nloc = nloc_added - nloc_deleted
-
-                commit_data_list.append(
-                    {
-                        "Datetime": commit_datetime,
-                        "Repository": repository_name,
-                        "Branch": self._branch_name,
-                        "Commit_hash": commit_hash,
-                        "Author": commit_author,
-                        "Language": language,
-                        "NLOC_Added": nloc_added,
-                        "NLOC_Deleted": nloc_deleted,
-                        "NLOC": nloc,
-                    }
-                )
+            self._append_commit_rows(
+                commit,
+                repository_name,
+                cache_lookup,
+                commit_data_list,
+            )
+            record_progress(1)
+        flush_progress()
         if use_cache_resume and self._cache_commit_data is not None:
             commit_data_list.extend(self._cache_commit_data.to_dict("records"))
         # Create DataFrame from list in a single operation

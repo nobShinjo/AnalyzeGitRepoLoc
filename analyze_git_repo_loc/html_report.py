@@ -49,6 +49,8 @@ _REPOSITORY_CHART_FILENAME = "repository_chart.html"
 _AUTHOR_CONTRIBUTION_CHART_FILENAME = "author_contribution_contribution_chart.html"
 _FILTER_PROGRESS_CHUNK = 1000
 _PARENT_PROGRESS_STEPS = 4
+_LABEL_REPO_TABS = "Repo tabs"
+_LABEL_FILTER_ROWS = "Filter rows"
 
 
 @dataclass(frozen=True)
@@ -114,9 +116,7 @@ class HtmlReportBuilder:
         report_html = self._build_report_html(progress_callback=progress_callback)
         (self.output_dir / "report.html").write_text(report_html, encoding="utf-8")
         if progress_callback is not None:
-            progress_callback(
-                ProgressEvent(label="Report file written", advance=1)
-            )
+            progress_callback(ProgressEvent(label="Report file written", advance=1))
 
     def _ensure_assets(self) -> None:
         """
@@ -244,7 +244,7 @@ class HtmlReportBuilder:
         if progress_callback is not None:
             progress_callback(
                 ProgressEvent(
-                    label="Repo tabs",
+                    label=_LABEL_REPO_TABS,
                     advance=0,
                     total=_PARENT_PROGRESS_STEPS,
                 )
@@ -253,8 +253,8 @@ class HtmlReportBuilder:
             tab_ids, progress_callback=progress_callback
         )
         if progress_callback is not None:
-            progress_callback(ProgressEvent(label="Repo tabs", advance=1))
-            progress_callback(ProgressEvent(label="Filter rows", advance=0))
+            progress_callback(ProgressEvent(label=_LABEL_REPO_TABS, advance=1))
+            progress_callback(ProgressEvent(label=_LABEL_FILTER_ROWS, advance=0))
         filter_payload = self._build_filter_payload(
             repo_tabs_meta,
             detail_data=detail_data,
@@ -262,7 +262,7 @@ class HtmlReportBuilder:
             chunk_size=filter_chunk_size,
         )
         if progress_callback is not None:
-            progress_callback(ProgressEvent(label="Filter rows", advance=1))
+            progress_callback(ProgressEvent(label=_LABEL_FILTER_ROWS, advance=1))
         return {
             "assets_dir": _ASSETS_DIR_NAME,
             "generated_at": generated_at,
@@ -346,7 +346,7 @@ class HtmlReportBuilder:
             if progress_callback is not None:
                 progress_callback(
                     ProgressEvent(
-                        label="Filter rows",
+                        label=_LABEL_FILTER_ROWS,
                         advance=0,
                         total=0,
                         kind="child",
@@ -359,7 +359,7 @@ class HtmlReportBuilder:
         if progress_callback is not None:
             progress_callback(
                 ProgressEvent(
-                    label="Filter rows",
+                    label=_LABEL_FILTER_ROWS,
                     advance=0,
                     total=total_rows,
                     kind="child",
@@ -374,14 +374,14 @@ class HtmlReportBuilder:
             if progress_callback is not None:
                 progress_callback(
                     ProgressEvent(
-                        label="Filter rows",
+                        label=_LABEL_FILTER_ROWS,
                         advance=len(chunk),
                         kind="child",
                     )
                 )
         if progress_callback is not None:
             progress_callback(
-                ProgressEvent(label="Filter rows", kind="child", done=True)
+                ProgressEvent(label=_LABEL_FILTER_ROWS, kind="child", done=True)
             )
         return rows
 
@@ -407,7 +407,9 @@ class HtmlReportBuilder:
         chunk["Author"] = chunk["Author"].astype(str)
         chunk["Language"] = chunk["Language"].astype(str)
         for col in ["NLOC_Added", "NLOC_Deleted", "NLOC"]:
-            chunk[col] = pd.to_numeric(chunk[col], errors="coerce").fillna(0).astype(int)
+            chunk[col] = (
+                pd.to_numeric(chunk[col], errors="coerce").fillna(0).astype(int)
+            )
         return chunk.rename(
             columns={
                 interval_col: "interval",
@@ -493,13 +495,13 @@ class HtmlReportBuilder:
         if progress_callback is not None:
             progress_callback(
                 ProgressEvent(
-                    label="Repo tabs",
+                    label=_LABEL_REPO_TABS,
                     advance=0,
                     total=total_repos,
                     kind="child",
                 )
             )
-        for index, (repo, tab_id) in enumerate(tab_ids, start=1):
+        for repo, tab_id in tab_ids:
             repo_lang = self._subset_by_repo(self.language_analysis, repo)
             repo_author = self._subset_by_repo(self.author_analysis, repo)
             repo_trend = self._subset_by_repo(self.repository_trend_analysis, repo)
@@ -538,14 +540,14 @@ class HtmlReportBuilder:
             if progress_callback is not None:
                 progress_callback(
                     ProgressEvent(
-                        label="Repo tabs",
+                        label=_LABEL_REPO_TABS,
                         advance=1,
                         kind="child",
                     )
                 )
         if progress_callback is not None:
             progress_callback(
-                ProgressEvent(label="Repo tabs", kind="child", done=True)
+                ProgressEvent(label=_LABEL_REPO_TABS, kind="child", done=True)
             )
         return contexts
 

@@ -14,10 +14,19 @@ Functions:
 
 import argparse
 import os
+import queue as queue_module
+import shutil
 import sys
 import traceback
+from concurrent.futures import (  # pylint: disable=no-name-in-module
+    ProcessPoolExecutor,
+    as_completed,
+)
 from datetime import date, datetime
+from multiprocessing import Manager
+from multiprocessing.managers import SyncManager
 from pathlib import Path
+from threading import Event, Thread
 
 import pandas as pd
 from tqdm import tqdm
@@ -29,6 +38,12 @@ from analyze_git_repo_loc.remote_repos import RemoteRepoManager
 from analyze_git_repo_loc.yaml_config import merge_yaml_config
 
 _REMOTE_REPO_MANAGER = RemoteRepoManager()
+
+_REPO_EVENT_START = "start"
+_REPO_EVENT_TOTAL = "total"
+_REPO_EVENT_ADVANCE = "advance"
+_REPO_EVENT_FINISH = "finish"
+_REPO_EVENT_STOP = "stop"
 
 
 def parse_repos_paths(
@@ -98,7 +113,7 @@ def _normalize_optional_text(value: str | None) -> str | None:
     return normalized or None
 
 
-def _normalize_optional_list(values: list[str] | None) -> list[str] | None:     
+def _normalize_optional_list(values: list[str] | None) -> list[str] | None:
     """
     Normalize optional list input by trimming items and dropping empties.
 
@@ -153,6 +168,136 @@ def _normalize_optional_int(value: int | str | None, label: str) -> int | None:
     return parsed
 
 
+def _emit_repo_progress(
+    progress_queue: object | None,
+    kind: str,
+    repository_index: int,
+    repository_name: str,
+    value: int = 0,
+) -> None:
+    """
+    Emit a repository progress event when configured.
+
+    Args:
+        progress_queue (object | None): Queue-like object for events.
+        kind (str): Event kind ("start", "total", "advance", or "finish").
+        repository_index (int): Repository index for the event.
+        repository_name (str): Repository name for the event.
+        value (int): Optional value for total/advance events.
+    """
+    if progress_queue is None:
+        return
+    try:
+        progress_queue.put((kind, repository_index, repository_name, value))
+    except (AttributeError, EOFError, OSError, ValueError):
+        # Ignore queue errors to avoid breaking analysis.
+        return
+
+
+def _truncate_repo_label(name: str, max_width: int) -> str:
+    """
+    Truncate a repository label to fit within a width constraint.
+
+    Args:
+        active_repos (list[str]): Active repository names.
+        max_width (int): Maximum width for the formatted text.
+
+    Returns:
+        str: Formatted active repository list.
+    """
+    if len(name) <= max_width:
+        return name
+    trimmed = name[: max(0, max_width - 1)]
+    return trimmed + "…"
+
+
+def _apply_repo_progress_event(
+    *,
+    kind: str,
+    bar: tqdm | None,
+    label: str,
+    value: int,
+) -> bool:
+    """
+    Apply a repository progress event to a child progress bar.
+
+    Args:
+        kind (str): Event kind.
+        bar (tqdm | None): Target progress bar, if available.
+        label (str): Repository label for display.
+        value (int): Event payload value.
+
+    Returns:
+        bool: True to continue listening, False to stop.
+    """
+    if kind == _REPO_EVENT_STOP:
+        return False
+    if bar is None:
+        return True
+    if kind == _REPO_EVENT_START:
+        bar.set_description_str(f"Repo: {label} (running)")
+        bar.refresh()
+    elif kind == _REPO_EVENT_TOTAL:
+        total = max(0, int(value))
+        bar.total = total
+        bar.n = 0
+        bar.refresh()
+    elif kind == _REPO_EVENT_ADVANCE:
+        step = max(0, int(value))
+        if step:
+            bar.update(step)
+    elif kind == _REPO_EVENT_FINISH:
+        if bar.n < bar.total:
+            bar.update(bar.total - bar.n)
+        bar.set_description_str(f"Repo: {label} (done)")
+        bar.refresh()
+    return True
+
+
+def _start_repo_progress_listener(
+    *,
+    progress_queue: object,
+    repo_bars: dict[int, tqdm],
+    repo_labels: dict[int, str],
+) -> tuple[Event, Thread]:
+    """
+    Start a background listener that updates repository child progress bars.
+
+    Args:
+        progress_queue (object): Queue-like object for events.
+        repo_bars (dict[int, tqdm]): Repository progress bars by index.
+        repo_labels (dict[int, str]): Repository labels by index.
+
+    Returns:
+        tuple[Event, Thread]: Stop event and listener thread.
+    """
+    stop_event = Event()
+
+    def loop() -> None:
+        while True:
+            try:
+                kind, repository_index, repository_name, value = progress_queue.get(
+                    timeout=0.1
+                )
+            except queue_module.Empty:
+                if stop_event.is_set():
+                    break
+                continue
+            bar = repo_bars.get(repository_index)
+            label = repo_labels.get(repository_index, repository_name)
+            if not _apply_repo_progress_event(
+                kind=kind,
+                bar=bar,
+                label=label,
+                value=value,
+            ):
+                break
+
+    thread = Thread(target=loop, daemon=True)
+    thread.start()
+    return stop_event, thread
+
+
 def _parse_optional_iso_date(
     value: str | date | datetime | None,
     label: str,
@@ -198,7 +343,7 @@ def _validate_date_range(since: datetime | None, until: datetime | None) -> None
         raise ValueError("Invalid date range: --since must be on or before --until.")
 
 
-def parse_arguments(parser: argparse.ArgumentParser) -> argparse.Namespace:     
+def parse_arguments(parser: argparse.ArgumentParser) -> argparse.Namespace:
     """
     parse_arguments Parse command line arguments.
 
@@ -464,6 +609,7 @@ def _analyze_single_repository(
     languages: list[str] | None,
     clear_cache: bool,
     show_progress: bool,
+    progress_queue: object | None = None,
 ) -> tuple[int, str, pd.DataFrame]:
     """
     Analyze a single repository and return its index, name, and LOC data.
@@ -474,6 +620,12 @@ def _analyze_single_repository(
         os.environ["ANALYZE_GIT_REPO_LOC_LOG_AUTH"] = "0"
     console = ColoredConsolePrinter() if show_progress else None
     repository_name = GitRepoLOCAnalyzer.get_repository_name(repo_path)
+    _emit_repo_progress(
+        progress_queue,
+        _REPO_EVENT_START,
+        index,
+        repository_name,
+    )
     if show_progress and console is not None:
         console.print_h1("\n")
         console.print_h1(
@@ -481,41 +633,62 @@ def _analyze_single_repository(
         )
         if exclude_dirs is not None:
             console.print_h1(f"## Excluded directories:{exclude_dirs}")
+    try:
+        analysis_repo_path = _resolve_analysis_repo_path(
+            repo_path=repo_path,
+            branch_name=branch_name,
+            cache_dir=output_dir / ".cache",
+        )
 
-    analysis_repo_path = _resolve_analysis_repo_path(
-        repo_path=repo_path,
-        branch_name=branch_name,
-        cache_dir=output_dir / ".cache",
-    )
+        analyzer = _create_analyzer(
+            analysis_repo_path=analysis_repo_path,
+            repo_ref=repo_path,
+            branch_name=branch_name,
+            cache_dir=output_dir / ".cache",
+            output_dir=output_dir,
+            since=since,
+            until=until,
+            authors=authors,
+            languages=languages,
+            exclude_dirs=exclude_dirs,
+            show_progress=show_progress,
+        )
 
-    analyzer = _create_analyzer(
-        analysis_repo_path=analysis_repo_path,
-        repo_ref=repo_path,
-        branch_name=branch_name,
-        cache_dir=output_dir / ".cache",
-        output_dir=output_dir,
-        since=since,
-        until=until,
-        authors=authors,
-        languages=languages,
-        exclude_dirs=exclude_dirs,
-        show_progress=show_progress,
-    )
+        _maybe_clear_cache(
+            analyzer=analyzer,
+            console=console,
+            clear_cache=clear_cache,
+            show_progress=show_progress,
+        )
 
-    _maybe_clear_cache(
-        analyzer=analyzer,
-        console=console,
-        clear_cache=clear_cache,
-        show_progress=show_progress,
-    )
+        def progress_callback(kind: str, value: int) -> None:
+            event_kind = _REPO_EVENT_ADVANCE
+            if kind == "total":
+                event_kind = _REPO_EVENT_TOTAL
+            _emit_repo_progress(
+                progress_queue,
+                event_kind,
+                index,
+                repository_name,
+                value,
+            )
 
-    loc_data = analyzer.get_commit_analysis()
-    analyzer.save_cache()
+        loc_data = analyzer.get_commit_analysis(
+            progress_callback=progress_callback if progress_queue is not None else None
+        )
+        analyzer.save_cache()
 
-    repo_output_dir = _ensure_repo_output_dir(output_dir, repository_name)
-    loc_data.to_csv(repo_output_dir / "loc_data.csv")
+        repo_output_dir = _ensure_repo_output_dir(output_dir, repository_name)
+        loc_data.to_csv(repo_output_dir / "loc_data.csv")
 
-    return index, repository_name, loc_data
+        return index, repository_name, loc_data
+    finally:
+        _emit_repo_progress(
+            progress_queue,
+            _REPO_EVENT_FINISH,
+            index,
+            repository_name,
+        )
 
 
 def _ensure_repo_output_dir(output_dir: Path, repository_name: str) -> Path:
@@ -605,7 +778,162 @@ def analyze_trends(
     return pd.concat([analysis_data, trends_data], ignore_index=True)
 
 
-def analyze_git_repositories(args: argparse.Namespace) -> list[pd.DataFrame]:   
+def _resolve_exclude_dirs(
+    args: argparse.Namespace, exclude_dirs: list[Path] | None
+) -> list[Path] | None:
+    """
+    Resolve excluded directories, preferring CLI overrides when provided.
+    """
+    if args.exclude_dirs is not None:
+        return args.exclude_dirs
+    return exclude_dirs
+
+
+def _analyze_repositories_sequential(
+    *,
+    args: argparse.Namespace,
+    repo_entries: list[tuple[Path | str, str, list[Path] | None]],
+    progress: tqdm,
+    results: dict[int, pd.DataFrame],
+) -> None:
+    """
+    Analyze repositories sequentially and update results in-place.
+    """
+    for index, (repo_path, branch_name, exclude_dirs) in enumerate(repo_entries):
+        resolved_excludes = _resolve_exclude_dirs(args, exclude_dirs)
+        try:
+            _, _, loc_data = _analyze_single_repository(
+                index=index,
+                repo_path=repo_path,
+                branch_name=branch_name,
+                exclude_dirs=resolved_excludes,
+                output_dir=args.output,
+                since=args.since,
+                until=args.until,
+                authors=args.author_name,
+                languages=args.lang,
+                clear_cache=args.clear_cache,
+                show_progress=True,
+            )
+        except (OSError, ValueError) as ex:
+            handle_exception(ex)
+        results[index] = loc_data
+        progress.update(1)
+
+
+def _build_repo_progress_bars(
+    repo_entries: list[tuple[Path | str, str, list[Path] | None]],
+    *,
+    progress: tqdm,
+    label_width: int,
+) -> tuple[dict[int, tqdm], dict[int, str]]:
+    """
+    Build child progress bars and labels for repository analysis.
+    """
+    repo_bars: dict[int, tqdm] = {}
+    repo_labels: dict[int, str] = {}
+    for index, (repo_path, _, _) in enumerate(repo_entries):
+        repo_name = GitRepoLOCAnalyzer.get_repository_name(repo_path)
+        label = _truncate_repo_label(repo_name, label_width)
+        repo_labels[index] = label
+        repo_bars[index] = tqdm(
+            total=1,
+            desc=f"Repo: {label} (queued)",
+            position=progress.pos + 1 + index,
+            leave=False,
+        )
+    return repo_bars, repo_labels
+
+
+def _cleanup_repo_progress_listener(
+    *,
+    stop_event: Event,
+    listener_thread: Thread,
+    repo_bars: dict[int, tqdm],
+    manager: SyncManager,
+    progress_queue: object,
+) -> None:
+    """
+    Stop the progress listener and clean up related resources.
+    """
+    stop_event.set()
+    try:
+        progress_queue.put((_REPO_EVENT_STOP, -1, "", 0))
+    except (AttributeError, EOFError, OSError, ValueError):
+        pass
+    listener_thread.join()
+    for bar in repo_bars.values():
+        bar.close()
+    manager.shutdown()
+
+
+def _analyze_repositories_parallel(
+    *,
+    args: argparse.Namespace,
+    repo_entries: list[tuple[Path | str, str, list[Path] | None]],
+    worker_count: int,
+    progress: tqdm,
+    results: dict[int, pd.DataFrame],
+) -> None:
+    """
+    Analyze repositories in parallel and update results in-place.
+    """
+    futures = []
+    manager = Manager()
+    progress_queue = manager.Queue()
+    term_width = shutil.get_terminal_size((120, 20)).columns
+    label_width = max(12, min(40, term_width - 30))
+    repo_bars, repo_labels = _build_repo_progress_bars(
+        repo_entries,
+        progress=progress,
+        label_width=label_width,
+    )
+    stop_event, listener_thread = _start_repo_progress_listener(
+        progress_queue=progress_queue,
+        repo_bars=repo_bars,
+        repo_labels=repo_labels,
+    )
+    try:
+        with ProcessPoolExecutor(max_workers=worker_count) as executor:
+            for index, (repo_path, branch_name, exclude_dirs) in enumerate(
+                repo_entries
+            ):
+                resolved_excludes = _resolve_exclude_dirs(args, exclude_dirs)
+                futures.append(
+                    executor.submit(
+                        _analyze_single_repository,
+                        index=index,
+                        repo_path=repo_path,
+                        branch_name=branch_name,
+                        exclude_dirs=resolved_excludes,
+                        output_dir=args.output,
+                        since=args.since,
+                        until=args.until,
+                        authors=args.author_name,
+                        languages=args.lang,
+                        clear_cache=args.clear_cache,
+                        show_progress=False,
+                        progress_queue=progress_queue,
+                    )
+                )
+            for future in as_completed(futures):
+                try:
+                    index, _, loc_data = future.result()
+                except (OSError, ValueError) as ex:
+                    handle_exception(ex)
+                results[index] = loc_data
+                progress.update(1)
+    finally:
+        _cleanup_repo_progress_listener(
+            stop_event=stop_event,
+            listener_thread=listener_thread,
+            repo_bars=repo_bars,
+            manager=manager,
+            progress_queue=progress_queue,
+        )
+
+
+def analyze_git_repositories(args: argparse.Namespace) -> list[pd.DataFrame]:
     """
     Analyze the LOC in the Git repositories.
 
@@ -624,69 +952,20 @@ def analyze_git_repositories(args: argparse.Namespace) -> list[pd.DataFrame]:
 
     with tqdm(total=repo_count, desc="Analyzing repositories") as progress:
         if worker_count <= 1:
-            for index, (repo_path, branch_name, exclude_dirs) in enumerate(
-                repo_entries
-            ):
-                exclude_dirs = (
-                    args.exclude_dirs
-                    if args.exclude_dirs is not None
-                    else exclude_dirs
-                )
-                try:
-                    _, _, loc_data = _analyze_single_repository(
-                        index=index,
-                        repo_path=repo_path,
-                        branch_name=branch_name,
-                        exclude_dirs=exclude_dirs,
-                        output_dir=args.output,
-                        since=args.since,
-                        until=args.until,
-                        authors=args.author_name,
-                        languages=args.lang,
-                        clear_cache=args.clear_cache,
-                        show_progress=True,
-                    )
-                except (OSError, ValueError, FileNotFoundError) as ex:
-                    handle_exception(ex)
-                results[index] = loc_data
-                progress.update(1)
+            _analyze_repositories_sequential(
+                args=args,
+                repo_entries=repo_entries,
+                progress=progress,
+                results=results,
+            )
         else:
-            from concurrent.futures import ProcessPoolExecutor, as_completed
-
-            futures = []
-            with ProcessPoolExecutor(max_workers=worker_count) as executor:
-                for index, (repo_path, branch_name, exclude_dirs) in enumerate(
-                    repo_entries
-                ):
-                    exclude_dirs = (
-                        args.exclude_dirs
-                        if args.exclude_dirs is not None
-                        else exclude_dirs
-                    )
-                    futures.append(
-                        executor.submit(
-                            _analyze_single_repository,
-                            index=index,
-                            repo_path=repo_path,
-                            branch_name=branch_name,
-                            exclude_dirs=exclude_dirs,
-                            output_dir=args.output,
-                            since=args.since,
-                            until=args.until,
-                            authors=args.author_name,
-                            languages=args.lang,
-                            clear_cache=args.clear_cache,
-                            show_progress=False,
-                        )
-                    )
-                for future in as_completed(futures):
-                    try:
-                        index, repository_name, loc_data = future.result()
-                    except (OSError, ValueError, FileNotFoundError) as ex:
-                        handle_exception(ex)
-                    results[index] = loc_data
-                    tqdm.write(f"Completed repository analysis: {repository_name}")
-                    progress.update(1)
+            _analyze_repositories_parallel(
+                args=args,
+                repo_entries=repo_entries,
+                worker_count=worker_count,
+                progress=progress,
+                results=results,
+            )
 
     for index in sorted(results.keys()):
         loc_data_repositories.append(results[index])
