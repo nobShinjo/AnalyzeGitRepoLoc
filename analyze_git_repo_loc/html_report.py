@@ -49,6 +49,8 @@ _REPOSITORY_CHART_FILENAME = "repository_chart.html"
 _AUTHOR_CONTRIBUTION_CHART_FILENAME = "author_contribution_contribution_chart.html"
 _FILTER_PROGRESS_CHUNK = 1000
 _PARENT_PROGRESS_STEPS = 4
+_LABEL_REPO_TABS = "Repo tabs"
+_LABEL_FILTER_ROWS = "Filter rows"
 
 
 @dataclass(frozen=True)
@@ -114,9 +116,7 @@ class HtmlReportBuilder:
         report_html = self._build_report_html(progress_callback=progress_callback)
         (self.output_dir / "report.html").write_text(report_html, encoding="utf-8")
         if progress_callback is not None:
-            progress_callback(
-                ProgressEvent(label="Report file written", advance=1)
-            )
+            progress_callback(ProgressEvent(label="Report file written", advance=1))
 
     def _ensure_assets(self) -> None:
         """
@@ -244,7 +244,7 @@ class HtmlReportBuilder:
         if progress_callback is not None:
             progress_callback(
                 ProgressEvent(
-                    label="Repo tabs",
+                    label=_LABEL_REPO_TABS,
                     advance=0,
                     total=_PARENT_PROGRESS_STEPS,
                 )
@@ -253,8 +253,8 @@ class HtmlReportBuilder:
             tab_ids, progress_callback=progress_callback
         )
         if progress_callback is not None:
-            progress_callback(ProgressEvent(label="Repo tabs", advance=1))
-            progress_callback(ProgressEvent(label="Filter rows", advance=0))
+            progress_callback(ProgressEvent(label=_LABEL_REPO_TABS, advance=1))
+            progress_callback(ProgressEvent(label=_LABEL_FILTER_ROWS, advance=0))
         filter_payload = self._build_filter_payload(
             repo_tabs_meta,
             detail_data=detail_data,
@@ -262,7 +262,7 @@ class HtmlReportBuilder:
             chunk_size=filter_chunk_size,
         )
         if progress_callback is not None:
-            progress_callback(ProgressEvent(label="Filter rows", advance=1))
+            progress_callback(ProgressEvent(label=_LABEL_FILTER_ROWS, advance=1))
         return {
             "assets_dir": _ASSETS_DIR_NAME,
             "generated_at": generated_at,
@@ -346,7 +346,7 @@ class HtmlReportBuilder:
             if progress_callback is not None:
                 progress_callback(
                     ProgressEvent(
-                        label="Filter rows",
+                        label=_LABEL_FILTER_ROWS,
                         advance=0,
                         total=0,
                         kind="child",
@@ -355,53 +355,72 @@ class HtmlReportBuilder:
                 )
             return []
         interval_col = self.time_interval
-        rows: list[dict[str, object]] = []
         total_rows = len(detail_data)
-        processed = 0
         if progress_callback is not None:
             progress_callback(
                 ProgressEvent(
-                    label="Filter rows",
+                    label=_LABEL_FILTER_ROWS,
                     advance=0,
                     total=total_rows,
                     kind="child",
                 )
             )
-        for _, row in detail_data.iterrows():
-            rows.append(
-                {
-                    "interval": str(row[interval_col]),
-                    "repository": str(row["Repository"]),
-                    "author": str(row["Author"]),
-                    "language": str(row["Language"]),
-                    "nloc_added": self._to_int(row["NLOC_Added"]),
-                    "nloc_deleted": self._to_int(row["NLOC_Deleted"]),
-                    "nloc": self._to_int(row["NLOC"]),
-                }
-            )
-            processed += 1
-            if progress_callback is not None and processed % chunk_size == 0:
+        rows: list[dict[str, object]] = []
+        for start in range(0, total_rows, chunk_size):
+            end = min(start + chunk_size, total_rows)
+            chunk = detail_data.iloc[start:end].copy()
+            chunk = self._transform_filter_rows(chunk, interval_col)
+            rows.extend(chunk.to_dict(orient="records"))
+            if progress_callback is not None:
                 progress_callback(
                     ProgressEvent(
-                        label="Filter rows",
-                        advance=chunk_size,
+                        label=_LABEL_FILTER_ROWS,
+                        advance=len(chunk),
                         kind="child",
                     )
                 )
-        if progress_callback is not None and processed % chunk_size:
-            remainder = processed % chunk_size
-            progress_callback(
-                ProgressEvent(
-                    label="Filter rows",
-                    advance=remainder,
-                    kind="child",
-                )
-            )
         if progress_callback is not None:
             progress_callback(
-                ProgressEvent(label="Filter rows", kind="child", done=True)
+                ProgressEvent(label=_LABEL_FILTER_ROWS, kind="child", done=True)
             )
         return rows
+
+    @staticmethod
+    def _transform_filter_rows(
+        detail_data: pd.DataFrame, interval_col: str
+    ) -> pd.DataFrame:
+        """
+        Transform detail rows into filter payload rows.
+        """
+        columns = [
+            interval_col,
+            "Repository",
+            "Author",
+            "Language",
+            "NLOC_Added",
+            "NLOC_Deleted",
+            "NLOC",
+        ]
+        chunk = detail_data.loc[:, columns].copy()
+        chunk[interval_col] = chunk[interval_col].astype(str)
+        chunk["Repository"] = chunk["Repository"].astype(str)
+        chunk["Author"] = chunk["Author"].astype(str)
+        chunk["Language"] = chunk["Language"].astype(str)
+        for col in ["NLOC_Added", "NLOC_Deleted", "NLOC"]:
+            chunk[col] = (
+                pd.to_numeric(chunk[col], errors="coerce").fillna(0).astype(int)
+            )
+        return chunk.rename(
+            columns={
+                interval_col: "interval",
+                "Repository": "repository",
+                "Author": "author",
+                "Language": "language",
+                "NLOC_Added": "nloc_added",
+                "NLOC_Deleted": "nloc_deleted",
+                "NLOC": "nloc",
+            }
+        )
 
     @staticmethod
     def _serialize_filter_payload(payload: dict[str, object]) -> str:
@@ -476,13 +495,13 @@ class HtmlReportBuilder:
         if progress_callback is not None:
             progress_callback(
                 ProgressEvent(
-                    label="Repo tabs",
+                    label=_LABEL_REPO_TABS,
                     advance=0,
                     total=total_repos,
                     kind="child",
                 )
             )
-        for index, (repo, tab_id) in enumerate(tab_ids, start=1):
+        for repo, tab_id in tab_ids:
             repo_lang = self._subset_by_repo(self.language_analysis, repo)
             repo_author = self._subset_by_repo(self.author_analysis, repo)
             repo_trend = self._subset_by_repo(self.repository_trend_analysis, repo)
@@ -521,14 +540,14 @@ class HtmlReportBuilder:
             if progress_callback is not None:
                 progress_callback(
                     ProgressEvent(
-                        label="Repo tabs",
+                        label=_LABEL_REPO_TABS,
                         advance=1,
                         kind="child",
                     )
                 )
         if progress_callback is not None:
             progress_callback(
-                ProgressEvent(label="Repo tabs", kind="child", done=True)
+                ProgressEvent(label=_LABEL_REPO_TABS, kind="child", done=True)
             )
         return contexts
 

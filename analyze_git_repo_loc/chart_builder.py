@@ -20,7 +20,7 @@ Usage example:
 """
 
 from enum import Enum
-from typing import TypeVar
+from typing import Self
 
 import pandas as pd
 import plotly.express as px
@@ -42,8 +42,6 @@ class ChartBuilder:
     A class responsible for building and displaying LOC trend by language and total LOC charts.
     """
 
-    ChartBuilderSelf = TypeVar("ChartBuilderSelf", bound="ChartBuilder")
-
     def __init__(self) -> None:
         """
         Initializes a new instance of the ChartBuilder class without any data.
@@ -56,12 +54,12 @@ class ChartBuilder:
         """ A DataFrame containing the trend data of LOC. """
         self._summary_data: pd.DataFrame
         """ A DataFrame containing the summary data of LOC and the difference of LOC. """
-        self._fig: go.Figure = None
+        self._fig: go.Figure | None = None
         """ The final Plotly figure object that contains the combined area and line plot. """
-        self._strategy: ChartStrategy = None
+        self._strategy: ChartStrategy | None = None
         """ The strategy for building the chart. """
 
-    def set_strategy(self, strategy: ChartStrategy) -> ChartBuilderSelf:
+    def set_strategy(self, strategy: ChartStrategy) -> Self:
         """
         Sets the strategy for building the chart.
 
@@ -71,14 +69,14 @@ class ChartBuilder:
             strategy (str): The strategy for building the chart.
 
         Returns:
-            ChartBuilderSelf: The instance itself, enabling method chaining.
+            Self: The instance itself, enabling method chaining.
 
         This method enables the caller to input a strategy into the chart builder instance.
         """
         self._strategy = strategy
         return self
 
-    def set_trend_data(self, trend_data: pd.DataFrame) -> ChartBuilderSelf:
+    def set_trend_data(self, trend_data: pd.DataFrame) -> Self:
         """
         Sets the trend data for the chart builder.
 
@@ -90,7 +88,7 @@ class ChartBuilder:
                                        to be visualized.
 
         Returns:
-            ChartBuilderSelf: The instance itself, enabling method chaining.
+            Self: The instance itself, enabling method chaining.
 
         This method enables the caller to input new data into the chart builder instance,
         allowing for dynamic updates and modifications of the visualization.
@@ -98,7 +96,7 @@ class ChartBuilder:
         self._trend_data = trend_data
         return self
 
-    def set_summary_data(self, summary_data: pd.DataFrame) -> ChartBuilderSelf:
+    def set_summary_data(self, summary_data: pd.DataFrame) -> Self:
         """
         Sets the summary data for the chart builder.
 
@@ -109,7 +107,7 @@ class ChartBuilder:
             summary_data (pd.DataFrame): A DataFrame containing the summary data.
 
         Returns:
-            ChartBuilderSelf: The instance of the chart builder. This allows for chaining
+            Self: The instance of the chart builder. This allows for chaining
                               method calls to configure the chart builder further.
 
         Example usage might involve setting up a series of configurations to a chart builder:
@@ -128,7 +126,7 @@ class ChartBuilder:
         self._summary_data = summary_data
         return self
 
-    def create_fig(self) -> ChartBuilderSelf:
+    def create_fig(self) -> Self:
         """
         Initializes a figure object with a single subplot for the chart.
 
@@ -136,7 +134,7 @@ class ChartBuilder:
         with predefined x and y axis titles set to "Date" and "LOC" respectively.
 
         Returns:
-            ChartBuilderSelf: The instance itself, allowing for method chaining.
+            Self: The instance itself, allowing for method chaining.
 
         This is typically used to prepare the plotting object before adding traces,
         layouts or other specific settings required for the final visualization. After calling
@@ -149,7 +147,7 @@ class ChartBuilder:
         )
         return self
 
-    def create_trend_trace(self, xaxis_column: str) -> ChartBuilderSelf:
+    def create_trend_trace(self, xaxis_column: str) -> Self:
         """
         Generates a trend trace from the trend data and appends it to the chart figure.
 
@@ -166,7 +164,7 @@ class ChartBuilder:
                                 the x-axis data for the area plot.
 
         Returns:
-            ChartBuilderSelf: The instance of the chart builder with the new trend trace
+            Self: The instance of the chart builder with the new trend trace
                                 appended to its figure. This supports chaining further
                                 configuration calls to the chart builder.
 
@@ -201,7 +199,7 @@ class ChartBuilder:
 
         return self
 
-    def create_sum_trace(self, xaxis_column: str) -> ChartBuilderSelf:
+    def create_sum_trace(self, xaxis_column: str) -> Self:
         """
         Creates and appends a summary line trace to the chart figure.
 
@@ -216,7 +214,7 @@ class ChartBuilder:
                                 the x-axis data for the line plot.
 
         Returns:
-            ChartBuilderSelf: The instance itself is returned, enabling method chaining
+            Self: The instance itself is returned, enabling method chaining
                               with other configuration functions of the chart builder.
 
         Example usage might be:
@@ -239,7 +237,7 @@ class ChartBuilder:
             data_frame=self._summary_data, x=xaxis_column, y="SUM", markers=True
         )
         for trace in fig_sum["data"]:
-            # trace["showlegend"] = False
+            # trace["showlegend"] = False  # NOSONAR
             trace["name"] = "SUM"
             trace["marker"] = {"size": 8, "color": "#636EFA"}
             trace["line"] = {"width": 2, "color": "#636EFA"}
@@ -247,7 +245,7 @@ class ChartBuilder:
 
         return self
 
-    def create_diff_trace(self, xaxis_column: str) -> ChartBuilderSelf:
+    def create_diff_trace(self, xaxis_column: str) -> Self:
         """
         Adds a differential trace to an existing plotly figure within the ChartBuilder instance.
 
@@ -267,7 +265,7 @@ class ChartBuilder:
             data_frame=self._summary_data, x=xaxis_column, y="Diff", markers=True
         )
         for trace in fig_diff["data"]:
-            # trace["showlegend"] = False
+            # trace["showlegend"] = False # NOSONAR
             trace["name"] = "Diff"
             trace["marker"] = {"size": 8, "color": "#EF553B"}
             trace["line"] = {"width": 2, "color": "#EF553B"}
@@ -275,7 +273,7 @@ class ChartBuilder:
         return self
 
     # added, deleted の棒グラフを追加するメソッド
-    def create_bar_trace(self, xaxis_column: str) -> ChartBuilderSelf:
+    def create_bar_trace(self, xaxis_column: str) -> Self:
         """
         Adds a bar trace to an existing plotly figure within the ChartBuilder instance.
 
@@ -300,7 +298,7 @@ class ChartBuilder:
 
         # Add the bar traces to the figure
         for trace in fig_bar["data"]:
-            # trace["showlegend"] = False
+            # trace["showlegend"] = False # NOSONAR
             self._fig.add_trace(trace, row=1, col=1, secondary_y=True)
 
         # Update the color of the bar traces
@@ -313,7 +311,7 @@ class ChartBuilder:
 
         return self
 
-    def create_author_contribution_trace(self) -> ChartBuilderSelf:
+    def create_author_contribution_trace(self) -> Self:
         """
         Adds a horizontal stacked bar trace to an existing plotly figure
         within the ChartBuilder instance.
@@ -350,7 +348,7 @@ class ChartBuilder:
 
         return self
 
-    def update_fig_trend(self, title: str) -> ChartBuilderSelf:
+    def update_fig_trend(self, title: str) -> Self:
         """
         Updates the axes and layout of the `_fig` attribute with a specific style.
 
@@ -363,7 +361,7 @@ class ChartBuilder:
             title (str): The title to be displayed in the chart title.
 
         Returns:
-            ChartBuilderSelf: The instance itself, enabling method chaining.
+            Self: The instance itself, enabling method chaining.
         """
         self._fig.update_xaxes(
             showline=True,
@@ -432,7 +430,7 @@ class ChartBuilder:
         )
         return self
 
-    def update_fig_author_contribution(self, title: str) -> ChartBuilderSelf:
+    def update_fig_author_contribution(self, title: str) -> Self:
         """
         Updates the axes and layout of the `_fig` attribute with a specific style.
 
@@ -445,7 +443,7 @@ class ChartBuilder:
             title (str): The title to be displayed in the chart title.
 
         Returns:
-            ChartBuilderSelf: The instance itself, enabling method chaining.
+            Self: The instance itself, enabling method chaining.
         """
         self._fig.update_xaxes(
             showline=True,
@@ -470,12 +468,12 @@ class ChartBuilder:
             title_text="Author",
             title_font_size=18,
             tickfont_size=14,
-            # range=[0, None],
+            # range=[0, None], # NOSONAR
             # autorange="max",
             # rangemode="tozero",
             # automargin=True,
             spikethickness=1,
-            # spikemode=None,
+            # spikemode=None, # NOSONAR
             # spikemode="toaxis+across",
             categoryorder="total ascending",
             automargin=True,
@@ -496,7 +494,7 @@ class ChartBuilder:
         )
         return self
 
-    def update_fig(self, title: str) -> ChartBuilderSelf:
+    def update_fig(self, title: str) -> Self:
         """
         Updates the figure based on the strategy.
 
@@ -504,7 +502,7 @@ class ChartBuilder:
             title (str): The title to be displayed in the chart title.
 
         Returns:
-            ChartBuilderSelf: The instance itself, enabling method chaining.
+            Self: The instance itself, enabling method chaining.
         """
         match self._strategy:
             case ChartStrategy.TREND:
@@ -512,7 +510,7 @@ class ChartBuilder:
             case ChartStrategy.AUTHOR_CONTRIBUTION:
                 return self.update_fig_author_contribution(title)
 
-    def update_xaxis_tickformat(self, x_axis_interval: str) -> ChartBuilderSelf:
+    def update_xaxis_tickformat(self, x_axis_interval: str) -> Self:
         """
         Update the x-axis tick format based on the interval.
 
@@ -521,14 +519,16 @@ class ChartBuilder:
                             Should be one of 'daily', 'weekly', or 'monthly'.
 
         Returns:
-            ChartBuilderSelf: The instance of the ChartBuilder for method chaining.
+            Self: The instance of the ChartBuilder for method chaining.
         """
         # tick format
         tickformat = {
-            "daily": "%b %d, %Y",
-            "weekly": "%b %d, %Y",
+            "daily": "%b %d, %Y",  # NOSONAR
+            "weekly": "%b %d, %Y",  # NOSONAR
             "monthly": "%b %Y",
-        }.get(x_axis_interval, "%b %d, %Y")
+        }.get(
+            x_axis_interval, "%b %d, %Y"
+        )  # NOSONAR
 
         self._fig.update_xaxes(tickformat=tickformat)
         # dtick for x-axis
@@ -564,8 +564,8 @@ class ChartBuilder:
             title (str): The title to be displayed in the chart title.
 
         Returns:
-            ChartBuilderSelf: The Plotly figure object configured with the trend and summary
-                              traces, ready for display or further modification.
+            go.Figure: The Plotly figure object configured with the trend and
+                summary traces, ready for display or further modification.
         raises:
             ValueError: If the strategy is not set.
         """
@@ -596,12 +596,11 @@ class ChartBuilder:
         returning it.
 
         Args:
-            interval (str): The interval to use for formatting the x-axis ticks.
             title (str): The title to be displayed in the chart title.
 
         Returns:
-            ChartBuilderSelf: The Plotly figure object configured with the trend and summary
-                              traces, ready for display or further modification.
+            go.Figure: The Plotly figure object configured with the trend and
+                summary traces, ready for display or further modification.
         """
         self.create_fig()
         self.create_trend_trace(interval)
@@ -629,8 +628,8 @@ class ChartBuilder:
             title (str): The title to be displayed in the chart title.
 
         Returns:
-            ChartBuilderSelf: The Plotly figure object configured with the trend and summary
-                              traces, ready for display or further modification
+            go.Figure: The Plotly figure object configured with the author
+                contribution traces, ready for display or further modification.
         """
         self.create_fig()
         self.create_author_contribution_trace()

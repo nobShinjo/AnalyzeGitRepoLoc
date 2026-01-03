@@ -82,6 +82,22 @@ def _resolve_interval(interval_value) -> str:
     return interval
 
 
+def _resolve_workers(workers_value) -> int | None:
+    if workers_value is None:
+        return None
+    if isinstance(workers_value, str):
+        workers_value = workers_value.strip()
+        if not workers_value:
+            return None
+    try:
+        workers = int(workers_value)
+    except (TypeError, ValueError) as ex:
+        raise ValueError(f"Invalid workers value '{workers_value}'.") from ex
+    if workers < 1:
+        raise ValueError(f"Invalid workers value '{workers_value}'. Use 1 or higher.")
+    return workers
+
+
 def _build_repo_entries(
     repositories: list[dict],
     repo_manager: RemoteRepoManager,
@@ -126,6 +142,7 @@ def merge_yaml_config(
     args.lang = _pick_value(args, settings, "lang")
     args.author_name = _pick_value(args, settings, "author_name")
     args.exclude_dirs = _pick_value(args, settings, "exclude_dirs")
+    args.workers = _resolve_workers(_pick_value(args, settings, "workers"))
 
     if args.repo_paths is None:
         args.repo_paths = _build_repo_entries(

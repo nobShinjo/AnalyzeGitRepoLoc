@@ -6,18 +6,18 @@ Description:
     generate charts and reports for each run.
     Handles argument parsing, data aggregation, and output layout.
 Functions:
-	main: Run the CLI workflow for analysis and reporting.
-		Coordinates parsing, analysis, charting, and report outputs.
-	save_analysis_data: Persist analysis CSV outputs for the run.
-		Writes aggregated analysis dataframes to CSV files.
-	generate_trend_chart: Create per-repository trend charts.
-		Builds and saves language/author trend charts per repository.
-	save_chart_data: Write chart data and HTML outputs to disk.
-		Serializes trend data, summaries, and Plotly HTML outputs.
-	generate_all_repositories_trend_chart: Create aggregate trend charts.
-		Builds combined charts across all repositories.
-	generate_author_contribution_chart: Create author contribution charts.
-		Builds stacked contribution charts by repository.
+    main: Run the CLI workflow for analysis and reporting.
+            Coordinates parsing, analysis, charting, and report outputs.
+    save_analysis_data: Persist analysis CSV outputs for the run.
+            Writes aggregated analysis dataframes to CSV files.
+    generate_trend_chart: Create per-repository trend charts.
+            Builds and saves language/author trend charts per repository.
+    save_chart_data: Write chart data and HTML outputs to disk.
+            Serializes trend data, summaries, and Plotly HTML outputs.
+    generate_all_repositories_trend_chart: Create aggregate trend charts.
+            Builds combined charts across all repositories.
+    generate_author_contribution_chart: Create author contribution charts.
+            Builds stacked contribution charts by repository.
 """
 
 import argparse
@@ -37,10 +37,10 @@ from analyze_git_repo_loc.analysis_helpers import (
     prepare_summary_data,
     prepare_trend_data,
 )
-from analyze_git_repo_loc.chart_builder import ChartBuilder, ChartStrategy      
-from analyze_git_repo_loc.colored_console_printer import ColoredConsolePrinter  
+from analyze_git_repo_loc.chart_builder import ChartBuilder, ChartStrategy
+from analyze_git_repo_loc.colored_console_printer import ColoredConsolePrinter
 from analyze_git_repo_loc.html_report import ProgressEvent, generate_html_report
-from analyze_git_repo_loc.markdown_summary import generate_markdown_summary     
+from analyze_git_repo_loc.markdown_summary import generate_markdown_summary
 from analyze_git_repo_loc.utils import (
     analyze_git_repositories,
     analyze_trends,
@@ -49,6 +49,269 @@ from analyze_git_repo_loc.utils import (
     parse_arguments,
     save_repository_branch_info,
 )
+
+
+class _ReportProgressTracker:
+    """
+    Track parent/child progress bars for HTML report generation.
+    """
+
+    def __init__(self, progress_bar: tqdm) -> None:
+        self._progress_bar = progress_bar
+        self._child_bar: tqdm | None = None
+        self._child_label: str | None = None
+
+    def __call__(self, event: ProgressEvent) -> None:
+        if event.kind == "parent":
+            self._handle_parent(event)
+        else:
+            self._handle_child(event)
+
+    def _handle_parent(self, event: ProgressEvent) -> None:
+        if self._child_bar is not None:
+            self._child_bar.close()
+            self._child_bar = None
+            self._child_label = None
+        if event.total is not None:
+            self._progress_bar.total = event.total
+            self._progress_bar.refresh()
+        if event.label:
+            self._progress_bar.set_description_str(event.label)
+        if event.advance:
+            self._progress_bar.update(event.advance)
+
+    def _handle_child(self, event: ProgressEvent) -> None:
+        if (
+            self._child_bar is None
+            or event.total is not None
+            or event.label != self._child_label
+        ):
+            if self._child_bar is not None:
+                self._child_bar.close()
+            self._child_label = event.label
+            self._child_bar = tqdm(
+                total=event.total or 0,
+                desc=event.label,
+                leave=False,
+                position=self._progress_bar.pos + 1,
+            )
+        if event.advance and self._child_bar is not None:
+            self._child_bar.update(event.advance)
+        if event.done and self._child_bar is not None:
+            self._child_bar.close()
+            self._child_bar = None
+            self._child_label = None
+
+
+def _print_start(console: ColoredConsolePrinter, parser: argparse.ArgumentParser) -> None:
+    console.print_h1(f"# Start {parser.prog}.")
+    print(Style.DIM + f"- {parser.description}", end=os.linesep + os.linesep)
+
+
+def _prepare_loc_data(
+    loc_data: pd.DataFrame,
+    *,
+    time_interval: str,
+    time_period: str,
+    console: ColoredConsolePrinter,
+) -> str:
+    if "Datetime" not in loc_data.columns:
+        console.print_colored(
+            "Error: 'Datetime' column is not found in the dataframe.",
+            Fore.RED,
+        )
+        sys.exit(1)
+    loc_data[time_interval] = (
+        loc_data["Datetime"]
+        .dt.tz_localize(None)
+        .dt.to_period(time_period)
+        .dt.to_timestamp()
+    )
+    if "Repository" not in loc_data.columns:
+        console.print_colored(
+            "Error: 'Repository' column is not found in the dataframe.",
+            Fore.RED,
+        )
+        sys.exit(1)
+    return next(iter(loc_data["Repository"].unique()), "Unknown")
+
+
+def _ensure_repo_output_dir(output_root: Path, repository_name: str) -> Path:
+    repo_output_dir = output_root / repository_name
+    try:
+        repo_output_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as ex:
+        handle_exception(ex)
+    return repo_output_dir
+
+
+def _build_analysis_data(
+    *,
+    loc_data_repositories: list[pd.DataFrame],
+    time_interval: str,
+    time_period: str,
+    output_root: Path,
+    console: ColoredConsolePrinter,
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    language_analysis = pd.DataFrame()
+    author_analysis = pd.DataFrame()
+    repository_trend_analysis = pd.DataFrame()
+
+    console.print_h1("\n# Forming dataframe type data.")
+    for loc_data in tqdm(loc_data_repositories, desc="Processing loc data"):
+        repository_name = _prepare_loc_data(
+            loc_data,
+            time_interval=time_interval,
+            time_period=time_period,
+            console=console,
+        )
+        repo_output_dir = _ensure_repo_output_dir(output_root, repository_name)
+        language_analysis = analyze_trends(
+            category_column="Language",
+            interval=time_interval,
+            loc_data=loc_data,
+            analysis_data=language_analysis,
+            output_path=repo_output_dir,
+        )
+        author_analysis = analyze_trends(
+            category_column="Author",
+            interval=time_interval,
+            loc_data=loc_data,
+            analysis_data=author_analysis,
+            output_path=repo_output_dir,
+        )
+        repository_trend_analysis = analyze_trends(
+            category_column="Repository",
+            interval=time_interval,
+            loc_data=loc_data,
+            analysis_data=repository_trend_analysis,
+        )
+    return language_analysis, author_analysis, repository_trend_analysis
+
+
+def _save_analysis_outputs(
+    *,
+    output_dir: Path,
+    args: argparse.Namespace,
+    time_interval: str,
+    language_analysis: pd.DataFrame,
+    author_analysis: pd.DataFrame,
+    repository_trend_analysis: pd.DataFrame,
+) -> None:
+    data_list = {
+        "language_analysis": language_analysis,
+        "author_analysis": author_analysis,
+        "repository_trend_analysis": repository_trend_analysis,
+    }
+    save_analysis_data(data_list=data_list, output_dir=output_dir)
+    save_repository_branch_info(args.repo_paths, output_dir / "repo_list.txt")
+    try:
+        generate_markdown_summary(
+            output_dir=output_dir,
+            time_interval=time_interval,
+            language_analysis=language_analysis,
+            author_analysis=author_analysis,
+            repository_trend_analysis=repository_trend_analysis,
+        )
+    except OSError as ex:
+        handle_exception(ex)
+
+
+def _generate_charts(
+    *,
+    output_root: Path,
+    output_dir: Path,
+    time_interval: str,
+    suppress_plot_show: bool,
+    language_analysis: pd.DataFrame,
+    author_analysis: pd.DataFrame,
+    repository_trend_analysis: pd.DataFrame,
+) -> None:
+    with tqdm(total=5, desc="Charts: Language trend") as progress_bar:
+        generate_trend_chart(
+            data=language_analysis,
+            category_column="Language",
+            time_interval=time_interval,
+            output_path=output_root,
+            no_plot_show=suppress_plot_show,
+        )
+        progress_bar.update(1)
+
+        progress_bar.set_description_str("Charts: Author trend")
+        generate_trend_chart(
+            data=author_analysis,
+            category_column="Author",
+            time_interval=time_interval,
+            output_path=output_root,
+            no_plot_show=suppress_plot_show,
+        )
+        progress_bar.update(1)
+
+        progress_bar.set_description_str("Charts: Repository trend")
+        generate_all_repositories_trend_chart(
+            data=repository_trend_analysis,
+            time_interval=time_interval,
+            category_column="Repository",
+            output_path=output_dir,
+            no_plot_show=suppress_plot_show,
+        )
+        progress_bar.update(1)
+
+        progress_bar.set_description_str("Charts: Author contribution")
+        generate_author_contribution_chart(
+            data=author_analysis,
+            output_path=output_dir,
+            no_plot_show=suppress_plot_show,
+        )
+        progress_bar.update(1)
+
+        progress_bar.set_description_str("Charts: Author aggregate")
+        generate_all_repositories_trend_chart(
+            data=repository_trend_analysis,
+            time_interval=time_interval,
+            category_column="Author",
+            output_path=output_dir,
+            no_plot_show=suppress_plot_show,
+        )
+        progress_bar.update(1)
+
+
+def _generate_report(
+    *,
+    output_dir: Path,
+    output_root: Path,
+    time_interval: str,
+    loc_data_repositories: list[pd.DataFrame],
+    language_analysis: pd.DataFrame,
+    author_analysis: pd.DataFrame,
+    repository_trend_analysis: pd.DataFrame,
+) -> None:
+    with tqdm(desc="Generating HTML report") as progress_bar:
+        report_progress = _ReportProgressTracker(progress_bar)
+        try:
+            generate_html_report(
+                output_dir=output_dir,
+                charts_root=output_root,
+                time_interval=time_interval,
+                language_analysis=language_analysis,
+                author_analysis=author_analysis,
+                repository_trend_analysis=repository_trend_analysis,
+                detail_analysis=(
+                    pd.concat(loc_data_repositories, ignore_index=True)
+                    if loc_data_repositories
+                    else pd.DataFrame()
+                ),
+                progress_callback=report_progress,
+            )
+        except OSError as ex:
+            handle_exception(ex)
+
+
+def _maybe_open_report(*, output_dir: Path, args: argparse.Namespace, repo_count: int) -> None:
+    if repo_count > 1 and not args.no_plot_show:
+        report_path = output_dir / "report.html"
+        if report_path.exists():
+            webbrowser.open(report_path.resolve().as_uri())
 
 
 def main() -> None:
@@ -66,8 +329,7 @@ def main() -> None:
     console = ColoredConsolePrinter()
 
     # Output program name and description.
-    console.print_h1(f"# Start {parser.prog}.")
-    print(Style.DIM + f"- {parser.description}", end=os.linesep + os.linesep)
+    _print_start(console, parser)
 
     # Analyze the LOC in the Git repositories
     loc_data_repositories = analyze_git_repositories(args)
@@ -75,208 +337,51 @@ def main() -> None:
 
     repo_count = len(loc_data_repositories)
     suppress_plot_show = args.no_plot_show or repo_count > 1
-
-    # Dataframe declaration
-    language_analysis = pd.DataFrame()
-    author_analysis = pd.DataFrame()
-    repository_trend_analysis = pd.DataFrame()
-
-    # Convert analyzed data for visualization
-    console.print_h1("\n# Forming dataframe type data.")
-    for loc_data in tqdm(loc_data_repositories, desc="Processing loc data"):
-        if "Datetime" not in loc_data.columns:
-            console.print_colored(
-                "Error: 'Datetime' column is not found in the dataframe.", Fore.RED
-            )
-            sys.exit(1)
-        loc_data[time_interval] = (
-            loc_data["Datetime"]
-            .dt.tz_localize(None)
-            .dt.to_period(time_period)
-            .dt.to_timestamp()
-        )
-        # Create output directory for the repository
-        if "Repository" not in loc_data.columns:
-            console.print_colored(
-                "Error: 'Repository' column is not found in the dataframe.", Fore.RED
-            )
-            sys.exit(1)
-        repository_name = next(iter(loc_data["Repository"].unique()), "Unknown")
-        repo_output_dir: Path = Path(args.output) / repository_name
-        try:
-            repo_output_dir.mkdir(parents=True, exist_ok=True)
-        except OSError as ex:
-            handle_exception(ex)
-
-        # 1. Stacked area trend chart of code volume by programming language per repository,
-        #    bar graph of added/deleted code volume, and line graph of average code volume
-        language_analysis = analyze_trends(
-            category_column="Language",
-            interval=time_interval,
-            loc_data=loc_data,
-            analysis_data=language_analysis,
-            output_path=repo_output_dir,
-        )
-
-        # 2. Stacked area trend chart by author per repository
-        author_analysis = analyze_trends(
-            category_column="Author",
-            interval=time_interval,
-            loc_data=loc_data,
-            analysis_data=author_analysis,
-            output_path=repo_output_dir,
-        )
-
-        # 3. Stacked trend chart of code volume per repository,
-        #    bar graph of added/deleted code volume, and line graph of average code volume
-        repository_trend_analysis = analyze_trends(
-            category_column="Repository",
-            interval=time_interval,
-            loc_data=loc_data,
-            analysis_data=repository_trend_analysis,
-        )
+    output_root = Path(args.output)
+    language_analysis, author_analysis, repository_trend_analysis = _build_analysis_data(
+        loc_data_repositories=loc_data_repositories,
+        time_interval=time_interval,
+        time_period=time_period,
+        output_root=output_root,
+        console=console,
+    )
 
     # Save the analyzed data
     console.print_h1("\n# Save the analyzed data.")
-    output_dir = Path(args.output) / datetime.now().strftime("%Y%m%d%H%M%S")
-    data_list = {
-        "language_analysis": language_analysis,
-        "author_analysis": author_analysis,
-        "repository_trend_analysis": repository_trend_analysis,
-    }
-    save_analysis_data(data_list=data_list, output_dir=output_dir)
-    # Save the list of repositories and branch name
-    save_repository_branch_info(args.repo_paths, output_dir / "repo_list.txt")
-    try:
-        generate_markdown_summary(
-            output_dir=output_dir,
-            time_interval=time_interval,
-            language_analysis=language_analysis,
-            author_analysis=author_analysis,
-            repository_trend_analysis=repository_trend_analysis,
-        )
-    except OSError as ex:
-        handle_exception(ex)
+    output_dir = output_root / datetime.now().strftime("%Y%m%d%H%M%S")
+    _save_analysis_outputs(
+        output_dir=output_dir,
+        args=args,
+        time_interval=time_interval,
+        language_analysis=language_analysis,
+        author_analysis=author_analysis,
+        repository_trend_analysis=repository_trend_analysis,
+    )
 
     # Generate charts
     console.print_h1("\n# Generate charts.")
-    with tqdm(total=5, desc="Charts: Language trend") as progress_bar:
-        # 1. Stacked area trend chart of code volume by programming language per repository,
-        generate_trend_chart(
-            data=language_analysis,
-            category_column="Language",
-            time_interval=time_interval,
-            output_path=Path(args.output),
-            no_plot_show=suppress_plot_show,
-        )
-        progress_bar.update(1)
-
-        # 2. Stacked area trend chart by author per repository
-        progress_bar.set_description_str("Charts: Author trend")
-        generate_trend_chart(
-            data=author_analysis,
-            category_column="Author",
-            time_interval=time_interval,
-            output_path=Path(args.output),
-            no_plot_show=suppress_plot_show,
-        )
-        progress_bar.update(1)
-
-        # 3. Stacked trend chart of code volume per repository
-        progress_bar.set_description_str("Charts: Repository trend")
-        generate_all_repositories_trend_chart(
-            data=repository_trend_analysis,
-            time_interval=time_interval,
-            category_column="Repository",
-            output_path=output_dir,
-            no_plot_show=suppress_plot_show,
-        )
-        progress_bar.update(1)
-
-        # 4. Stacked bar chart of author contribution per repository
-        progress_bar.set_description_str("Charts: Author contribution")
-        generate_author_contribution_chart(
-            data=author_analysis,
-            output_path=output_dir,
-            no_plot_show=suppress_plot_show,
-        )
-        progress_bar.update(1)
-
-        # 5. Stack trend chart of code volume per author
-        progress_bar.set_description_str("Charts: Author aggregate")
-        generate_all_repositories_trend_chart(
-            data=repository_trend_analysis,
-            time_interval=time_interval,
-            category_column="Author",
-            output_path=output_dir,
-            no_plot_show=suppress_plot_show,
-        )
-        progress_bar.update(1)
+    _generate_charts(
+        output_root=output_root,
+        output_dir=output_dir,
+        time_interval=time_interval,
+        suppress_plot_show=suppress_plot_show,
+        language_analysis=language_analysis,
+        author_analysis=author_analysis,
+        repository_trend_analysis=repository_trend_analysis,
+    )
 
     console.print_h1("\n# Generate HTML report.")
-    with tqdm(desc="Generating HTML report") as progress_bar:
-        child_bar: tqdm | None = None
-        child_label: str | None = None
+    _generate_report(
+        output_dir=output_dir,
+        output_root=output_root,
+        time_interval=time_interval,
+        loc_data_repositories=loc_data_repositories,
+        language_analysis=language_analysis,
+        author_analysis=author_analysis,
+        repository_trend_analysis=repository_trend_analysis,
+    )
 
-        def report_progress(event: ProgressEvent) -> None:
-            nonlocal child_bar, child_label
-            if event.kind == "parent":
-                if child_bar is not None:
-                    child_bar.close()
-                    child_bar = None
-                    child_label = None
-                if event.total is not None:
-                    progress_bar.total = event.total
-                    progress_bar.refresh()
-                if event.label:
-                    progress_bar.set_description_str(event.label)
-                if event.advance:
-                    progress_bar.update(event.advance)
-                return
-
-            if (
-                child_bar is None
-                or event.total is not None
-                or event.label != child_label
-            ):
-                if child_bar is not None:
-                    child_bar.close()
-                child_label = event.label
-                child_bar = tqdm(
-                    total=event.total or 0,
-                    desc=event.label,
-                    leave=False,
-                    position=progress_bar.pos + 1,
-                )
-            if event.advance:
-                child_bar.update(event.advance)
-            if event.done and child_bar is not None:
-                child_bar.close()
-                child_bar = None
-                child_label = None
-
-        try:
-            generate_html_report(
-                output_dir=output_dir,
-                charts_root=Path(args.output),
-                time_interval=time_interval,
-                language_analysis=language_analysis,
-                author_analysis=author_analysis,
-                repository_trend_analysis=repository_trend_analysis,
-                detail_analysis=(
-                    pd.concat(loc_data_repositories, ignore_index=True)
-                    if loc_data_repositories
-                    else pd.DataFrame()
-                ),
-                progress_callback=report_progress,
-            )
-        except OSError as ex:
-            handle_exception(ex)
-
-    if repo_count > 1 and not args.no_plot_show:
-        report_path = output_dir / "report.html"
-        if report_path.exists():
-            webbrowser.open(report_path.resolve().as_uri())
+    _maybe_open_report(output_dir=output_dir, args=args, repo_count=repo_count)
 
     console.print_h1("\n# LOC Analyze")
     print(Cursor.UP() + Cursor.FORWARD(50) + Fore.GREEN + "FINISH")

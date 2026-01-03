@@ -1,8 +1,11 @@
 # cli-interface Specification
 
 ## Purpose
+
 Define the command-line interface, supported inputs, options, and error reporting.
+
 ## Requirements
+
 ### Requirement: CLI entrypoint
 
 The system SHALL provide a CLI entrypoint invoked via `python -m analyze_git_repo_loc`.
@@ -79,7 +82,11 @@ fatal errors. For chart generation, the system SHALL display a parent progress
 bar that advances once per chart step, with five steps corresponding to the
 language trend, author trend, repository trend, author contribution, and author
 aggregate charts. The parent progress bar SHALL surface the active chart step in
-its description while per-repository progress bars remain unchanged.
+its description while per-repository progress bars remain unchanged. When
+analyzing multiple repositories with workers greater than 1, the system SHALL
+render child progress bars per repository that surface active repositories and
+completion state, and advance based on commit analysis progress without
+corrupting existing progress bars.
 
 #### Scenario: Fatal error
 
@@ -90,5 +97,28 @@ its description while per-repository progress bars remain unchanged.
 
 - **WHEN** the CLI starts generating charts
 - **THEN** the console displays a five-step parent progress bar that updates its
-  description to the active chart step while preserving per-repository progress bars.
+  description to the active chart step while preserving per-repository progress
+  bars.
 
+#### Scenario: Parallel repository progress
+
+- **WHEN** multiple repositories are analyzed with workers greater than 1
+- **THEN** the console shows per-repository child progress bars that update as
+  repositories start, advance through commit analysis, and finish.
+
+### Requirement: Worker configuration option
+
+The system SHALL support a `--workers` CLI option to control the maximum number
+of repositories analyzed concurrently. When omitted, the system SHALL select a
+default worker count based on available CPU cores (minimum 1) and SHALL NOT
+exceed the number of repositories provided.
+
+#### Scenario: Workers option provided
+
+- **WHEN** the user runs the CLI with `--workers 4`
+- **THEN** repository analysis uses up to 4 concurrent workers.
+
+#### Scenario: Workers option omitted
+
+- **WHEN** the user omits `--workers`
+- **THEN** the system selects a default worker count based on CPU cores and repo count.

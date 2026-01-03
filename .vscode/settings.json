@@ -28,6 +28,7 @@
         "linewidth",
         "nfiles",
         "NLOC",
+        "NOSONAR",
         "numpy",
         "pipdeptree",
         "plotly",
