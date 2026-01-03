@@ -355,9 +355,7 @@ class HtmlReportBuilder:
                 )
             return []
         interval_col = self.time_interval
-        rows: list[dict[str, object]] = []
         total_rows = len(detail_data)
-        processed = 0
         if progress_callback is not None:
             progress_callback(
                 ProgressEvent(
@@ -367,41 +365,60 @@ class HtmlReportBuilder:
                     kind="child",
                 )
             )
-        for _, row in detail_data.iterrows():
-            rows.append(
-                {
-                    "interval": str(row[interval_col]),
-                    "repository": str(row["Repository"]),
-                    "author": str(row["Author"]),
-                    "language": str(row["Language"]),
-                    "nloc_added": self._to_int(row["NLOC_Added"]),
-                    "nloc_deleted": self._to_int(row["NLOC_Deleted"]),
-                    "nloc": self._to_int(row["NLOC"]),
-                }
-            )
-            processed += 1
-            if progress_callback is not None and processed % chunk_size == 0:
+        rows: list[dict[str, object]] = []
+        for start in range(0, total_rows, chunk_size):
+            end = min(start + chunk_size, total_rows)
+            chunk = detail_data.iloc[start:end].copy()
+            chunk = self._transform_filter_rows(chunk, interval_col)
+            rows.extend(chunk.to_dict(orient="records"))
+            if progress_callback is not None:
                 progress_callback(
                     ProgressEvent(
                         label="Filter rows",
-                        advance=chunk_size,
+                        advance=len(chunk),
                         kind="child",
                     )
                 )
-        if progress_callback is not None and processed % chunk_size:
-            remainder = processed % chunk_size
-            progress_callback(
-                ProgressEvent(
-                    label="Filter rows",
-                    advance=remainder,
-                    kind="child",
-                )
-            )
         if progress_callback is not None:
             progress_callback(
                 ProgressEvent(label="Filter rows", kind="child", done=True)
             )
         return rows
+
+    @staticmethod
+    def _transform_filter_rows(
+        detail_data: pd.DataFrame, interval_col: str
+    ) -> pd.DataFrame:
+        """
+        Transform detail rows into filter payload rows.
+        """
+        columns = [
+            interval_col,
+            "Repository",
+            "Author",
+            "Language",
+            "NLOC_Added",
+            "NLOC_Deleted",
+            "NLOC",
+        ]
+        chunk = detail_data.loc[:, columns].copy()
+        chunk[interval_col] = chunk[interval_col].astype(str)
+        chunk["Repository"] = chunk["Repository"].astype(str)
+        chunk["Author"] = chunk["Author"].astype(str)
+        chunk["Language"] = chunk["Language"].astype(str)
+        for col in ["NLOC_Added", "NLOC_Deleted", "NLOC"]:
+            chunk[col] = pd.to_numeric(chunk[col], errors="coerce").fillna(0).astype(int)
+        return chunk.rename(
+            columns={
+                interval_col: "interval",
+                "Repository": "repository",
+                "Author": "author",
+                "Language": "language",
+                "NLOC_Added": "nloc_added",
+                "NLOC_Deleted": "nloc_deleted",
+                "NLOC": "nloc",
+            }
+        )
 
     @staticmethod
     def _serialize_filter_payload(payload: dict[str, object]) -> str:
