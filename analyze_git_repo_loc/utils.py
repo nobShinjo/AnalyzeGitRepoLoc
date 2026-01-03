@@ -468,6 +468,10 @@ def _analyze_single_repository(
     """
     Analyze a single repository and return its index, name, and LOC data.
     """
+    if show_progress:
+        os.environ.pop("ANALYZE_GIT_REPO_LOC_LOG_AUTH", None)
+    else:
+        os.environ["ANALYZE_GIT_REPO_LOC_LOG_AUTH"] = "0"
     console = ColoredConsolePrinter() if show_progress else None
     repository_name = GitRepoLOCAnalyzer.get_repository_name(repo_path)
     if show_progress and console is not None:

@@ -33,6 +33,8 @@ class RemoteAuthError(ValueError):
 class RemoteAuthService:
     """Encapsulates remote authentication helpers."""
 
+    _AUTH_LOG_ENV = "ANALYZE_GIT_REPO_LOC_LOG_AUTH"
+
     def build_auth_candidates(self, repo_url: str) -> list[str]:
         """
         Build ordered clone/fetch URLs based on the provided scheme.
@@ -88,9 +90,18 @@ class RemoteAuthService:
         Args:
             candidate (str): Clone/fetch URL that succeeded.
         """
+        if not self._is_auth_log_enabled():
+            return
         sanitized = self.strip_credentials(candidate)
         method = self._describe_auth_method(candidate)
         tqdm.write(f"Authentication succeeded: {method} ({sanitized})")
+
+    @classmethod
+    def _is_auth_log_enabled(cls) -> bool:
+        """
+        Determine whether authentication logs should be emitted.
+        """
+        return os.getenv(cls._AUTH_LOG_ENV, "1") != "0"
 
     def is_auth_failure(self, error: GitCommandError) -> bool:
         """
