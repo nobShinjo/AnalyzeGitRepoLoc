@@ -60,6 +60,7 @@ class GitRepoLOCAnalyzer:
         languages: list[str] = None,
         exclude_dirs: list[str] = None,
         repo_ref: Union[Path, str, None] = None,
+        show_progress: bool = True,
     ):
         """
         Initialize the Git repository Lines of Code (LOC) Analyzer.
@@ -77,6 +78,7 @@ class GitRepoLOCAnalyzer:
             languages (list[str]): A list of languages to filter commits.
             exclude_dirs (list[str]): A list of directories to exclude from analysis.
             repo_ref (Union[Path, str, None]): Original repository path or URL for cache identity.
+            show_progress (bool): Whether to show progress bars during analysis.
 
         Raises:
             OSError: If there is an error creating the cache or output directories.
@@ -129,6 +131,8 @@ class GitRepoLOCAnalyzer:
         """ Cache metadata loaded from disk """
         self._cache_commit_data = self.load_cache()
         """ DataFrame containing the cached commit data """
+        self._show_progress = show_progress
+        """ Whether to show progress bars during analysis """
 
     def make_output_dir(self, output_dir: Path) -> Path:
         """
@@ -163,7 +167,10 @@ class GitRepoLOCAnalyzer:
         """
         self._cache_commit_data = None
         if self._cache_path.exists() and self._cache_path.is_dir():
-            for file in tqdm(self._cache_path.glob("**/*")):
+            for file in tqdm(
+                self._cache_path.glob("**/*"),
+                disable=not self._show_progress,
+            ):
                 if file.is_file():
                     try:
                         file.unlink()
@@ -262,7 +269,12 @@ class GitRepoLOCAnalyzer:
             list: List of commit objects.
         """
         return list(
-            tqdm(repository.traverse_commits(), desc="Getting commits", unit="commit")
+            tqdm(
+                repository.traverse_commits(),
+                desc="Getting commits",
+                unit="commit",
+                disable=not self._show_progress,
+            )
         )
 
     @staticmethod
@@ -393,6 +405,7 @@ class GitRepoLOCAnalyzer:
             desc="Analyzing commits",
             total=len(commits_to_analyze),
             unit="commit",
+            disable=not self._show_progress,
         ):
             commit_datetime = commit.committer_date
             repository_name = GitRepoLOCAnalyzer.get_repository_name(self._repo_path)

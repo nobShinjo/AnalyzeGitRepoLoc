@@ -13,6 +13,7 @@ Functions:
 """
 
 import argparse
+import os
 import sys
 import traceback
 from datetime import date, datetime
@@ -97,7 +98,7 @@ def _normalize_optional_text(value: str | None) -> str | None:
     return normalized or None
 
 
-def _normalize_optional_list(values: list[str] | None) -> list[str] | None:
+def _normalize_optional_list(values: list[str] | None) -> list[str] | None:     
     """
     Normalize optional list input by trimming items and dropping empties.
 
@@ -123,6 +124,33 @@ def _normalize_optional_list(values: list[str] | None) -> list[str] | None:
         if trimmed:
             normalized.append(trimmed)
     return normalized or None
+
+
+def _normalize_optional_int(value: int | str | None, label: str) -> int | None:
+    """
+    Normalize optional integer input by trimming and validating.
+
+    Args:
+        value (int | str | None): The input value to normalize.
+        label (str): Label used in validation error messages.
+
+    Returns:
+        int | None: Normalized integer value or None when unset.
+    """
+    if value is None:
+        return None
+    if isinstance(value, str):
+        normalized = value.strip()
+        if not normalized:
+            return None
+        value = normalized
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError) as ex:
+        raise ValueError(f"Invalid {label} value '{value}'. Use an integer.") from ex
+    if parsed < 1:
+        raise ValueError(f"Invalid {label} value '{value}'. Use 1 or higher.")
+    return parsed
 
 
 def _parse_optional_iso_date(
@@ -170,7 +198,7 @@ def _validate_date_range(since: datetime | None, until: datetime | None) -> None
         raise ValueError("Invalid date range: --since must be on or before --until.")
 
 
-def parse_arguments(parser: argparse.ArgumentParser) -> argparse.Namespace:
+def parse_arguments(parser: argparse.ArgumentParser) -> argparse.Namespace:     
     """
     parse_arguments Parse command line arguments.
 
@@ -233,6 +261,15 @@ def parse_arguments(parser: argparse.ArgumentParser) -> argparse.Namespace:
             "specified as comma-separated paths relative to the repository root."
         ),
     )
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=None,
+        help=(
+            "Maximum number of repositories to analyze concurrently "
+            "(default: auto)."
+        ),
+    )
 
     parser.add_argument(
         "--clear-cache",
@@ -266,6 +303,7 @@ def parse_arguments(parser: argparse.ArgumentParser) -> argparse.Namespace:
         args.lang = _normalize_optional_list(args.lang)
         args.author_name = _normalize_optional_list(args.author_name)
         args.exclude_dirs = _normalize_optional_list(args.exclude_dirs)
+        args.workers = _normalize_optional_int(args.workers, "--workers")
         _validate_date_range(args.since, args.until)
     except ValueError as ex:
         parser.error(str(ex))
@@ -350,6 +388,7 @@ def _create_analyzer(
     authors: list[str] | None,
     languages: list[str] | None,
     exclude_dirs: list[Path] | None,
+    show_progress: bool,
 ) -> GitRepoLOCAnalyzer:
     """
     Build a GitRepoLOCAnalyzer with common arguments.
@@ -368,20 +407,111 @@ def _create_analyzer(
         languages=languages,
         exclude_dirs=exclude_dirs,
         repo_ref=repo_ref,
+        show_progress=show_progress,
     )
 
 
 def _maybe_clear_cache(
-    *, analyzer: GitRepoLOCAnalyzer, console: ColoredConsolePrinter, clear_cache: bool
+    *,
+    analyzer: GitRepoLOCAnalyzer,
+    console: ColoredConsolePrinter | None,
+    clear_cache: bool,
+    show_progress: bool,
 ) -> None:
     """
     Clear cache files when requested.
     """
     if not clear_cache:
         return
-    console.print_h1("# Remove cache files.")
+    if show_progress and console is not None:
+        console.print_h1("# Remove cache files.")
     analyzer.clear_cache_files()
-    console.print_ok(up=2, forward=50)
+    if show_progress and console is not None:
+        console.print_ok(up=2, forward=50)
+
+
+def _resolve_worker_count(workers: int | None, repo_count: int) -> int:
+    """
+    Resolve repository worker count based on CPU availability and repo count.
+
+    Args:
+        workers (int | None): Configured worker count.
+        repo_count (int): Number of repositories to analyze.
+
+    Returns:
+        int: Effective worker count (minimum 1).
+    """
+    if repo_count <= 1:
+        return 1
+    cpu_count = os.cpu_count() or 1
+    if workers is None:
+        resolved = min(cpu_count, repo_count)
+    else:
+        resolved = min(workers, repo_count)
+    return max(1, resolved)
+
+
+def _analyze_single_repository(
+    *,
+    index: int,
+    repo_path: Path | str,
+    branch_name: str,
+    exclude_dirs: list[Path] | None,
+    output_dir: Path,
+    since: datetime | None,
+    until: datetime | None,
+    authors: list[str] | None,
+    languages: list[str] | None,
+    clear_cache: bool,
+    show_progress: bool,
+) -> tuple[int, str, pd.DataFrame]:
+    """
+    Analyze a single repository and return its index, name, and LOC data.
+    """
+    console = ColoredConsolePrinter() if show_progress else None
+    repository_name = GitRepoLOCAnalyzer.get_repository_name(repo_path)
+    if show_progress and console is not None:
+        console.print_h1("\n")
+        console.print_h1(
+            f"# Analysis of LOC in git repository: {repository_name} ({branch_name})",
+        )
+        if exclude_dirs is not None:
+            console.print_h1(f"## Excluded directories:{exclude_dirs}")
+
+    analysis_repo_path = _resolve_analysis_repo_path(
+        repo_path=repo_path,
+        branch_name=branch_name,
+        cache_dir=output_dir / ".cache",
+    )
+
+    analyzer = _create_analyzer(
+        analysis_repo_path=analysis_repo_path,
+        repo_ref=repo_path,
+        branch_name=branch_name,
+        cache_dir=output_dir / ".cache",
+        output_dir=output_dir,
+        since=since,
+        until=until,
+        authors=authors,
+        languages=languages,
+        exclude_dirs=exclude_dirs,
+        show_progress=show_progress,
+    )
+
+    _maybe_clear_cache(
+        analyzer=analyzer,
+        console=console,
+        clear_cache=clear_cache,
+        show_progress=show_progress,
+    )
+
+    loc_data = analyzer.get_commit_analysis()
+    analyzer.save_cache()
+
+    repo_output_dir = _ensure_repo_output_dir(output_dir, repository_name)
+    loc_data.to_csv(repo_output_dir / "loc_data.csv")
+
+    return index, repository_name, loc_data
 
 
 def _ensure_repo_output_dir(output_dir: Path, repository_name: str) -> Path:
@@ -471,7 +601,7 @@ def analyze_trends(
     return pd.concat([analysis_data, trends_data], ignore_index=True)
 
 
-def analyze_git_repositories(args: argparse.Namespace) -> list[pd.DataFrame]:
+def analyze_git_repositories(args: argparse.Namespace) -> list[pd.DataFrame]:   
     """
     Analyze the LOC in the Git repositories.
 
@@ -481,78 +611,80 @@ def analyze_git_repositories(args: argparse.Namespace) -> list[pd.DataFrame]:
     Returns:
         list[pd.DataFrame]: The list of LOC dataframes for each repository.
     """
-    # Initialize ColoredConsolePrinter
-    console = ColoredConsolePrinter()
-
     # Analyze the LOC in the Git repositories
     loc_data_repositories: list[pd.DataFrame] = []
-    for repo_path, branch_name, exclude_dirs in tqdm(
-        args.repo_paths, desc="Analyzing repositories"
-    ):
-        exclude_dirs = (
-            args.exclude_dirs if args.exclude_dirs is not None else exclude_dirs
-        )
-        repository_name = GitRepoLOCAnalyzer.get_repository_name(repo_path)
-        try:
-            analysis_repo_path = _resolve_analysis_repo_path(
-                repo_path=repo_path,
-                branch_name=branch_name,
-                cache_dir=args.output / ".cache",
-            )
-        except (OSError, ValueError) as ex:
-            handle_exception(ex)
-        console.print_h1("\n")
-        console.print_h1(
-            f"# Analysis of LOC in git repository: {repository_name} ({branch_name})",
-        )
-        if exclude_dirs is not None:
-            console.print_h1(f"## Excluded directories:{exclude_dirs}")
+    repo_entries = list(args.repo_paths)
+    repo_count = len(repo_entries)
+    worker_count = _resolve_worker_count(args.workers, repo_count)
+    results: dict[int, pd.DataFrame] = {}
 
-        # Create GitRepoLOCAnalyzer
-        try:
-            analyzer = _create_analyzer(
-                analysis_repo_path=analysis_repo_path,
-                repo_ref=repo_path,
-                branch_name=branch_name,
-                cache_dir=args.output / ".cache",
-                output_dir=args.output,
-                since=args.since,
-                until=args.until,
-                authors=args.author_name,
-                languages=args.lang,
-                exclude_dirs=exclude_dirs,
-            )
-        except OSError as ex:
-            handle_exception(ex)
+    with tqdm(total=repo_count, desc="Analyzing repositories") as progress:
+        if worker_count <= 1:
+            for index, (repo_path, branch_name, exclude_dirs) in enumerate(
+                repo_entries
+            ):
+                exclude_dirs = (
+                    args.exclude_dirs
+                    if args.exclude_dirs is not None
+                    else exclude_dirs
+                )
+                try:
+                    _, _, loc_data = _analyze_single_repository(
+                        index=index,
+                        repo_path=repo_path,
+                        branch_name=branch_name,
+                        exclude_dirs=exclude_dirs,
+                        output_dir=args.output,
+                        since=args.since,
+                        until=args.until,
+                        authors=args.author_name,
+                        languages=args.lang,
+                        clear_cache=args.clear_cache,
+                        show_progress=True,
+                    )
+                except (OSError, ValueError, FileNotFoundError) as ex:
+                    handle_exception(ex)
+                results[index] = loc_data
+                progress.update(1)
+        else:
+            from concurrent.futures import ProcessPoolExecutor, as_completed
 
-        # Remove cache files
-        try:
-            _maybe_clear_cache(
-                analyzer=analyzer,
-                console=console,
-                clear_cache=args.clear_cache,
-            )
-        except FileNotFoundError as ex:
-            handle_exception(ex)
+            futures = []
+            with ProcessPoolExecutor(max_workers=worker_count) as executor:
+                for index, (repo_path, branch_name, exclude_dirs) in enumerate(
+                    repo_entries
+                ):
+                    exclude_dirs = (
+                        args.exclude_dirs
+                        if args.exclude_dirs is not None
+                        else exclude_dirs
+                    )
+                    futures.append(
+                        executor.submit(
+                            _analyze_single_repository,
+                            index=index,
+                            repo_path=repo_path,
+                            branch_name=branch_name,
+                            exclude_dirs=exclude_dirs,
+                            output_dir=args.output,
+                            since=args.since,
+                            until=args.until,
+                            authors=args.author_name,
+                            languages=args.lang,
+                            clear_cache=args.clear_cache,
+                            show_progress=False,
+                        )
+                    )
+                for future in as_completed(futures):
+                    try:
+                        index, repository_name, loc_data = future.result()
+                    except (OSError, ValueError, FileNotFoundError) as ex:
+                        handle_exception(ex)
+                    results[index] = loc_data
+                    tqdm.write(f"Completed repository analysis: {repository_name}")
+                    progress.update(1)
 
-        # Analyze the repository
-        loc_data = analyzer.get_commit_analysis()
-
-        # Save the analyzed data to pickle file (cache)
-        try:
-            analyzer.save_cache()
-        except ValueError as ex:
-            handle_exception(ex)
-
-        # Create output directory for the repository
-        try:
-            repo_output_dir = _ensure_repo_output_dir(args.output, repository_name)
-        except OSError as ex:
-            handle_exception(ex)
-        # Save the LOC data
-        loc_data.to_csv(repo_output_dir / "loc_data.csv")
-
-        # append loc_data to loc_data_repositories
-        loc_data_repositories.append(loc_data)
+    for index in sorted(results.keys()):
+        loc_data_repositories.append(results[index])
 
     return loc_data_repositories
