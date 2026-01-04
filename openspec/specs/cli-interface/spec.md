@@ -3,9 +3,7 @@
 ## Purpose
 
 Define the command-line interface, supported inputs, options, and error reporting.
-
 ## Requirements
-
 ### Requirement: CLI entrypoint
 
 The system SHALL provide a CLI entrypoint invoked via `python -m analyze_git_repo_loc`.
@@ -17,18 +15,20 @@ The system SHALL provide a CLI entrypoint invoked via `python -m analyze_git_rep
 
 ### Requirement: Repository input formats
 
-The system SHALL accept `repo_paths` as either a comma-separated list of repository
-paths or Git URLs, or a text file with one repository entry per line.
+The system SHALL accept `repo_paths` as a comma-separated list of repository
+paths or Git URLs and SHALL reject file-path inputs that point to a repository
+list file.
 
 #### Scenario: Comma-separated list
 
 - **WHEN** the user passes `path1,path2`
 - **THEN** the system parses both repositories for analysis.
 
-#### Scenario: File input
+#### Scenario: File input rejected
 
-- **WHEN** the user passes a file path
-- **THEN** the system reads and parses one repository entry per line.
+- **WHEN** the user passes an existing file path to `repo_paths`
+- **THEN** the CLI reports an error that file-based repository lists are no
+  longer supported and instructs the user to use a YAML config file instead.
 
 ### Requirement: Branch defaults and per-repo exclude directories
 
@@ -122,3 +122,4 @@ exceed the number of repositories provided.
 
 - **WHEN** the user omits `--workers`
 - **THEN** the system selects a default worker count based on CPU cores and repo count.
+
