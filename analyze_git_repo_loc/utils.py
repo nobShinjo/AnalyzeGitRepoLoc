@@ -50,11 +50,11 @@ def parse_repos_paths(
     repo_paths_input: str,
 ) -> list[tuple[Path | str, str, list[Path]]]:
     """
-    Parse repository paths, branches and excluded directories path from a string or file.
+    Parse repository paths, branches and excluded directories path from a string.
 
     Args:
-        repo_paths_input (str): A string containing repository data or a path to a text file.
-            Format for each line: "repo_path#branch,/path/to/exclude1,/path/to/exclude2,..."
+        repo_paths_input (str): A comma-separated list of repository entries.
+            Format for each entry: "repo_path#branch,/path/to/exclude1,/path/to/exclude2,..."
 
     Returns:
        list[tuple[Path | str, str, list[Path]]]: A list of tuples containing:
@@ -63,21 +63,12 @@ def parse_repos_paths(
         - list[Path]: Excluded directories paths
     """
     path = Path(repo_paths_input)
-    repo_entries = []
-
     if path.is_file():
-        try:
-            # If the input string is a file, read its contents
-            with open(path, "r", encoding="utf-8") as f:
-                repo_entries = f.read().strip().splitlines()
-        except OSError as ex:
-            handle_exception(ex)
-
-        if not repo_entries:
-            handle_exception(ValueError("The file is empty."))
-    else:
-        # Otherwise, treat the string as a list of repo paths
-        repo_entries = repo_paths_input.split(",")
+        raise ValueError(
+            "Repository list files are no longer supported. "
+            "Use --config with a YAML configuration file instead."
+        )
+    repo_entries = repo_paths_input.split(",")
 
     # Parse each line into repository path, branch name, and excluded directories
     result = []
@@ -367,12 +358,12 @@ def parse_arguments(parser: argparse.ArgumentParser) -> argparse.Namespace:
         nargs="?",
         type=parse_repos_paths,
         help=(
-            "A text file containing a list of repositories, "
-            "or a comma-separated list of Git repository paths or URLs,\n"
+            "A comma-separated list of Git repository paths or URLs,\n"
             "optionally followed by a branch name separated with '#'.\n"
             "Examples: /path/to/repo1#branch-name or"
             "http://github.com/user/repo2.git#branch-name.\n"
-            "If no branch is specified, 'main' will be used as the default."
+            "If no branch is specified, 'main' will be used as the default.\n"
+            "Use --config for multi-repository YAML inputs."
         ),
     )
 
