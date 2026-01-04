@@ -12,6 +12,33 @@
 
 ### Security
 
+## [2.3.0] - 2026-01-05
+
+### Added
+
+- Support YAML configuration for analysis settings.
+- Support multi-repository YAML inputs with per-repository settings.
+- Generate HTML reports with layout templates, embedded detail data, and filters.
+- Generate Markdown summaries for analysis runs.
+- Add cache diff analysis for commit-level reuse checks.
+- Add `--workers` to control parallel repository analysis.
+- Add commit-based repository progress updates.
+
+### Changed
+
+- Improve report layout, filter UI, and summary number formatting.
+- Refine CLI progress output for chart and HTML report generation.
+- Optimize HTML report filter serialization performance.
+
+### Fixed
+
+- Ensure chart generation progress bars complete accurately.
+- Avoid remote auth logs during parallel runs.
+
+### Removed
+
+- Remove repository list file input for `repo_paths`; use YAML config instead.
+
 ## [2.2.4] - 2026-01-01
 
 ### Added
@@ -195,6 +222,7 @@
 - Provided functionality to generate LOC trend charts by language and author.
 -
 
+[2.3.0](https://github.com/nobShinjo/AnalyzeGitRepoLoc/releases/tag/v2.3.0)
 [2.2.4](https://github.com/nobShinjo/AnalyzeGitRepoLoc/releases/tag/v2.2.4)
 [2.2.3](https://github.com/nobShinjo/AnalyzeGitRepoLoc/releases/tag/v2.2.3)
 [2.2.2](https://github.com/nobShinjo/AnalyzeGitRepoLoc/releases/tag/v2.2.2)
