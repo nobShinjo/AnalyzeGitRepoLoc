@@ -352,6 +352,11 @@ def parse_arguments(parser: argparse.ArgumentParser) -> argparse.Namespace:
         default=None,
         help="YAML configuration file path",
     )
+    parser.add_argument(
+        "--tui",
+        action="store_true",
+        help="Select GitHub/GitLab repositories interactively before analysis.",
+    )
 
     parser.add_argument(
         "repo_paths",
@@ -410,15 +415,19 @@ def parse_arguments(parser: argparse.ArgumentParser) -> argparse.Namespace:
     parser.add_argument(
         "--clear-cache",
         action="store_true",
+        default=None,
         help="If set, the cache will be cleared before executing the main function.",
     )
     parser.add_argument(
         "--no-plot-show",
         action="store_true",
+        default=None,
         help="If set, the plots will not be shown.",
     )
     args = parser.parse_args()
     try:
+        if args.tui and args.config is None:
+            raise ValueError("--config is required when --tui is provided.")
         if args.config is not None:
             args = merge_yaml_config(
                 args=args,
@@ -440,6 +449,10 @@ def parse_arguments(parser: argparse.ArgumentParser) -> argparse.Namespace:
         args.author_name = _normalize_optional_list(args.author_name)
         args.exclude_dirs = _normalize_optional_list(args.exclude_dirs)
         args.workers = _normalize_optional_int(args.workers, "--workers")
+        if args.clear_cache is None:
+            args.clear_cache = False
+        if args.no_plot_show is None:
+            args.no_plot_show = False
         _validate_date_range(args.since, args.until)
     except ValueError as ex:
         parser.error(str(ex))

@@ -41,6 +41,16 @@ from analyze_git_repo_loc.chart_builder import ChartBuilder, ChartStrategy
 from analyze_git_repo_loc.colored_console_printer import ColoredConsolePrinter
 from analyze_git_repo_loc.html_report import ProgressEvent, generate_html_report
 from analyze_git_repo_loc.markdown_summary import generate_markdown_summary
+from analyze_git_repo_loc.remote_catalog import (
+    RemoteCatalogError,
+    fetch_remote_repositories,
+    load_tui_settings,
+    selected_refs_to_repo_paths,
+)
+from analyze_git_repo_loc.tui_selector import (
+    TuiSelectionCancelled,
+    run_repository_selector,
+)
 from analyze_git_repo_loc.utils import (
     analyze_git_repositories,
     analyze_trends,
@@ -49,6 +59,7 @@ from analyze_git_repo_loc.utils import (
     parse_arguments,
     save_repository_branch_info,
 )
+from analyze_git_repo_loc.yaml_config import load_yaml_data
 
 
 class _ReportProgressTracker:
@@ -106,6 +117,29 @@ class _ReportProgressTracker:
 def _print_start(console: ColoredConsolePrinter, parser: argparse.ArgumentParser) -> None:
     console.print_h1(f"# Start {parser.prog}.")
     print(Style.DIM + f"- {parser.description}", end=os.linesep + os.linesep)
+
+
+def _apply_tui_repository_selection(args: argparse.Namespace) -> None:
+    """
+    Run TUI repository selection and update args.repo_paths.
+
+    Args:
+        args (argparse.Namespace): Parsed CLI arguments.
+    """
+    if not getattr(args, "tui", False):
+        return
+    try:
+        config_data = load_yaml_data(args.config)
+        tui_settings = load_tui_settings(config_data)
+        remote_refs = fetch_remote_repositories(tui_settings)
+        selected_refs = run_repository_selector(remote_refs)
+        args.repo_paths = selected_refs_to_repo_paths(
+            selected_refs,
+            clone_protocol=tui_settings.defaults.clone_protocol,
+        )
+    except (RemoteCatalogError, RuntimeError, TuiSelectionCancelled, ValueError) as ex:
+        print(str(ex), file=sys.stderr)
+        sys.exit(1)
 
 
 def _prepare_loc_data(
@@ -327,6 +361,7 @@ def main() -> None:
 
     # Initialize ColoredConsolePrinter
     console = ColoredConsolePrinter()
+    _apply_tui_repository_selection(args)
 
     # Output program name and description.
     _print_start(console, parser)

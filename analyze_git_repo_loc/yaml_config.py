@@ -2,6 +2,7 @@
 YAML configuration loader and merger for CLI arguments.
 
 Functions:
+    load_yaml_data
     load_yaml_config
     merge_yaml_config
 
@@ -21,15 +22,15 @@ import yaml
 from analyze_git_repo_loc.remote_repos import RemoteRepoManager
 
 
-def load_yaml_config(config_path: Path) -> tuple[dict, list[dict]]:
+def load_yaml_data(config_path: Path) -> dict:
     """
-    Load YAML configuration data and validate required structure.
+    Load YAML configuration data and validate the top-level shape.
 
     Args:
         config_path (Path): Path to the YAML configuration file.
 
     Returns:
-        tuple[dict, list[dict]]: (settings, repositories) dictionaries.
+        dict: Parsed YAML mapping.
     """
     if not config_path.exists():
         raise ValueError(f"Config file not found: {config_path}")
@@ -40,13 +41,36 @@ def load_yaml_config(config_path: Path) -> tuple[dict, list[dict]]:
         raise ValueError(f"Invalid YAML in config file: {config_path}") from ex
     if not isinstance(data, dict):
         raise ValueError("YAML config must be a mapping at the top level.")
+    return data
+
+
+def load_yaml_config(
+    config_path: Path,
+    *,
+    require_repositories: bool = True,
+) -> tuple[dict, list[dict]]:
+    """
+    Load YAML configuration data and validate required structure.
+
+    Args:
+        config_path (Path): Path to the YAML configuration file.
+        require_repositories (bool): Whether repositories must be present.
+
+    Returns:
+        tuple[dict, list[dict]]: (settings, repositories) dictionaries.
+    """
+    data = load_yaml_data(config_path)
 
     settings = data.get("settings") or {}
     if not isinstance(settings, dict):
         raise ValueError("YAML config 'settings' must be a mapping.")
 
     repositories = data.get("repositories")
+    if repositories is None and not require_repositories:
+        repositories = []
     if not isinstance(repositories, list) or not repositories:
+        if not require_repositories and repositories == []:
+            return settings, []
         raise ValueError("YAML config 'repositories' must be a non-empty list.")
     normalized_repositories: list[dict] = []
     for entry in repositories:
@@ -98,6 +122,20 @@ def _resolve_workers(workers_value) -> int | None:
     return workers
 
 
+def _resolve_optional_bool(bool_value, key: str) -> bool | None:
+    if bool_value is None:
+        return None
+    if isinstance(bool_value, bool):
+        return bool_value
+    if isinstance(bool_value, str):
+        normalized = bool_value.strip().lower()
+        if normalized in {"1", "true", "yes", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "off"}:
+            return False
+    raise ValueError(f"Invalid {key} value '{bool_value}'.")
+
+
 def _build_repo_entries(
     repositories: list[dict],
     repo_manager: RemoteRepoManager,
@@ -133,7 +171,10 @@ def merge_yaml_config(
     Returns:
         argparse.Namespace: Updated arguments with YAML config applied.
     """
-    settings, repositories = load_yaml_config(args.config)
+    settings, repositories = load_yaml_config(
+        args.config,
+        require_repositories=not getattr(args, "tui", False),
+    )
 
     args.output = _resolve_output_path(_pick_value(args, settings, "output"))
     args.interval = _resolve_interval(_pick_value(args, settings, "interval"))
@@ -143,8 +184,16 @@ def merge_yaml_config(
     args.author_name = _pick_value(args, settings, "author_name")
     args.exclude_dirs = _pick_value(args, settings, "exclude_dirs")
     args.workers = _resolve_workers(_pick_value(args, settings, "workers"))
+    args.clear_cache = _resolve_optional_bool(
+        _pick_value(args, settings, "clear_cache"),
+        "clear_cache",
+    )
+    args.no_plot_show = _resolve_optional_bool(
+        _pick_value(args, settings, "no_plot_show"),
+        "no_plot_show",
+    )
 
-    if args.repo_paths is None:
+    if args.repo_paths is None and repositories:
         args.repo_paths = _build_repo_entries(
             repositories,
             repo_manager,
