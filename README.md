@@ -114,6 +114,16 @@ python -m analyze_git_repo_loc /path/to/repo1#main,/path/to/repo2#develop --inte
 python -m analyze_git_repo_loc --config ./config.yml
 ```
 
+#### Example : GitHub/GitLab repository selector TUI
+
+```shell
+python -m analyze_git_repo_loc --tui --config ./config.yml
+```
+
+The TUI lists repositories from enabled GitHub/GitLab providers, lets you
+search and select multiple repositories, then immediately runs the normal
+analysis pipeline with the selected repositories.
+
 #### Example : Limit workers
 
 ```shell
@@ -155,6 +165,17 @@ repositories:
       - samples
   - path: https://github.com/user/repo2.git
     branch: develop
+
+tui:
+  providers:
+    github:
+      enabled: true
+      api_base_url: https://api.github.com
+    gitlab:
+      enabled: false
+      base_url: https://gitlab.com
+  defaults:
+    clone_protocol: https
 ```
 
 Notes:
@@ -163,6 +184,10 @@ Notes:
   `branch`, and `exclude_dirs`. Branch defaults to `main`.
 - `lang`, `author_name`, and `exclude_dirs` accept a YAML list or a
   comma-separated string.
+- `--tui` requires `--config` and may use a YAML file without `repositories`.
+- TUI authentication uses only `GITHUB_TOKEN` and `GITLAB_TOKEN` environment
+  variables. Tokens are not read from YAML and are not entered in the TUI.
+- `tui.defaults.clone_protocol` accepts `https` or `ssh`.
 
 ### Output files
 
