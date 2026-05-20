@@ -124,6 +124,11 @@ The TUI lists repositories from enabled GitHub/GitLab providers, lets you
 search and select multiple repositories, then immediately runs the normal
 analysis pipeline with the selected repositories.
 
+When only one provider is configured and `GITHUB_TOKEN` / `GITLAB_TOKEN` or an
+existing `gh` / `glab` login is available, `--tui` starts at Quick Review.
+Press Enter to run, `e` to edit, `d` for details, `s` to save config then run,
+or `c` to cancel.
+
 #### Example : Limit workers
 
 ```shell
@@ -176,6 +181,13 @@ tui:
       base_url: https://gitlab.com
   defaults:
     clone_protocol: https
+  quick_defaults:
+    interval: monthly
+    cache_policy: use
+    no_plot_show: true
+    exclude_dirs:
+      - node_modules
+      - .venv
 ```
 
 Notes:
@@ -185,8 +197,33 @@ Notes:
 - `lang`, `author_name`, and `exclude_dirs` accept a YAML list or a
   comma-separated string.
 - `--tui` requires `--config` and may use a YAML file without `repositories`.
-- TUI authentication uses only `GITHUB_TOKEN` and `GITLAB_TOKEN` environment
-  variables. Tokens are not read from YAML and are not entered in the TUI.
+- `--tui` runs a pre-analysis wizard. YAML and CLI values are loaded as
+  defaults, then the wizard confirms repository selection, branches, filters,
+  path rules, output, cache policy, and display behavior before analysis starts.
+- The wizard can ask which providers to use: GitHub, GitLab.com, and
+  self-hosted GitLab. If exactly one provider is configured, that provider is
+  selected automatically. The self-hosted GitLab URL can be entered at runtime.
+- `tui.quick_defaults` stores non-secret defaults used by the Quick Review
+  screen. It never stores tokens, client IDs, or authentication choices.
+- In the TUI wizard, global excludes and per-repository excludes are combined
+  into the repository entries passed to the existing analysis pipeline. Quick
+  Review excludes are applied only when the path exists in the cached repo.
+- Quick Review starts with a compact summary and uses terminal colors when
+  supported to distinguish headings, summary values, actions, and cache states.
+  Press `d` to show repository-level details and full execution conditions.
+- TUI-selected repositories may include `include_subpath` when saving config;
+  the analysis run treats it as a repository-root-relative subpath.
+- TUI authentication is selected at runtime. It offers environment tokens
+  (`GITHUB_TOKEN` / `GITLAB_TOKEN`), existing `gh` / `glab` CLI login tokens,
+  OAuth Device Code login when an application client ID is available, or a
+  one-time token entered for the current run.
+- Environment tokens and existing `gh` / `glab` logins are selected
+  automatically when they are the configured provider's available non-interactive
+  option. Device Code and one-time token authentication still require explicit
+  selection.
+- TUI authentication details are not stored in YAML, files, or keyrings by this
+  application. Resolved tokens are mirrored only into the current process
+  environment for downstream clone compatibility.
 - `tui.defaults.clone_protocol` accepts `https` or `ssh`.
 
 ### Output files
