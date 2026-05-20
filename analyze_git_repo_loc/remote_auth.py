@@ -11,6 +11,9 @@ Public methods:
     RemoteAuthService.log_auth_success
     RemoteAuthService.is_auth_failure
     RemoteAuthService.raise_auth_failure
+Functions:
+    build_host_token_env_var:
+        Build the process-local environment variable name for a host token.
 
 Overview:
     Encapsulates token resolution, HTTPS token URL construction, credential
@@ -20,6 +23,7 @@ Overview:
 from __future__ import annotations
 
 import os
+import re
 from urllib.parse import urlparse
 
 from git import GitCommandError
@@ -28,6 +32,20 @@ from tqdm import tqdm
 
 class RemoteAuthError(ValueError):
     """Authentication failed while accessing a remote repository."""
+
+
+def build_host_token_env_var(host: str) -> str:
+    """
+    Build the environment variable name used for a host-specific token.
+
+    Args:
+        host (str): Git hosting hostname.
+
+    Returns:
+        str: Process environment variable name for the host token.
+    """
+    normalized = re.sub(r"[^A-Za-z0-9]+", "_", host).strip("_").upper()
+    return f"ANALYZE_GIT_REPO_LOC_TOKEN_{normalized}"
 
 
 class RemoteAuthService:
@@ -159,6 +177,10 @@ class RemoteAuthService:
         if not host:
             return None
         normalized = host.lower()
+        host_token = os.getenv(build_host_token_env_var(normalized))
+        if host_token:
+            username = "x-access-token" if "github" in normalized else "oauth2"
+            return host_token, username
         if "github" in normalized:
             token = os.getenv("GITHUB_TOKEN")
             if token:

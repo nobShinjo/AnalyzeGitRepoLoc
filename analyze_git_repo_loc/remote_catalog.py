@@ -24,7 +24,6 @@ Functions:
 from __future__ import annotations
 
 import json
-import os
 from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlencode, urljoin
@@ -253,6 +252,7 @@ def fetch_github_repositories(
 def _gitlab_headers(token: str) -> dict[str, str]:
     return {
         "Accept": "application/json",
+        "Authorization": f"Bearer {token}",
         "PRIVATE-TOKEN": token,
         "User-Agent": "analyze-git-repo-loc",
     }
@@ -314,7 +314,24 @@ def fetch_gitlab_repositories(
     return refs
 
 
-def fetch_remote_repositories(settings: TuiSettings) -> list[RemoteRepositoryRef]:
+def _require_auth_token(
+    auth_tokens: dict[str, str],
+    provider: str,
+    provider_label: str,
+) -> str:
+    token = auth_tokens.get(provider)
+    if not token:
+        raise RemoteCatalogError(
+            f"{provider_label} authentication token was not resolved before fetching repositories."
+        )
+    return token
+
+
+def fetch_remote_repositories(
+    settings: TuiSettings,
+    *,
+    auth_tokens: dict[str, str] | None = None,
+) -> list[RemoteRepositoryRef]:
     """
     Fetch repositories from all enabled TUI providers.
 
@@ -327,14 +344,11 @@ def fetch_remote_repositories(settings: TuiSettings) -> list[RemoteRepositoryRef
     Raises:
         RemoteCatalogError: If tokens are missing, APIs fail, or no repos exist.
     """
+    auth_tokens = auth_tokens or {}
     refs: list[RemoteRepositoryRef] = []
     try:
         if settings.providers.github.enabled:
-            token = os.getenv("GITHUB_TOKEN")
-            if not token:
-                raise RemoteCatalogError(
-                    "GITHUB_TOKEN is required when GitHub TUI provider is enabled."
-                )
+            token = _require_auth_token(auth_tokens, "github", "GitHub")
             refs.extend(
                 fetch_github_repositories(
                     api_base_url=settings.providers.github.api_base_url,
@@ -342,11 +356,7 @@ def fetch_remote_repositories(settings: TuiSettings) -> list[RemoteRepositoryRef
                 )
             )
         if settings.providers.gitlab.enabled:
-            token = os.getenv("GITLAB_TOKEN")
-            if not token:
-                raise RemoteCatalogError(
-                    "GITLAB_TOKEN is required when GitLab TUI provider is enabled."
-                )
+            token = _require_auth_token(auth_tokens, "gitlab", "GitLab")
             refs.extend(
                 fetch_gitlab_repositories(
                     base_url=settings.providers.gitlab.base_url,

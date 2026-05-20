@@ -15,6 +15,8 @@ Overview:
 
 from __future__ import annotations
 
+import hashlib
+import os
 import shutil
 from pathlib import Path
 from urllib.parse import urlparse
@@ -67,7 +69,7 @@ class RemoteRepoManager:
             self._fetch_with_auth(repo, repo_url)
         except (InvalidGitRepositoryError, NoSuchPathError):
             if repo_path.exists():
-                shutil.rmtree(repo_path)
+                self._remove_cache_path(repo_path)
             repo_path.parent.mkdir(parents=True, exist_ok=True)
             try:
                 repo = self._clone_with_auth(repo_url, repo_path)
@@ -179,7 +181,7 @@ class RemoteRepoManager:
             except GitCommandError as ex:
                 last_error = ex
                 if repo_path.exists():
-                    shutil.rmtree(repo_path)
+                    self._remove_cache_path(repo_path)
         if last_error is not None:
             if self._auth.is_auth_failure(last_error):
                 self._auth.raise_auth_failure(repo_url, last_error)
@@ -198,7 +200,24 @@ class RemoteRepoManager:
             Path: Path to the cached clone.
         """
         repo_name = GitRepoLOCAnalyzer.get_repository_name(repo_url)
-        return cache_dir / "remote-repos" / repo_name
+        identity = self._parse_repo_identity(repo_url)
+        identity_text = "/".join(identity) if identity is not None else repo_url
+        identity_hash = hashlib.sha1(identity_text.encode("utf-8")).hexdigest()[:12]
+        return cache_dir / "remote-repos" / f"{repo_name}-{identity_hash}"
+
+    def _remove_cache_path(self, repo_path: Path) -> None:
+        shutil.rmtree(repo_path, onexc=self._handle_remove_error)
+
+    def _handle_remove_error(
+        self,
+        function: object,
+        path: str,
+        excinfo: BaseException,
+    ) -> None:
+        if not isinstance(excinfo, PermissionError):
+            raise excinfo
+        os.chmod(path, 0o700)
+        function(path)
 
     def _checkout_branch(self, repo: Repo, branch_name: str) -> None:
         """

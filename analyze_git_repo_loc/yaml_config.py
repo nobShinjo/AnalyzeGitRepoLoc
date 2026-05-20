@@ -140,18 +140,21 @@ def _build_repo_entries(
     repositories: list[dict],
     repo_manager: RemoteRepoManager,
     normalize_list: Callable[[list[str] | str | None], list[str] | None],
-) -> list[tuple[Path | str, str, list[str]]]:
+) -> list[tuple[Path | str, str, list[str], str | None]]:
     repo_entries = []
     for repository in repositories:
         repo_path_value = repository["path"]
         branch_name = repository.get("branch") or "main"
         exclude_dirs = normalize_list(repository.get("exclude_dirs")) or []
+        include_subpath = repository.get("include_subpath")
+        if include_subpath is not None:
+            include_subpath = str(include_subpath).strip() or None
         repo_path = (
             repo_path_value
             if repo_manager.is_git_url(repo_path_value)
             else Path(repo_path_value)
         )
-        repo_entries.append((repo_path, branch_name, exclude_dirs))
+        repo_entries.append((repo_path, branch_name, exclude_dirs, include_subpath))
     return repo_entries
 
 

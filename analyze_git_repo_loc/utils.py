@@ -525,6 +525,34 @@ def _resolve_analysis_repo_path(
     return repo_path
 
 
+def _apply_include_subpath(
+    analysis_repo_path: Path | str,
+    include_subpath: str | Path | None,
+) -> Path | str:
+    """
+    Apply a repository-root-relative include subpath when configured.
+
+    Args:
+        analysis_repo_path (Path | str): Resolved repository root.
+        include_subpath (str | Path | None): Optional include subpath.
+
+    Returns:
+        Path | str: Repository root or selected subpath.
+    """
+    if include_subpath in {None, ""}:
+        return analysis_repo_path
+    subpath = Path(include_subpath)
+    if subpath == Path("."):
+        return analysis_repo_path
+    if subpath.is_absolute():
+        raise ValueError("include_subpath must be repository-root-relative.")
+    root = Path(analysis_repo_path).resolve()
+    candidate = (root / subpath).resolve()
+    if candidate != root and root not in candidate.parents:
+        raise ValueError("include_subpath must resolve within repository root.")
+    return candidate
+
+
 def _create_analyzer(
     *,
     analysis_repo_path: Path | str,
@@ -606,6 +634,7 @@ def _analyze_single_repository(
     repo_path: Path | str,
     branch_name: str,
     exclude_dirs: list[Path] | None,
+    include_subpath: str | Path | None,
     output_dir: Path,
     since: datetime | None,
     until: datetime | None,
@@ -642,6 +671,10 @@ def _analyze_single_repository(
             repo_path=repo_path,
             branch_name=branch_name,
             cache_dir=output_dir / ".cache",
+        )
+        analysis_repo_path = _apply_include_subpath(
+            analysis_repo_path,
+            include_subpath,
         )
 
         analyzer = _create_analyzer(
@@ -724,8 +757,8 @@ def save_repository_branch_info(repo_paths, output_file: Path) -> None:
         f.write(
             "\n".join(
                 [
-                    f"repository: {repo_path}, branch: {branch_name}"
-                    for repo_path, branch_name, _ in repo_paths
+                    f"repository: {entry[0]}, branch: {entry[1]}"
+                    for entry in repo_paths
                 ]
             )
         )
@@ -793,6 +826,21 @@ def _resolve_exclude_dirs(
     return exclude_dirs
 
 
+def _unpack_repo_entry(
+    repo_entry: tuple,
+) -> tuple[Path | str, str, list[Path] | None, str | Path | None]:
+    """
+    Normalize repository entries to include optional include subpath.
+    """
+    if len(repo_entry) == 3:
+        repo_path, branch_name, exclude_dirs = repo_entry
+        return repo_path, branch_name, exclude_dirs, None
+    if len(repo_entry) == 4:
+        repo_path, branch_name, exclude_dirs, include_subpath = repo_entry
+        return repo_path, branch_name, exclude_dirs, include_subpath
+    raise ValueError("Repository entries must contain 3 or 4 values.")
+
+
 def _analyze_repositories_sequential(
     *,
     args: argparse.Namespace,
@@ -803,7 +851,10 @@ def _analyze_repositories_sequential(
     """
     Analyze repositories sequentially and update results in-place.
     """
-    for index, (repo_path, branch_name, exclude_dirs) in enumerate(repo_entries):
+    for index, repo_entry in enumerate(repo_entries):
+        repo_path, branch_name, exclude_dirs, include_subpath = _unpack_repo_entry(
+            repo_entry
+        )
         resolved_excludes = _resolve_exclude_dirs(args, exclude_dirs)
         try:
             _, _, loc_data = _analyze_single_repository(
@@ -811,6 +862,7 @@ def _analyze_repositories_sequential(
                 repo_path=repo_path,
                 branch_name=branch_name,
                 exclude_dirs=resolved_excludes,
+                include_subpath=include_subpath,
                 output_dir=args.output,
                 since=args.since,
                 until=args.until,
@@ -826,7 +878,7 @@ def _analyze_repositories_sequential(
 
 
 def _build_repo_progress_bars(
-    repo_entries: list[tuple[Path | str, str, list[Path] | None]],
+    repo_entries: list[tuple],
     *,
     progress: tqdm,
     label_width: int,
@@ -836,7 +888,8 @@ def _build_repo_progress_bars(
     """
     repo_bars: dict[int, tqdm] = {}
     repo_labels: dict[int, str] = {}
-    for index, (repo_path, _, _) in enumerate(repo_entries):
+    for index, repo_entry in enumerate(repo_entries):
+        repo_path, _, _, _ = _unpack_repo_entry(repo_entry)
         repo_name = GitRepoLOCAnalyzer.get_repository_name(repo_path)
         label = _truncate_repo_label(repo_name, label_width)
         repo_labels[index] = label
@@ -899,9 +952,10 @@ def _analyze_repositories_parallel(
     )
     try:
         with ProcessPoolExecutor(max_workers=worker_count) as executor:
-            for index, (repo_path, branch_name, exclude_dirs) in enumerate(
-                repo_entries
-            ):
+            for index, repo_entry in enumerate(repo_entries):
+                repo_path, branch_name, exclude_dirs, include_subpath = _unpack_repo_entry(
+                    repo_entry
+                )
                 resolved_excludes = _resolve_exclude_dirs(args, exclude_dirs)
                 futures.append(
                     executor.submit(
@@ -910,6 +964,7 @@ def _analyze_repositories_parallel(
                         repo_path=repo_path,
                         branch_name=branch_name,
                         exclude_dirs=resolved_excludes,
+                        include_subpath=include_subpath,
                         output_dir=args.output,
                         since=args.since,
                         until=args.until,
