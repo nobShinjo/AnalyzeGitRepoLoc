@@ -18,3 +18,8 @@ dependencies = [
   "pip-licenses>=5.0.0",
   "prompt_toolkit>=3.0.52"
 ]
+
+[dependency-groups]
+dev = [
+  "pytest>=8.4.0"
+]
