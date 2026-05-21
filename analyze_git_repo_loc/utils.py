@@ -357,6 +357,11 @@ def parse_arguments(parser: argparse.ArgumentParser) -> argparse.Namespace:
         action="store_true",
         help="Select GitHub/GitLab repositories interactively before analysis.",
     )
+    parser.add_argument(
+        "--init",
+        action="store_true",
+        help="Create an initial YAML configuration file interactively.",
+    )
 
     parser.add_argument(
         "repo_paths",
@@ -426,6 +431,8 @@ def parse_arguments(parser: argparse.ArgumentParser) -> argparse.Namespace:
     )
     args = parser.parse_args()
     try:
+        if args.init:
+            return args
         if args.tui and args.config is None:
             raise ValueError("--config is required when --tui is provided.")
         if args.config is not None:

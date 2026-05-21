@@ -40,6 +40,7 @@ from analyze_git_repo_loc.analysis_helpers import (
 from analyze_git_repo_loc.chart_builder import ChartBuilder, ChartStrategy
 from analyze_git_repo_loc.colored_console_printer import ColoredConsolePrinter
 from analyze_git_repo_loc.html_report import ProgressEvent, generate_html_report
+from analyze_git_repo_loc.init_config import run_init_config
 from analyze_git_repo_loc.markdown_summary import generate_markdown_summary
 from analyze_git_repo_loc.remote_catalog import (
     RemoteCatalogError,
@@ -337,33 +338,43 @@ def _maybe_open_report(*, output_dir: Path, args: argparse.Namespace, repo_count
             webbrowser.open(report_path.resolve().as_uri())
 
 
-def _format_output_summary(output_dir: Path) -> list[str]:
+def _format_output_summary(
+    output_dir: Path, output_root: Path | None = None
+) -> list[str]:
     """
     Format the final artifact summary for a completed analysis run.
 
     Args:
         output_dir (Path): Timestamped output directory for the run.
+        output_root (Path | None): Root output directory for charts and cache.
 
     Returns:
         list[str]: Human-readable artifact summary lines.
     """
+    resolved_output_root = output_root or output_dir.parent
     return [
         "Finished",
         f"Report: {output_dir / 'report.html'}",
         f"Summary: {output_dir / 'summary.md'}",
         f"Data: {output_dir / '*.csv'}",
+        f"Run data: {output_dir}",
+        f"Repository charts: {resolved_output_root}",
+        f"Cache: {resolved_output_root / '.cache'}",
     ]
 
 
-def _print_output_summary(console: ColoredConsolePrinter, output_dir: Path) -> None:
+def _print_output_summary(
+    console: ColoredConsolePrinter, output_dir: Path, output_root: Path
+) -> None:
     """
     Print generated artifact paths for a completed analysis run.
 
     Args:
         console (ColoredConsolePrinter): Console printer for colored output.
         output_dir (Path): Timestamped output directory for the run.
+        output_root (Path): Root output directory for charts and cache.
     """
-    lines = _format_output_summary(output_dir)
+    lines = _format_output_summary(output_dir, output_root)
     console.print_colored(lines[0], color=Fore.GREEN, bright=True)
     for line in lines[1:]:
         label, _, value = line.partition(": ")
@@ -381,6 +392,9 @@ def main() -> None:
         description="Analyze Git repositories and visualize code LOC.",
     )
     args = parse_arguments(parser)
+    if getattr(args, "init", False):
+        run_init_config()
+        return
 
     # Initialize ColoredConsolePrinter
     console = ColoredConsolePrinter()
@@ -440,7 +454,7 @@ def main() -> None:
     )
 
     _maybe_open_report(output_dir=output_dir, args=args, repo_count=repo_count)
-    _print_output_summary(console, output_dir)
+    _print_output_summary(console, output_dir, output_root)
 
     console.print_h1("\n# LOC Analyze")
     print(Cursor.UP() + Cursor.FORWARD(50) + Fore.GREEN + "FINISH")

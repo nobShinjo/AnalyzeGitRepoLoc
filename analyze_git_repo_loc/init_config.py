@@ -1,0 +1,243 @@
+"""Create first-run YAML configuration files.
+
+Description:
+    Provides the interactive `--init` setup flow for creating a minimal
+    TUI-ready YAML configuration file. Keeps authentication secrets and
+    repository selections out of generated config files.
+Classes:
+    InitConfigOptions:
+        Stores non-secret defaults selected during first-run setup.
+Functions:
+    build_init_config_data:
+        Convert setup options into YAML-ready config data.
+    render_init_config_yaml:
+        Render generated config data as YAML text.
+    resolve_init_config_path:
+        Select a safe config output path with overwrite confirmation.
+    run_init_config:
+        Run the interactive config initialization flow.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from datetime import datetime
+from pathlib import Path
+from typing import Callable, Any
+
+import yaml
+
+
+PromptFunc = Callable[[str], str]
+ConfirmFunc = Callable[[Path], bool]
+
+
+@dataclass(frozen=True)
+class InitConfigOptions:
+    """Non-secret first-run configuration choices."""
+
+    github_enabled: bool = True
+    gitlab_enabled: bool = False
+    output: Path = Path("out")
+    interval: str = "monthly"
+    since: str | None = None
+    until: str | None = None
+    no_plot_show: bool = True
+    cache_policy: str = "use"
+    exclude_dirs: list[str] = field(default_factory=lambda: ["node_modules", ".venv"])
+
+
+def build_init_config_data(options: InitConfigOptions) -> dict[str, Any]:
+    """Build a minimal TUI-ready config mapping.
+
+    Args:
+        options (InitConfigOptions): First-run configuration choices.
+
+    Returns:
+        dict[str, Any]: YAML-ready config data.
+    """
+    settings: dict[str, Any] = {
+        "output": str(options.output),
+        "interval": options.interval,
+        "clear_cache": False,
+        "no_plot_show": options.no_plot_show,
+    }
+    if options.since:
+        settings["since"] = options.since
+    if options.until:
+        settings["until"] = options.until
+
+    return {
+        "settings": settings,
+        "tui": {
+            "providers": {
+                "github": {
+                    "enabled": options.github_enabled,
+                    "api_base_url": "https://api.github.com",
+                },
+                "gitlab": {
+                    "enabled": options.gitlab_enabled,
+                    "base_url": "https://gitlab.com",
+                },
+            },
+            "defaults": {
+                "clone_protocol": "https",
+            },
+            "quick_defaults": {
+                "interval": options.interval,
+                "cache_policy": options.cache_policy,
+                "no_plot_show": options.no_plot_show,
+                "exclude_dirs": options.exclude_dirs,
+            },
+        },
+    }
+
+
+def render_init_config_yaml(config_data: dict[str, Any]) -> str:
+    """Render config data as YAML text.
+
+    Args:
+        config_data (dict[str, Any]): YAML-ready config data.
+
+    Returns:
+        str: Rendered YAML ending with a newline.
+    """
+    return yaml.safe_dump(
+        config_data,
+        allow_unicode=False,
+        default_flow_style=False,
+        sort_keys=False,
+    )
+
+
+def resolve_init_config_path(
+    *,
+    default_path: Path,
+    prompt: PromptFunc,
+    confirm_overwrite: ConfirmFunc,
+) -> Path:
+    """Resolve a safe output path for generated config.
+
+    Args:
+        default_path (Path): Default config file path.
+        prompt (PromptFunc): Input function for alternate paths.
+        confirm_overwrite (ConfirmFunc): Confirmation function for overwrites.
+
+    Returns:
+        Path: Selected config path.
+    """
+    if not default_path.exists():
+        return default_path
+
+    base_dir = default_path.parent
+    while True:
+        answer = prompt(
+            f"{default_path} already exists. Enter another config file path: "
+        ).strip()
+        candidate = Path(answer) if answer else default_path
+        if not candidate.is_absolute():
+            candidate = base_dir / candidate
+        if candidate.exists():
+            if confirm_overwrite(candidate):
+                return candidate
+            continue
+        return candidate
+
+
+def _prompt_bool(prompt: PromptFunc, message: str, default: bool) -> bool:
+    suffix = "Y/n" if default else "y/N"
+    answer = prompt(f"{message} [{suffix}]: ").strip().lower()
+    if not answer:
+        return default
+    return answer in {"y", "yes", "true", "1"}
+
+
+def _prompt_text(prompt: PromptFunc, message: str, default: str) -> str:
+    answer = prompt(f"{message} [{default}]: ").strip()
+    return answer or default
+
+
+def _prompt_optional_date(prompt: PromptFunc, message: str) -> str | None:
+    answer = prompt(f"{message} [blank]: ").strip()
+    if not answer:
+        return None
+    try:
+        datetime.fromisoformat(answer)
+    except ValueError as ex:
+        raise ValueError(f"Invalid date '{answer}'. Use YYYY-MM-DD.") from ex
+    return answer
+
+
+def _prompt_interval(prompt: PromptFunc) -> str:
+    interval = _prompt_text(prompt, "Analysis interval (daily/weekly/monthly)", "monthly")
+    if interval not in {"daily", "weekly", "monthly"}:
+        raise ValueError("Invalid interval. Use daily, weekly, or monthly.")
+    return interval
+
+
+def _prompt_cache_policy(prompt: PromptFunc) -> str:
+    cache_policy = _prompt_text(prompt, "Cache policy (use/update/clear)", "use")
+    if cache_policy not in {"use", "update", "clear"}:
+        raise ValueError("Invalid cache policy. Use use, update, or clear.")
+    return cache_policy
+
+
+def _prompt_exclude_dirs(prompt: PromptFunc) -> list[str]:
+    raw_value = _prompt_text(prompt, "Common exclude directories", "node_modules,.venv")
+    return [item.strip() for item in raw_value.split(",") if item.strip()]
+
+
+def _default_confirm_overwrite(path: Path) -> bool:
+    answer = input(f"Overwrite {path}? [y/N]: ").strip().lower()
+    return answer in {"y", "yes"}
+
+
+def run_init_config(
+    *,
+    default_path: Path = Path("config.yml"),
+    prompt: PromptFunc = input,
+    confirm_overwrite: ConfirmFunc = _default_confirm_overwrite,
+) -> Path:
+    """Run interactive config initialization and write the YAML file.
+
+    Args:
+        default_path (Path): Default config output path.
+        prompt (PromptFunc): Input function for interactive prompts.
+        confirm_overwrite (ConfirmFunc): Confirmation function for overwrites.
+
+    Returns:
+        Path: Written config file path.
+    """
+    config_path = resolve_init_config_path(
+        default_path=default_path,
+        prompt=prompt,
+        confirm_overwrite=confirm_overwrite,
+    )
+    github_enabled = _prompt_bool(prompt, "Enable GitHub provider", True)
+    gitlab_enabled = _prompt_bool(prompt, "Enable GitLab provider", False)
+    output = Path(_prompt_text(prompt, "Output directory", "out"))
+    interval = _prompt_interval(prompt)
+    since = _prompt_optional_date(prompt, "Start date YYYY-MM-DD")
+    until = _prompt_optional_date(prompt, "End date YYYY-MM-DD")
+    no_plot_show = not _prompt_bool(prompt, "Open plots automatically", False)
+    cache_policy = _prompt_cache_policy(prompt)
+    exclude_dirs = _prompt_exclude_dirs(prompt)
+
+    config_data = build_init_config_data(
+        InitConfigOptions(
+            github_enabled=github_enabled,
+            gitlab_enabled=gitlab_enabled,
+            output=output,
+            interval=interval,
+            since=since,
+            until=until,
+            no_plot_show=no_plot_show,
+            cache_policy=cache_policy,
+            exclude_dirs=exclude_dirs,
+        )
+    )
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text(render_init_config_yaml(config_data), encoding="utf-8")
+    print(f"Created config: {config_path}")
+    print(f"Next: python -m analyze_git_repo_loc --tui --config {config_path}")
+    return config_path

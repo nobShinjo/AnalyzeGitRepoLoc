@@ -114,6 +114,25 @@ python -m analyze_git_repo_loc /path/to/repo1#main,/path/to/repo2#develop --inte
 python -m analyze_git_repo_loc --config ./config.yml
 ```
 
+#### Example : Create an initial config
+
+```shell
+python -m analyze_git_repo_loc --init
+```
+
+`--init` interactively creates a minimal TUI-ready YAML config. The default
+output file is `config.yml`. If the file already exists, the CLI asks for
+another file name; entering the same existing path requires explicit overwrite
+confirmation.
+
+The generated config stores common non-secret defaults only. It does not save
+repositories, tokens, client IDs, or authentication choices. After creation,
+run:
+
+```shell
+python -m analyze_git_repo_loc --tui --config ./config.yml
+```
+
 #### Example : GitHub/GitLab repository selector TUI
 
 ```shell
@@ -196,6 +215,7 @@ Notes:
   `branch`, and `exclude_dirs`. Branch defaults to `main`.
 - `lang`, `author_name`, and `exclude_dirs` accept a YAML list or a
   comma-separated string.
+- `--init` can create a minimal starter config for TUI usage.
 - `--tui` requires `--config` and may use a YAML file without `repositories`.
 - `--tui` runs a pre-analysis wizard. YAML and CLI values are loaded as
   defaults, then the wizard confirms repository selection, branches, filters,
