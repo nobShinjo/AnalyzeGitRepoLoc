@@ -2,10 +2,10 @@
 
 - [x] Confirm base worktree and current report architecture.
 - [x] Write design, plan, spec, and knowledge notes.
-- [ ] Add focused failing tests for lazy render markers and structure.
-- [ ] Implement dashboard template structure.
-- [ ] Implement active-tab lazy rendering.
-- [ ] Run focused tests.
-- [ ] Run full test suite.
-- [ ] Run Browser smoke verification.
+- [x] Add focused failing tests for lazy render markers and structure.
+- [x] Implement dashboard template structure.
+- [x] Implement active-tab lazy rendering.
+- [x] Run focused tests.
+- [x] Run full test suite.
+- [x] Run Browser smoke verification.
 - [ ] Commit implementation.
