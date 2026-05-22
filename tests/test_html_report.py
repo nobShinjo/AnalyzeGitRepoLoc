@@ -56,9 +56,22 @@ class HtmlReportUxTests(unittest.TestCase):
     def test_daily_x_axis_uses_adaptive_tick_config(self) -> None:
         html = self._generate_report_html(time_interval="Date")
 
-        self.assertIn("const getTickConfig = (intervalLabel, intervalCount)", html)
-        self.assertIn("getTickConfig(reportData.time_interval, intervalValues.length)", html)
+        self.assertIn("const getTickConfig = (intervalLabel, intervalValues)", html)
+        self.assertIn("const getIntervalSpan = (intervalLabel, intervalValues)", html)
+        self.assertIn("getTickConfig(reportData.time_interval, intervalValues)", html)
+        self.assertIn('"tick_policy"', html)
         self.assertNotIn('return { tickformat: "%b %d, %Y", dtick: "D1" };', html)
+
+    def test_weekly_x_axis_uses_span_based_tick_policy(self) -> None:
+        html = self._generate_report_html(time_interval="Week")
+
+        self.assertIn('"weekly"', html)
+        self.assertIn('"max_span": 104', html)
+        self.assertIn('"dtick": "W1"', html)
+        self.assertNotIn(
+            'return { tickformat: "%b %d, %Y", dtick: "W1" };',
+            html,
+        )
 
     def test_tab_rendering_queues_chart_work_after_content_render(self) -> None:
         html = self._generate_report_html()

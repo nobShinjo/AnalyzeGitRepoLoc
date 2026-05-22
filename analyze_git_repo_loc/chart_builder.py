@@ -27,6 +27,8 @@ import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
+from analyze_git_repo_loc.chart_ticks import resolve_xaxis_tick_config
+
 
 class ChartStrategy(Enum):
     """
@@ -510,9 +512,35 @@ class ChartBuilder:
             case ChartStrategy.AUTHOR_CONTRIBUTION:
                 return self.update_fig_author_contribution(title)
 
+    def _get_xaxis_values(self, x_axis_interval: str) -> list[object]:
+        """
+        Get x-axis values from the available chart data.
+        """
+        for data_frame in (
+            getattr(self, "_summary_data", None),
+            getattr(self, "_trend_data", None),
+        ):
+            if data_frame is None or x_axis_interval not in data_frame.columns:
+                continue
+            return data_frame[x_axis_interval].dropna().tolist()
+        return []
+
+    def _count_xaxis_points(self, x_axis_interval: str) -> int:
+        """
+        Count unique x-axis points from the available chart data.
+        """
+        for data_frame in (
+            getattr(self, "_summary_data", None),
+            getattr(self, "_trend_data", None),
+        ):
+            if data_frame is None or x_axis_interval not in data_frame.columns:
+                continue
+            return int(data_frame[x_axis_interval].nunique(dropna=True))
+        return 0
+
     def update_xaxis_tickformat(self, x_axis_interval: str) -> Self:
         """
-        Update the x-axis tick format based on the interval.
+        Update the x-axis tick format based on interval and date span.
 
         Args:
             interval (str): The interval to use for formatting the x-axis ticks.
@@ -521,23 +549,14 @@ class ChartBuilder:
         Returns:
             Self: The instance of the ChartBuilder for method chaining.
         """
-        # tick format
-        tickformat = {
-            "daily": "%b %d, %Y",  # NOSONAR
-            "weekly": "%b %d, %Y",  # NOSONAR
-            "monthly": "%b %Y",
-        }.get(
-            x_axis_interval, "%b %d, %Y"
-        )  # NOSONAR
+        tickformat, dtick = resolve_xaxis_tick_config(
+            x_axis_interval,
+            values=self._get_xaxis_values(x_axis_interval),
+            point_count=self._count_xaxis_points(x_axis_interval),
+        )
 
         self._fig.update_xaxes(tickformat=tickformat)
-        # dtick for x-axis
-        x_axis_interval = {
-            "daily": "W1",
-            "weekly": "W1",
-            "monthly": "M1",
-        }.get(x_axis_interval, "M1")
-        self._fig.update_layout(xaxis={"dtick": x_axis_interval})
+        self._fig.update_layout(xaxis={"dtick": dtick})
         return self
 
     def build(

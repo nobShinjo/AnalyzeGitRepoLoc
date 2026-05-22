@@ -333,6 +333,7 @@
       const renderedChartTabs = new Set();
       const chartRenderQueue = [];
       let chartRenderScheduled = false;
+      const tickPolicy = reportData.tick_policy || { aliases: {}, rules: {} };
 
       const escapeHtml = (value) =>
         String(value)
@@ -655,27 +656,54 @@
         return applyFilters(state.baseRows, filters);
       };
 
-      const getTickConfig = (intervalLabel, intervalCount) => {
+      const normalizeIntervalLabel = (intervalLabel) => {
         const label = String(intervalLabel || "").toLowerCase();
-        if (label === "month") {
-          return { tickformat: "%b %Y", dtick: "M1" };
+        return tickPolicy.aliases?.[label] || label;
+      };
+
+      const getIntervalSpan = (intervalLabel, intervalValues) => {
+        const label = normalizeIntervalLabel(intervalLabel);
+        const values = Array.isArray(intervalValues) ? intervalValues : [];
+        const dates = values
+          .map((value) => new Date(value))
+          .filter((date) => !Number.isNaN(date.getTime()))
+          .sort((a, b) => a - b);
+        if (!dates.length) {
+          return values.length;
         }
-        if (label === "week") {
-          return { tickformat: "%b %d, %Y", dtick: "W1" };
+        const first = dates[0];
+        const last = dates[dates.length - 1];
+        if (label === "monthly") {
+          return (
+            (last.getUTCFullYear() - first.getUTCFullYear()) * 12 +
+            last.getUTCMonth() -
+            first.getUTCMonth() +
+            1
+          );
         }
-        if (label === "date") {
-          if (intervalCount <= 31) {
-            return { tickformat: "%b %d", dtick: "D3" };
-          }
-          if (intervalCount <= 90) {
-            return { tickformat: "%b %d", dtick: "D7" };
-          }
-          if (intervalCount <= 180) {
-            return { tickformat: "%b %d", dtick: "D14" };
-          }
-          return { tickformat: "%b %Y", dtick: "M1" };
+        const daySpan =
+          Math.floor(Math.max(0, last.getTime() - first.getTime()) / 86400000) + 1;
+        if (label === "weekly") {
+          return Math.floor((daySpan - 1) / 7) + 1;
         }
-        return { tickformat: "%b %d, %Y", dtick: "M1" };
+        return daySpan;
+      };
+
+      const getTickConfig = (intervalLabel, intervalValues) => {
+        const label = normalizeIntervalLabel(intervalLabel);
+        const values = Array.isArray(intervalValues) ? intervalValues : [];
+        const span = Math.max(getIntervalSpan(label, values), values.length);
+        const rules = tickPolicy.rules?.[label] || [];
+        const matchedRule = rules.find(
+          (rule) => rule.max_span === null || span <= rule.max_span
+        );
+        if (matchedRule) {
+          return {
+            tickformat: matchedRule.tickformat,
+            dtick: matchedRule.dtick,
+          };
+        }
+        return { tickformat: "%b %Y", dtick: "M1" };
       };
 
       const renderNoData = (container) => {
@@ -866,7 +894,7 @@
           name: "Deleted",
           marker: { color: "rgba(239,85,59,0.6)" },
         });
-        const tickConfig = getTickConfig(reportData.time_interval, intervalValues.length);
+        const tickConfig = getTickConfig(reportData.time_interval, intervalValues);
         const layout = {
           title: { text: title, x: 0.5, xanchor: "center", font: { size: 20 } },
           font: { family: "Open Sans" },

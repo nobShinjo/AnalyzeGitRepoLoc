@@ -40,6 +40,7 @@ from analyze_git_repo_loc.analysis_helpers import (
     prepare_trend_data,
 )
 from analyze_git_repo_loc.chart_builder import ChartBuilder, ChartStrategy
+from analyze_git_repo_loc.chart_ticks import build_client_tick_policy
 
 _ASSETS_DIR_NAME = "assets"
 _NO_DATA_MESSAGE = '<p class="text-muted">No data available.</p>'
@@ -293,6 +294,7 @@ class HtmlReportBuilder:
         repositories = sorted({row["repository"] for row in rows})
         return {
             "time_interval": self.time_interval,
+            "tick_policy": build_client_tick_policy(),
             "rows": rows,
             "languages": languages,
             "authors": authors,
