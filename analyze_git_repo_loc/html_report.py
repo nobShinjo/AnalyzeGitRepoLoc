@@ -441,15 +441,14 @@ class HtmlReportBuilder:
         """
         Build template context for the overview tab.
         """
-        repo_list = ", ".join(self.repositories) if self.repositories else "None"
         meta_items = [
             {"label": "Run directory", "value": self.output_dir.name},
             {"label": "Time interval", "value": self.time_interval},
             {"label": "Repositories analyzed", "value": len(self.repositories)},
-            {"label": "Repository list", "value": repo_list},
         ]
         return {
             "meta_items": meta_items,
+            "repositories": self.repositories,
             "totals_table": self._summarize_totals_table(
                 self.repository_trend_analysis
             ),

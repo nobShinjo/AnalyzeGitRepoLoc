@@ -22,6 +22,10 @@ Functions:
         the analyzed commit data.
     save_cache() -> None:
     get_repository_name(repo_path: Union[Path, str]) -> str:
+    get_repository_display_name(
+        repo_path: Union[Path, str],
+        repo_ref: Union[Path, str, None],
+    ) -> str:
     valid_language_key(languages: list[str]) -> list[str]:
 
 """
@@ -499,7 +503,10 @@ class GitRepoLOCAnalyzer:
             progress_callback,
             total_commits,
         )
-        repository_name = GitRepoLOCAnalyzer.get_repository_name(self._repo_path)
+        repository_name = GitRepoLOCAnalyzer.get_repository_display_name(
+            repo_path=self._repo_path,
+            repo_ref=self._repo_ref,
+        )
 
         # Traverse commits
         for commit in tqdm(
@@ -589,6 +596,26 @@ class GitRepoLOCAnalyzer:
             repo_path = repo_path.split(":", 1)[1]
         # Assume repo_path is a string (URL), process accordingly
         return repo_path.rsplit("/", 1)[-1].removesuffix(".git")
+
+    @classmethod
+    def get_repository_display_name(
+        cls,
+        repo_path: Union[Path, str],
+        repo_ref: Union[Path, str, None],
+    ) -> str:
+        """
+        Get the human-readable repository name for reports.
+
+        Args:
+            repo_path (Union[Path, str]): Local repository path used for analysis.
+            repo_ref (Union[Path, str, None]): Original repository path or URL.
+
+        Returns:
+            str: Repository name for display and report data.
+        """
+        if repo_ref is None:
+            return cls.get_repository_name(repo_path)
+        return cls.get_repository_name(repo_ref)
 
     def valid_language_key(self, languages: list[str]) -> list[str]:
         """

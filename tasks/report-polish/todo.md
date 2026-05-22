@@ -2,11 +2,11 @@
 
 - [x] Confirm worktree state and current report implementation.
 - [x] Add implementation notes.
-- [ ] Add failing tests.
-- [ ] Fix repository display names and repository list rendering.
-- [ ] Implement adaptive x-axis and deferred chart queue.
-- [ ] Compress report header.
-- [ ] Run focused tests.
-- [ ] Run full tests.
-- [ ] Run browser smoke verification.
+- [x] Add failing tests.
+- [x] Fix repository display names and repository list rendering.
+- [x] Implement adaptive x-axis and deferred chart queue.
+- [x] Compress report header.
+- [x] Run focused tests.
+- [x] Run full tests.
+- [x] Run browser smoke verification.
 - [ ] Commit changes.
