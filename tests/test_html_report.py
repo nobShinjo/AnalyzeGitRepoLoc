@@ -38,17 +38,59 @@ class HtmlReportUxTests(unittest.TestCase):
         self.assertIn("max-height: 14rem", html)
         self.assertIn("overflow-x: auto", html)
 
-    def _generate_report_html(self) -> str:
+    def test_repository_list_is_rendered_as_a_list_not_a_metric_string(self) -> None:
+        html = self._generate_report_html()
+
+        self.assertIn('class="repository-list"', html)
+        self.assertIn("<li>alpha-service-with-a-very-long-name</li>", html)
+        self.assertIn("<li>beta-platform</li>", html)
+        self.assertNotIn(
+            '<div class="metric-label">Repository list</div>',
+            html,
+        )
+        self.assertNotIn(
+            "alpha-service-with-a-very-long-name, beta-platform",
+            html,
+        )
+
+    def test_daily_x_axis_uses_adaptive_tick_config(self) -> None:
+        html = self._generate_report_html(time_interval="Date")
+
+        self.assertIn("const getTickConfig = (intervalLabel, intervalCount)", html)
+        self.assertIn("getTickConfig(reportData.time_interval, intervalValues.length)", html)
+        self.assertNotIn('return { tickformat: "%b %d, %Y", dtick: "D1" };', html)
+
+    def test_tab_rendering_queues_chart_work_after_content_render(self) -> None:
+        html = self._generate_report_html()
+
+        self.assertIn("const chartRenderQueue = [];", html)
+        self.assertIn("const queueChartRender = (tabId)", html)
+        self.assertIn("queueChartRender(tabId);", html)
+        self.assertNotIn("renderChartsForTab(tabId);\n        renderedTabs.add(tabId);", html)
+
+    def _generate_report_html(self, *, time_interval: str = "Month") -> str:
         with tempfile.TemporaryDirectory() as tmp_dir:
             output_dir = Path(tmp_dir)
+            language_analysis = self._language_analysis().rename(
+                columns={"Month": time_interval}
+            )
+            author_analysis = self._author_analysis().rename(
+                columns={"Month": time_interval}
+            )
+            repository_trend_analysis = self._repository_trend_analysis().rename(
+                columns={"Month": time_interval}
+            )
+            detail_analysis = self._detail_analysis().rename(
+                columns={"Month": time_interval}
+            )
             generate_html_report(
                 output_dir=output_dir,
                 charts_root=None,
-                time_interval="Month",
-                language_analysis=self._language_analysis(),
-                author_analysis=self._author_analysis(),
-                repository_trend_analysis=self._repository_trend_analysis(),
-                detail_analysis=self._detail_analysis(),
+                time_interval=time_interval,
+                language_analysis=language_analysis,
+                author_analysis=author_analysis,
+                repository_trend_analysis=repository_trend_analysis,
+                detail_analysis=detail_analysis,
             )
             return (output_dir / "report.html").read_text(encoding="utf-8")
 
