@@ -12,6 +12,8 @@ Functions:
                 Converts Date/Week/Month and daily/weekly/monthly into one vocabulary.
         resolve_xaxis_tick_config: Resolve a Plotly tick format and dtick.
                 Uses date span and point count to avoid overcrowded x-axis labels.
+        select_tick_values: Select a bounded set of x-axis tick values.
+                Prevents Plotly from generating too many date labels.
 """
 
 from __future__ import annotations
@@ -65,6 +67,7 @@ _TICK_RULES = {
         _TickRule(None, "%Y", "M6"),
     ),
 }
+_MAX_TICK_LABELS = 10
 
 
 def build_client_tick_policy() -> dict[str, Any]:
@@ -73,6 +76,7 @@ def build_client_tick_policy() -> dict[str, Any]:
     """
     return {
         "aliases": _INTERVAL_ALIASES,
+        "max_tick_labels": _MAX_TICK_LABELS,
         "rules": {
             interval: [rule.as_payload() for rule in rules]
             for interval, rules in _TICK_RULES.items()
@@ -107,6 +111,36 @@ def resolve_xaxis_tick_config(
         if rule.max_span is None or effective_span <= rule.max_span:
             return rule.tickformat, rule.dtick
     return "%b %Y", "M1"
+
+
+def select_tick_values(
+    values: Iterable[object] | None, *, max_labels: int = _MAX_TICK_LABELS
+) -> list[object]:
+    """
+    Select a bounded, ordered set of x-axis tick values.
+    """
+    if values is None:
+        return []
+    unique_values = list(dict.fromkeys(values))
+    if len(unique_values) <= max_labels:
+        return unique_values
+    if max_labels <= 1:
+        return [unique_values[0]]
+
+    last_index = len(unique_values) - 1
+    step = last_index / (max_labels - 1)
+    indexes = [round(index * step) for index in range(max_labels)]
+    indexes[0] = 0
+    indexes[-1] = last_index
+
+    selected: list[object] = []
+    seen_indexes: set[int] = set()
+    for index in indexes:
+        if index in seen_indexes:
+            continue
+        seen_indexes.add(index)
+        selected.append(unique_values[index])
+    return selected
 
 
 def _coerce_point_count(point_count: int) -> int:

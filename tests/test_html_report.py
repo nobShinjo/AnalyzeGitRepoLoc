@@ -58,7 +58,10 @@ class HtmlReportUxTests(unittest.TestCase):
 
         self.assertIn("const getTickConfig = (intervalLabel, intervalValues)", html)
         self.assertIn("const getIntervalSpan = (intervalLabel, intervalValues)", html)
+        self.assertIn("const getTickValues = (intervalValues)", html)
         self.assertIn("getTickConfig(reportData.time_interval, intervalValues)", html)
+        self.assertIn("layout.xaxis.tickmode = \"array\";", html)
+        self.assertIn("layout.xaxis.tickvals = tickConfig.tickvals;", html)
         self.assertIn('"tick_policy"', html)
         self.assertNotIn('return { tickformat: "%b %d, %Y", dtick: "D1" };', html)
 
@@ -67,6 +70,7 @@ class HtmlReportUxTests(unittest.TestCase):
 
         self.assertIn('"weekly"', html)
         self.assertIn('"max_span": 104', html)
+        self.assertIn('"max_tick_labels": 10', html)
         self.assertIn('"dtick": "W1"', html)
         self.assertNotIn(
             'return { tickformat: "%b %d, %Y", dtick: "W1" };',

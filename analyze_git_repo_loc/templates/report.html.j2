@@ -689,6 +689,34 @@
         return daySpan;
       };
 
+      const getTickValues = (intervalValues) => {
+        const values = Array.isArray(intervalValues) ? intervalValues : [];
+        const maxLabels = Number(tickPolicy.max_tick_labels) || 10;
+        if (values.length <= maxLabels) {
+          return values;
+        }
+        if (maxLabels <= 1) {
+          return [values[0]];
+        }
+        const lastIndex = values.length - 1;
+        const step = lastIndex / (maxLabels - 1);
+        const indexes = Array.from({ length: maxLabels }, (_, index) =>
+          Math.round(index * step)
+        );
+        indexes[0] = 0;
+        indexes[indexes.length - 1] = lastIndex;
+        const seenIndexes = new Set();
+        return indexes
+          .filter((index) => {
+            if (seenIndexes.has(index)) {
+              return false;
+            }
+            seenIndexes.add(index);
+            return true;
+          })
+          .map((index) => values[index]);
+      };
+
       const getTickConfig = (intervalLabel, intervalValues) => {
         const label = normalizeIntervalLabel(intervalLabel);
         const values = Array.isArray(intervalValues) ? intervalValues : [];
@@ -701,9 +729,10 @@
           return {
             tickformat: matchedRule.tickformat,
             dtick: matchedRule.dtick,
+            tickvals: getTickValues(values),
           };
         }
-        return { tickformat: "%b %Y", dtick: "M1" };
+        return { tickformat: "%b %Y", dtick: "M1", tickvals: getTickValues(values) };
       };
 
       const renderNoData = (container) => {
@@ -921,6 +950,10 @@
         };
         if (tickConfig.dtick) {
           layout.xaxis.dtick = tickConfig.dtick;
+        }
+        if (tickConfig.tickvals?.length) {
+          layout.xaxis.tickmode = "array";
+          layout.xaxis.tickvals = tickConfig.tickvals;
         }
         return renderPlot(container, traces, layout);
       };

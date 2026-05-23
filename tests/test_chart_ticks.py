@@ -6,6 +6,7 @@ from analyze_git_repo_loc.chart_ticks import (
     build_client_tick_policy,
     normalize_interval_label,
     resolve_xaxis_tick_config,
+    select_tick_values,
 )
 
 
@@ -58,3 +59,15 @@ def test_client_tick_policy_is_json_safe_and_span_based() -> None:
         "tickformat": "%b %Y",
         "dtick": "M1",
     }
+    assert policy["max_tick_labels"] == 10
+
+
+def test_select_tick_values_caps_dense_date_labels() -> None:
+    """Dense date ranges should render a bounded number of x-axis labels."""
+    values = [f"2026-01-{day:02d}" for day in range(1, 30)]
+
+    selected = select_tick_values(values, max_labels=10)
+
+    assert len(selected) <= 10
+    assert selected[0] == "2026-01-01"
+    assert selected[-1] == "2026-01-29"

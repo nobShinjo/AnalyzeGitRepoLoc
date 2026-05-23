@@ -59,3 +59,7 @@ def test_daily_trend_chart_uses_sparse_ticks_for_medium_ranges() -> None:
 
     assert fig.layout.xaxis.dtick == "D14"
     assert fig.layout.xaxis.tickformat == "%b %d"
+    assert fig.layout.xaxis.tickmode == "array"
+    assert len(fig.layout.xaxis.tickvals) <= 10
+    assert fig.layout.xaxis.tickvals[0] == dates[0]
+    assert fig.layout.xaxis.tickvals[-1] == dates[-1]

@@ -27,7 +27,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
-from analyze_git_repo_loc.chart_ticks import resolve_xaxis_tick_config
+from analyze_git_repo_loc.chart_ticks import resolve_xaxis_tick_config, select_tick_values
 
 
 class ChartStrategy(Enum):
@@ -554,9 +554,16 @@ class ChartBuilder:
             values=self._get_xaxis_values(x_axis_interval),
             point_count=self._count_xaxis_points(x_axis_interval),
         )
+        tickvals = select_tick_values(self._get_xaxis_values(x_axis_interval))
 
         self._fig.update_xaxes(tickformat=tickformat)
-        self._fig.update_layout(xaxis={"dtick": dtick})
+        self._fig.update_layout(
+            xaxis={
+                "dtick": dtick,
+                "tickmode": "array",
+                "tickvals": tickvals,
+            }
+        )
         return self
 
     def build(
