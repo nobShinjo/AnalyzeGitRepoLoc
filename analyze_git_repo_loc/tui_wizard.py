@@ -387,7 +387,7 @@ def _prompt(text: str, default: str | None = None) -> str:
         from prompt_toolkit import prompt
     except ImportError as ex:
         raise RuntimeError(
-            "prompt_toolkit is required for --tui. "
+            "prompt_toolkit is required for wizard. "
             "Install dependencies with `uv sync --active`."
         ) from ex
     suffix = f" [{default}]" if default not in {None, ""} else ""

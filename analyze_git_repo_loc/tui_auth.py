@@ -292,7 +292,7 @@ def _prompt_choice(provider: str, statuses: list[AuthMethodStatus]) -> AuthMetho
         from prompt_toolkit import prompt
     except ImportError as ex:
         raise RuntimeError(
-            "prompt_toolkit is required for --tui. "
+            "prompt_toolkit is required for wizard. "
             "Install dependencies with `uv sync --active`."
         ) from ex
 
@@ -325,7 +325,7 @@ def _prompt_one_time_token(provider: str) -> str:
         from prompt_toolkit import prompt
     except ImportError as ex:
         raise RuntimeError(
-            "prompt_toolkit is required for --tui. "
+            "prompt_toolkit is required for wizard. "
             "Install dependencies with `uv sync --active`."
         ) from ex
     return prompt(f"Paste {_provider_label(provider)} token: ", is_password=True).strip()
@@ -336,7 +336,7 @@ def _prompt_gitlab_device_client_id() -> str:
         from prompt_toolkit import prompt
     except ImportError as ex:
         raise RuntimeError(
-            "prompt_toolkit is required for --tui. "
+            "prompt_toolkit is required for wizard. "
             "Install dependencies with `uv sync --active`."
         ) from ex
     return prompt("GitLab OAuth Application ID for this run: ").strip()

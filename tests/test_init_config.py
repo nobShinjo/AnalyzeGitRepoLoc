@@ -277,17 +277,26 @@ class InitConfigPathTests(unittest.TestCase):
 
 
 class InitConfigCliTests(unittest.TestCase):
-    """CLI dispatch tests for --init."""
+    """CLI dispatch tests for init subcommand."""
 
-    def test_init_does_not_require_repo_paths_or_config(self) -> None:
+    def test_init_subcommand_uses_default_config_path(self) -> None:
+        parser = argparse.ArgumentParser(prog="analyze_git_repo_loc")
+
+        with patch.object(sys, "argv", ["analyze_git_repo_loc", "init"]):
+            args = parse_arguments(parser)
+
+        self.assertEqual(args.command, "init")
+        self.assertEqual(args.config, Path("config.yml"))
+        self.assertIsNone(args.repo_paths)
+
+    def test_legacy_init_flag_is_rejected(self) -> None:
         parser = argparse.ArgumentParser(prog="analyze_git_repo_loc")
 
         with patch.object(sys, "argv", ["analyze_git_repo_loc", "--init"]):
-            args = parse_arguments(parser)
+            with self.assertRaises(SystemExit) as ctx:
+                parse_arguments(parser)
 
-        self.assertTrue(args.init)
-        self.assertIsNone(args.repo_paths)
-        self.assertIsNone(args.config)
+        self.assertEqual(ctx.exception.code, 2)
 
 
 class OutputSummaryTests(unittest.TestCase):

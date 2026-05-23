@@ -199,7 +199,7 @@ def run_repository_selector(
         from prompt_toolkit.widgets import TextArea
     except ImportError as ex:
         raise RuntimeError(
-            "prompt_toolkit is required for --tui. "
+            "prompt_toolkit is required for wizard. "
             "Install dependencies with `uv sync --active`."
         ) from ex
 

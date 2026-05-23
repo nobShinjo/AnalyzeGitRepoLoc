@@ -119,13 +119,17 @@ class GitRepoLOCAnalyzer:
         """ List of languages to filter commits """
         self._language_extensions = LanguageExtensions.get_extensions(languages) or None
         """ Language extensions to filter commits """
+        self._warnings: list[str] = []
+        """Non-fatal analysis warnings collected for the caller."""
         self._exclude_dirs = [Path(repo_path).resolve() / d for d in exclude_dirs or []]
         """ List of directories to exclude from analysis """
 
         # Check if exclude directories exist
-        for exclude_dir in self._exclude_dirs:
+        for raw_exclude_dir, exclude_dir in zip(exclude_dirs or [], self._exclude_dirs):
             if not exclude_dir.exists():
-                print(f"Warning: {exclude_dir} does not exist.", file=sys.stderr)
+                self._warnings.append(
+                    f"excluded path does not exist: {raw_exclude_dir}"
+                )
 
         # Analyzed data
         self._commit_data = None

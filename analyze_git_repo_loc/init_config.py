@@ -256,5 +256,5 @@ def run_init_config(
     config_path.parent.mkdir(parents=True, exist_ok=True)
     config_path.write_text(render_init_config_yaml(config_data), encoding="utf-8")
     print(f"Created config: {config_path}")
-    print(f"Next: python -m analyze_git_repo_loc --tui --config {config_path}")
+    print(f"Next: python -m analyze_git_repo_loc wizard --config {config_path}")
     return config_path

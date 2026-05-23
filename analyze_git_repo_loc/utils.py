@@ -344,112 +344,112 @@ def parse_arguments(parser: argparse.ArgumentParser) -> argparse.Namespace:
     Returns:
         argparse.Namespace: Parsed command line arguments.
     """
+    subparsers = parser.add_subparsers(dest="command", required=True)
 
-    # pylint: enable=line-too-long
-    parser.add_argument(
-        "--config",
-        type=Path,
-        default=None,
-        help="YAML configuration file path",
-    )
-    parser.add_argument(
-        "--tui",
-        action="store_true",
-        help="Select GitHub/GitLab repositories interactively before analysis.",
-    )
-    parser.add_argument(
-        "--init",
-        action="store_true",
+    init_parser = subparsers.add_parser(
+        "init",
         help="Create an initial YAML configuration file interactively.",
     )
-
-    parser.add_argument(
-        "repo_paths",
-        nargs="?",
-        type=parse_repos_paths,
-        help=(
-            "A comma-separated list of Git repository paths or URLs,\n"
-            "optionally followed by a branch name separated with '#'.\n"
-            "Examples: /path/to/repo1#branch-name or"
-            "http://github.com/user/repo2.git#branch-name.\n"
-            "If no branch is specified, 'main' will be used as the default.\n"
-            "Use --config for multi-repository YAML inputs."
-        ),
+    init_parser.add_argument(
+        "--config",
+        type=Path,
+        default=Path("config.yml"),
+        help="YAML configuration file path to create (default: config.yml).",
+    )
+    init_parser.set_defaults(
+        tui=False,
+        repo_paths=None,
+        output=None,
+        since=None,
+        until=None,
+        interval=None,
+        lang=None,
+        author_name=None,
+        exclude_dirs=None,
+        workers=None,
+        clear_cache=None,
+        no_plot_show=None,
     )
 
-    parser.add_argument("-o", "--output", type=Path, default=None, help="Output path")
-    parser.add_argument("--since", type=str, default=None, help="Start Date yyyy-mm-dd")
-    parser.add_argument("--until", type=str, default=None, help="End Date yyyy-mm-dd")
-    parser.add_argument(
+    wizard_parser = subparsers.add_parser(
+        "wizard",
+        help="Run the interactive pre-analysis wizard.",
+    )
+    wizard_parser.add_argument(
+        "--config",
+        type=Path,
+        default=Path("config.yml"),
+        help="YAML configuration file path (default: config.yml).",
+    )
+    wizard_parser.set_defaults(
+        tui=True,
+        repo_paths=None,
+        output=None,
+        since=None,
+        until=None,
+        interval=None,
+        lang=None,
+        author_name=None,
+        exclude_dirs=None,
+        workers=None,
+        clear_cache=None,
+        no_plot_show=None,
+    )
+
+    run_parser = subparsers.add_parser(
+        "run",
+        help="Run analysis from a YAML configuration file.",
+    )
+    run_parser.add_argument(
+        "--config",
+        type=Path,
+        default=Path("config.yml"),
+        help="YAML configuration file path (default: config.yml).",
+    )
+    run_parser.add_argument("-o", "--output", type=Path, default=None, help="Output path")
+    run_parser.add_argument(
+        "--since",
+        type=str,
+        default=None,
+        help="Start Date yyyy-mm-dd",
+    )
+    run_parser.add_argument(
+        "--until",
+        type=str,
+        default=None,
+        help="End Date yyyy-mm-dd",
+    )
+    run_parser.add_argument(
         "--interval",
         choices=["daily", "weekly", "monthly"],
         default=None,
         help="Interval (default: monthly)",
     )
-    parser.add_argument(
-        "--lang",
-        type=lambda s: [item.strip() for item in s.split(",")],
-        default=None,
-        help="Count only the given space separated, case-insensitive languages L1,L2,L3, etc. ",
-    )
-    parser.add_argument(
-        "--author-name",
-        type=lambda s: [item.strip() for item in s.split(",")],
-        default=None,
-        help="Author name or comma-separated list of author names to filter commits",
-    )
-    parser.add_argument(
-        "--exclude-dirs",
-        default=None,
-        type=lambda s: [item.strip() for item in s.split(",")],
-        help=(
-            "Exclude directories from analysis, "
-            "specified as comma-separated paths relative to the repository root."
-        ),
-    )
-    parser.add_argument(
-        "--workers",
-        type=int,
-        default=None,
-        help=(
-            "Maximum number of repositories to analyze concurrently "
-            "(default: auto)."
-        ),
-    )
-
-    parser.add_argument(
-        "--clear-cache",
-        action="store_true",
-        default=None,
-        help="If set, the cache will be cleared before executing the main function.",
-    )
-    parser.add_argument(
+    run_parser.add_argument(
         "--no-plot-show",
         action="store_true",
         default=None,
         help="If set, the plots will not be shown.",
     )
+    run_parser.set_defaults(
+        tui=False,
+        repo_paths=None,
+        lang=None,
+        author_name=None,
+        exclude_dirs=None,
+        workers=None,
+        clear_cache=None,
+    )
+
     args = parser.parse_args()
     try:
-        if args.init:
+        if args.command == "init":
             return args
-        if args.tui and args.config is None:
-            raise ValueError("--config is required when --tui is provided.")
-        if args.config is not None:
-            args = merge_yaml_config(
-                args=args,
-                repo_manager=_REMOTE_REPO_MANAGER,
-                normalize_list=_normalize_optional_list,
-            )
-        else:
-            if args.repo_paths is None:
-                raise ValueError(
-                    "repo_paths is required when --config is not provided."
-                )
-            if args.output is None:
-                args.output = Path("./out")
-            if args.interval is None:
-                args.interval = "monthly"
+        args = merge_yaml_config(
+            args=args,
+            repo_manager=_REMOTE_REPO_MANAGER,
+            normalize_list=_normalize_optional_list,
+        )
         args.since = _parse_optional_iso_date(args.since, "--since")
         args.until = _parse_optional_iso_date(args.until, "--until")
         args.lang = _normalize_optional_list(args.lang)
@@ -650,7 +650,7 @@ def _analyze_single_repository(
     clear_cache: bool,
     show_progress: bool,
     progress_queue: object | None = None,
-) -> tuple[int, str, pd.DataFrame]:
+) -> tuple[int, str, pd.DataFrame, list[str]]:
     """
     Analyze a single repository and return its index, name, and LOC data.
     """
@@ -725,7 +725,7 @@ def _analyze_single_repository(
         repo_output_dir = _ensure_repo_output_dir(output_dir, repository_name)
         loc_data.to_csv(repo_output_dir / "loc_data.csv")
 
-        return index, repository_name, loc_data
+        return index, repository_name, loc_data, analyzer._warnings
     finally:
         _emit_repo_progress(
             progress_queue,
@@ -854,6 +854,7 @@ def _analyze_repositories_sequential(
     repo_entries: list[tuple[Path | str, str, list[Path] | None]],
     progress: tqdm,
     results: dict[int, pd.DataFrame],
+    warnings: list[str],
 ) -> None:
     """
     Analyze repositories sequentially and update results in-place.
@@ -864,7 +865,7 @@ def _analyze_repositories_sequential(
         )
         resolved_excludes = _resolve_exclude_dirs(args, exclude_dirs)
         try:
-            _, _, loc_data = _analyze_single_repository(
+            _, repository_name, loc_data, repo_warnings = _analyze_single_repository(
                 index=index,
                 repo_path=repo_path,
                 branch_name=branch_name,
@@ -876,10 +877,13 @@ def _analyze_repositories_sequential(
                 authors=args.author_name,
                 languages=args.lang,
                 clear_cache=args.clear_cache,
-                show_progress=True,
+                show_progress=False,
             )
         except (OSError, ValueError) as ex:
             handle_exception(ex)
+        warnings.extend(
+            f"{repository_name}: {warning}" for warning in repo_warnings
+        )
         results[index] = loc_data
         progress.update(1)
 
@@ -938,65 +942,56 @@ def _analyze_repositories_parallel(
     worker_count: int,
     progress: tqdm,
     results: dict[int, pd.DataFrame],
+    warnings: list[str],
 ) -> None:
     """
     Analyze repositories in parallel and update results in-place.
     """
     futures = []
-    manager = Manager()
-    progress_queue = manager.Queue()
-    term_width = shutil.get_terminal_size((120, 20)).columns
-    label_width = max(12, min(40, term_width - 30))
-    repo_bars, repo_labels = _build_repo_progress_bars(
-        repo_entries,
-        progress=progress,
-        label_width=label_width,
-    )
-    stop_event, listener_thread = _start_repo_progress_listener(
-        progress_queue=progress_queue,
-        repo_bars=repo_bars,
-        repo_labels=repo_labels,
-    )
-    try:
-        with ProcessPoolExecutor(max_workers=worker_count) as executor:
-            for index, repo_entry in enumerate(repo_entries):
-                repo_path, branch_name, exclude_dirs, include_subpath = _unpack_repo_entry(
-                    repo_entry
+    with ProcessPoolExecutor(max_workers=worker_count) as executor:
+        for index, repo_entry in enumerate(repo_entries):
+            repo_path, branch_name, exclude_dirs, include_subpath = _unpack_repo_entry(
+                repo_entry
+            )
+            resolved_excludes = _resolve_exclude_dirs(args, exclude_dirs)
+            futures.append(
+                executor.submit(
+                    _analyze_single_repository,
+                    index=index,
+                    repo_path=repo_path,
+                    branch_name=branch_name,
+                    exclude_dirs=resolved_excludes,
+                    include_subpath=include_subpath,
+                    output_dir=args.output,
+                    since=args.since,
+                    until=args.until,
+                    authors=args.author_name,
+                    languages=args.lang,
+                    clear_cache=args.clear_cache,
+                    show_progress=False,
                 )
-                resolved_excludes = _resolve_exclude_dirs(args, exclude_dirs)
-                futures.append(
-                    executor.submit(
-                        _analyze_single_repository,
-                        index=index,
-                        repo_path=repo_path,
-                        branch_name=branch_name,
-                        exclude_dirs=resolved_excludes,
-                        include_subpath=include_subpath,
-                        output_dir=args.output,
-                        since=args.since,
-                        until=args.until,
-                        authors=args.author_name,
-                        languages=args.lang,
-                        clear_cache=args.clear_cache,
-                        show_progress=False,
-                        progress_queue=progress_queue,
-                    )
-                )
-            for future in as_completed(futures):
-                try:
-                    index, _, loc_data = future.result()
-                except (OSError, ValueError) as ex:
-                    handle_exception(ex)
-                results[index] = loc_data
-                progress.update(1)
-    finally:
-        _cleanup_repo_progress_listener(
-            stop_event=stop_event,
-            listener_thread=listener_thread,
-            repo_bars=repo_bars,
-            manager=manager,
-            progress_queue=progress_queue,
-        )
+            )
+        for future in as_completed(futures):
+            try:
+                index, repository_name, loc_data, repo_warnings = future.result()
+            except (OSError, ValueError) as ex:
+                handle_exception(ex)
+            results[index] = loc_data
+            warnings.extend(
+                f"{repository_name}: {warning}" for warning in repo_warnings
+            )
+            progress.update(1)
+
+
+def _print_repository_warnings(warnings: list[str]) -> None:
+    """
+    Print collected repository warnings after progress bars have completed.
+    """
+    if not warnings:
+        return
+    print("Warnings:", file=sys.stderr)
+    for warning in warnings:
+        print(f"- {warning}", file=sys.stderr)
 
 
 def analyze_git_repositories(args: argparse.Namespace) -> list[pd.DataFrame]:
@@ -1015,6 +1010,7 @@ def analyze_git_repositories(args: argparse.Namespace) -> list[pd.DataFrame]:
     repo_count = len(repo_entries)
     worker_count = _resolve_worker_count(args.workers, repo_count)
     results: dict[int, pd.DataFrame] = {}
+    warnings: list[str] = []
 
     with tqdm(total=repo_count, desc="Analyzing repositories") as progress:
         if worker_count <= 1:
@@ -1023,6 +1019,7 @@ def analyze_git_repositories(args: argparse.Namespace) -> list[pd.DataFrame]:
                 repo_entries=repo_entries,
                 progress=progress,
                 results=results,
+                warnings=warnings,
             )
         else:
             _analyze_repositories_parallel(
@@ -1031,7 +1028,10 @@ def analyze_git_repositories(args: argparse.Namespace) -> list[pd.DataFrame]:
                 worker_count=worker_count,
                 progress=progress,
                 results=results,
+                warnings=warnings,
             )
+
+    _print_repository_warnings(warnings)
 
     for index in sorted(results.keys()):
         loc_data_repositories.append(results[index])

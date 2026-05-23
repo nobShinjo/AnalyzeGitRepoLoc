@@ -392,8 +392,8 @@ def main() -> None:
         description="Analyze Git repositories and visualize code LOC.",
     )
     args = parse_arguments(parser)
-    if getattr(args, "init", False):
-        run_init_config_wizard()
+    if args.command == "init":
+        run_init_config_wizard(default_path=args.config)
         return
 
     # Initialize ColoredConsolePrinter

@@ -114,9 +114,9 @@ class TuiConfigTests(unittest.TestCase):
 
 
 class CliTuiArgumentTests(unittest.TestCase):
-    """CLI validation tests for --tui."""
+    """CLI validation tests for wizard/run subcommands."""
 
-    def test_tui_requires_config(self) -> None:
+    def test_legacy_tui_flag_is_rejected(self) -> None:
         parser = argparse.ArgumentParser(prog="analyze_git_repo_loc")
 
         with patch.object(sys, "argv", ["analyze_git_repo_loc", "--tui"]):
@@ -125,7 +125,7 @@ class CliTuiArgumentTests(unittest.TestCase):
 
         self.assertEqual(ctx.exception.code, 2)
 
-    def test_tui_config_allows_missing_repositories(self) -> None:
+    def test_wizard_config_allows_missing_repositories(self) -> None:
         parser = argparse.ArgumentParser(prog="analyze_git_repo_loc")
         with tempfile.TemporaryDirectory() as tmp_dir:
             config_path = Path(tmp_dir) / "config.yml"
@@ -141,13 +141,23 @@ class CliTuiArgumentTests(unittest.TestCase):
             with patch.object(
                 sys,
                 "argv",
-                ["analyze_git_repo_loc", "--tui", "--config", str(config_path)],
+                ["analyze_git_repo_loc", "wizard", "--config", str(config_path)],
             ):
                 args = parse_arguments(parser)
 
+        self.assertEqual(args.command, "wizard")
         self.assertTrue(args.tui)
         self.assertIsNone(args.repo_paths)
         self.assertEqual(args.output, Path("./out"))
+
+    def test_tui_subcommand_is_rejected(self) -> None:
+        parser = argparse.ArgumentParser(prog="analyze_git_repo_loc")
+
+        with patch.object(sys, "argv", ["analyze_git_repo_loc", "tui"]):
+            with self.assertRaises(SystemExit) as ctx:
+                parse_arguments(parser)
+
+        self.assertEqual(ctx.exception.code, 2)
 
     def test_config_repository_include_subpath_is_loaded(self) -> None:
         parser = argparse.ArgumentParser(prog="analyze_git_repo_loc")
@@ -168,14 +178,92 @@ class CliTuiArgumentTests(unittest.TestCase):
             with patch.object(
                 sys,
                 "argv",
-                ["analyze_git_repo_loc", "--config", str(config_path)],
+                ["analyze_git_repo_loc", "run", "--config", str(config_path)],
             ):
                 args = parse_arguments(parser)
 
+        self.assertEqual(args.command, "run")
         self.assertEqual(
             args.repo_paths,
             [("https://github.com/org/alpha.git", "main", ["vendor"], "src/app")],
         )
+
+    def test_run_uses_default_config_yml(self) -> None:
+        parser = argparse.ArgumentParser(prog="analyze_git_repo_loc")
+        original_cwd = Path.cwd()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            try:
+                os.chdir(tmp_dir)
+                Path("config.yml").write_text(
+                    "settings:\n"
+                    "  output: ./out\n"
+                    "repositories:\n"
+                    "  - path: https://github.com/org/alpha.git\n"
+                    "    branch: main\n",
+                    encoding="utf-8",
+                )
+
+                with patch.object(sys, "argv", ["analyze_git_repo_loc", "run"]):
+                    args = parse_arguments(parser)
+            finally:
+                os.chdir(original_cwd)
+
+        self.assertEqual(args.command, "run")
+        self.assertEqual(args.config, Path("config.yml"))
+        self.assertEqual(
+            args.repo_paths,
+            [("https://github.com/org/alpha.git", "main", [], None)],
+        )
+
+    def test_run_minimal_cli_overrides_config(self) -> None:
+        parser = argparse.ArgumentParser(prog="analyze_git_repo_loc")
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config_path = Path(tmp_dir) / "config.yml"
+            config_path.write_text(
+                "settings:\n"
+                "  output: ./out\n"
+                "  interval: monthly\n"
+                "repositories:\n"
+                "  - path: https://github.com/org/alpha.git\n"
+                "    branch: main\n",
+                encoding="utf-8",
+            )
+
+            with patch.object(
+                sys,
+                "argv",
+                [
+                    "analyze_git_repo_loc",
+                    "run",
+                    "--config",
+                    str(config_path),
+                    "--output",
+                    "reports",
+                    "--since",
+                    "2026-01-01",
+                    "--until",
+                    "2026-05-01",
+                    "--interval",
+                    "weekly",
+                    "--no-plot-show",
+                ],
+            ):
+                args = parse_arguments(parser)
+
+        self.assertEqual(args.output, Path("reports"))
+        self.assertEqual(args.interval, "weekly")
+        self.assertEqual(args.since.isoformat(), "2026-01-01T00:00:00")
+        self.assertEqual(args.until.isoformat(), "2026-05-01T00:00:00")
+        self.assertTrue(args.no_plot_show)
+
+    def test_legacy_repo_paths_without_subcommand_is_rejected(self) -> None:
+        parser = argparse.ArgumentParser(prog="analyze_git_repo_loc")
+
+        with patch.object(sys, "argv", ["analyze_git_repo_loc", "."]):
+            with self.assertRaises(SystemExit) as ctx:
+                parse_arguments(parser)
+
+        self.assertEqual(ctx.exception.code, 2)
 
 
 class RemoteCatalogTests(unittest.TestCase):

@@ -34,19 +34,19 @@ Analyze Git repositories and visualize code LOC.
 
 ### Command line
 
+The CLI is organized around three subcommands:
+
 ```shell
-python -m analyze_git_repo_loc [repo_paths] [options]
+python -m analyze_git_repo_loc init [--config config.yml]
+python -m analyze_git_repo_loc wizard [--config config.yml]
+python -m analyze_git_repo_loc run [--config config.yml] [options]
 ```
 
-`repo_paths` is a comma-separated list of Git repository paths or URLs.
+Use `init` to create a starter config, `wizard` for the guided interactive
+workflow, and `run` for non-interactive batch analysis from YAML.
 
-Each repository entry supports an optional branch name using `#`:
-`/path/to/repo#branch-name` or `https://github.com/user/repo.git#branch-name`.
-If no branch is specified, `main` is used. When `--config` is provided,
-`repo_paths` can be omitted.
-
-Note: Per-repository exclude directories can be specified in the YAML config.
-`--exclude-dirs` applies to all repositories.
+Direct `repo_paths` arguments are no longer a command-line entry point. Define
+repositories in YAML, or select them with `wizard` and save the generated config.
 
 ### Remote authentication
 
@@ -60,67 +60,13 @@ Set one of the following environment variables before running the CLI:
 
 ### Examples
 
-#### Example : Monthly Analysis
-
-```shell
-python -m analyze_git_repo_loc /path/to/repo#main --interval monthly -o ./out
-```
-
-#### Example : Daily Analysis
-
-```shell
-python -m analyze_git_repo_loc /path/to/repo#main --interval daily -o ./out
-```
-
-#### Example : Specify branch name
-
-```shell
-python -m analyze_git_repo_loc /path/to/repo#develop --interval daily -o ./out
-```
-
-#### Example : Filter by date
-
-```shell
-python -m analyze_git_repo_loc /path/to/repo#main --interval monthly -o ./out --since 2023-01-01 --until 2023-12-31
-```
-
-#### Example : Filter by Language
-
-```shell
-python -m analyze_git_repo_loc /path/to/repo#main --interval monthly -o ./out --lang C#,Python,text,Markdown
-```
-
-#### Example : Filter by Author
-
-```shell
-python -m analyze_git_repo_loc /path/to/repo#main --interval monthly -o ./out --author-name "Alice,Bob"
-```
-
-#### Example : Exclude directory
-
-```shell
-python -m analyze_git_repo_loc /path/to/repo#main --interval monthly -o ./out --exclude-dirs dir1,dir2
-```
-
-#### Example : Multi repository (comma-separated)
-
-```shell
-python -m analyze_git_repo_loc /path/to/repo1#main,/path/to/repo2#develop --interval monthly -o ./out
-```
-
-#### Example : YAML config
-
-```shell
-python -m analyze_git_repo_loc --config ./config.yml
-```
-
 #### Example : Create an initial config
 
 ```shell
-python -m analyze_git_repo_loc --init
+python -m analyze_git_repo_loc init
 ```
 
-`--init` interactively creates a minimal TUI-ready YAML config. The default
+`init` interactively creates a minimal TUI-ready YAML config. The default
 output file is `config.yml`. If the file already exists, the CLI asks for
 another file name; entering the same existing path requires explicit overwrite
 confirmation.
@@ -130,13 +76,13 @@ repositories, tokens, client IDs, or authentication choices. After creation,
 run:
 
 ```shell
-python -m analyze_git_repo_loc --tui --config ./config.yml
+python -m analyze_git_repo_loc wizard
 ```
 
-#### Example : GitHub/GitLab repository selector TUI
+#### Example : Guided wizard analysis
 
 ```shell
-python -m analyze_git_repo_loc --tui --config ./config.yml
+python -m analyze_git_repo_loc wizard --config ./config.yml
 ```
 
 The TUI lists repositories from enabled GitHub/GitLab providers, lets you
@@ -144,26 +90,28 @@ search and select multiple repositories, then immediately runs the normal
 analysis pipeline with the selected repositories.
 
 When only one provider is configured and `GITHUB_TOKEN` / `GITLAB_TOKEN` or an
-existing `gh` / `glab` login is available, `--tui` starts at Quick Review.
+existing `gh` / `glab` login is available, `wizard` starts at Quick Review.
 Press Enter to run, `e` to edit, `d` for details, `s` to save config then run,
 or `c` to cancel.
 
-#### Example : Limit workers
+#### Example : Batch run from YAML
 
 ```shell
-python -m analyze_git_repo_loc /path/to/repo#main --interval monthly -o ./out --workers 4
+python -m analyze_git_repo_loc run --config ./config.yml
 ```
 
-#### Example : Clear old cache files
+`run` reads repositories and stable analysis settings from YAML. A small set of
+runtime overrides remains available:
 
 ```shell
-python -m analyze_git_repo_loc /path/to/repo#main --interval monthly -o ./out --clear-cache
+python -m analyze_git_repo_loc run --config ./config.yml --interval weekly --output ./reports --no-plot-show
 ```
 
 ### YAML configuration
 
-Use `--config` to load a YAML file. CLI arguments override `settings`, and
-`repo_paths` on the CLI takes precedence over `repositories`.
+Use YAML to define repositories and stable analysis settings. `run` supports
+only minimal CLI overrides: `--output`, `--since`, `--until`, `--interval`, and
+`--no-plot-show`.
 
 ```yaml
 settings:
@@ -215,9 +163,10 @@ Notes:
   `branch`, and `exclude_dirs`. Branch defaults to `main`.
 - `lang`, `author_name`, and `exclude_dirs` accept a YAML list or a
   comma-separated string.
-- `--init` can create a minimal starter config for TUI usage.
-- `--tui` requires `--config` and may use a YAML file without `repositories`.
-- `--tui` runs a pre-analysis wizard. YAML and CLI values are loaded as
+- `init` can create a minimal starter config for TUI usage.
+- `wizard` uses `config.yml` by default and may use a YAML file without
+  `repositories`.
+- `wizard` runs a pre-analysis wizard. YAML values are loaded as
   defaults, then the wizard confirms repository selection, branches, filters,
   path rules, output, cache policy, and display behavior before analysis starts.
 - The wizard can ask which providers to use: GitHub, GitLab.com, and
@@ -248,9 +197,10 @@ Notes:
 
 ### Output files
 
-The output root is `--output` (default: `./out`). Each run creates a timestamped
-directory (`YYYYMMDDHHMMSS`) with run-level outputs, and per-repository folders
-are created directly under the output root.
+The output root comes from `settings.output` in YAML, or from the `run --output`
+override. Each run creates a timestamped directory (`YYYYMMDDHHMMSS`) with
+run-level outputs, and per-repository folders are created directly under the
+output root.
 
 Run directory (timestamped) contents:
 
@@ -271,7 +221,7 @@ Per-repository directory (under the output root) contents:
   `author_summary_data.csv`, `author_chart.html`
 
 The `.cache` directory under the output root stores remote clones and can be
-cleared with `--clear-cache`.
+cleared with the YAML `settings.clear_cache` value.
 
 ### Stdout examples
 
@@ -312,34 +262,18 @@ python -m analyze_git_repo_loc --help
 ```
 
 ```text
-usage: analyze_git_repo_loc [-h] [--config CONFIG] [-o OUTPUT] [--since SINCE] [--until UNTIL] [--interval {daily,weekly,monthly}] [--lang LANG]
-                            [--author-name AUTHOR_NAME] [--exclude-dirs EXCLUDE_DIRS] [--workers WORKERS] [--clear-cache] [--no-plot-show]
-                            repo_paths
+usage: analyze_git_repo_loc [-h] {init,wizard,run} ...
 
 Analyze Git repositories and visualize code LOC.
 
 positional arguments:
-  repo_paths            A comma-separated list of Git repository paths or URLs,
-                        optionally followed by a branch name separated with '#'. Examples: /path/to/repo1#branch-name
-                        orhttp://github.com/user/repo2.git#branch-name. If no branch is specified, 'main' will be used as the default.
-                        Use --config for multi-repository YAML inputs.
+  {init,wizard,run}
+    init          Create an initial YAML configuration file interactively.
+    wizard        Run the interactive pre-analysis wizard.
+    run           Run analysis from a YAML configuration file.
 
 options:
-  -h, --help            show this help message and exit
-  --config CONFIG       YAML configuration file path
-  -o, --output OUTPUT   Output path
-  --since SINCE         Start Date yyyy-mm-dd
-  --until UNTIL         End Date yyyy-mm-dd
-  --interval {daily,weekly,monthly}
-                        Interval (default: monthly)
-  --lang LANG           Count only the given space separated, case-insensitive languages L1,L2,L3, etc.
-  --author-name AUTHOR_NAME
-                        Author name or comma-separated list of author names to filter commits
-  --exclude-dirs EXCLUDE_DIRS
-                        Exclude directories from analysis, specified as comma-separated paths relative to the repository root.
-  --workers WORKERS     Maximum number of repositories to analyze concurrently (default: auto).
-  --clear-cache         If set, the cache will be cleared before executing the main function.
-  --no-plot-show        If set, the plots will not be shown.
+  -h, --help      show this help message and exit
 ```
 
 ## Author

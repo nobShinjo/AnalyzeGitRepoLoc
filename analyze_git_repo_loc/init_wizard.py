@@ -396,7 +396,7 @@ class _InitWizardController:
                     self._color("Config summary", Fore.CYAN + Style.BRIGHT),
                     render_init_config_summary(self.state, color=True),
                     "",
-                    "Next: python -m analyze_git_repo_loc --tui --config "
+                    "Next: python -m analyze_git_repo_loc wizard --config "
                     f"{self.state.config_path}",
                 ]
             )
@@ -585,5 +585,5 @@ def run_init_config_wizard(default_path: Path = Path("config.yml")) -> Path:
         + f"Created config: {config_path}"
         + Style.RESET_ALL
     )
-    print(f"Next: python -m analyze_git_repo_loc --tui --config {config_path}")
+    print(f"Next: python -m analyze_git_repo_loc wizard --config {config_path}")
     return config_path
