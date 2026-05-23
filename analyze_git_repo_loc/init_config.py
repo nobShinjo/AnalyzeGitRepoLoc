@@ -14,6 +14,8 @@ Functions:
         Render generated config data as YAML text.
     resolve_init_config_path:
         Select a safe config output path with overwrite confirmation.
+    run_init_config_wizard:
+        Delegate to the full-screen config initialization wizard.
     run_init_config:
         Run the interactive config initialization flow.
 """
@@ -23,7 +25,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Callable, Any
+from typing import Any, Callable
 
 import yaml
 
@@ -38,6 +40,7 @@ class InitConfigOptions:
 
     github_enabled: bool = True
     gitlab_enabled: bool = False
+    gitlab_base_url: str = "https://gitlab.com"
     output: Path = Path("out")
     interval: str = "monthly"
     since: str | None = None
@@ -77,7 +80,7 @@ def build_init_config_data(options: InitConfigOptions) -> dict[str, Any]:
                 },
                 "gitlab": {
                     "enabled": options.gitlab_enabled,
-                    "base_url": "https://gitlab.com",
+                    "base_url": options.gitlab_base_url.rstrip("/"),
                 },
             },
             "defaults": {
@@ -190,6 +193,20 @@ def _prompt_exclude_dirs(prompt: PromptFunc) -> list[str]:
 def _default_confirm_overwrite(path: Path) -> bool:
     answer = input(f"Overwrite {path}? [y/N]: ").strip().lower()
     return answer in {"y", "yes"}
+
+
+def run_init_config_wizard(default_path: Path = Path("config.yml")) -> Path:
+    """Run the full-screen config initialization wizard.
+
+    Args:
+        default_path (Path): Default config output path.
+
+    Returns:
+        Path: Written config file path.
+    """
+    from analyze_git_repo_loc.init_wizard import run_init_config_wizard as run_wizard
+
+    return run_wizard(default_path)
 
 
 def run_init_config(

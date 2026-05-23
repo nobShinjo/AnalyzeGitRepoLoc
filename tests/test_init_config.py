@@ -10,6 +10,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import yaml
+from colorama import Fore, Style
 
 from analyze_git_repo_loc.__main__ import _format_output_summary
 from analyze_git_repo_loc.init_config import (
@@ -17,6 +18,11 @@ from analyze_git_repo_loc.init_config import (
     build_init_config_data,
     render_init_config_yaml,
     resolve_init_config_path,
+)
+from analyze_git_repo_loc.init_wizard import (
+    InitWizardState,
+    _InitWizardController,
+    render_init_config_summary,
 )
 from analyze_git_repo_loc.utils import parse_arguments
 
@@ -80,6 +86,134 @@ class InitConfigGenerationTests(unittest.TestCase):
         self.assertEqual(loaded, config)
         self.assertTrue(rendered.endswith("\n"))
         self.assertNotIn("repositories:", rendered)
+
+    def test_self_hosted_gitlab_config_uses_custom_base_url(self) -> None:
+        config = build_init_config_data(
+            InitConfigOptions(
+                github_enabled=False,
+                gitlab_enabled=True,
+                gitlab_base_url="https://gitlab.example.com",
+            )
+        )
+
+        self.assertFalse(config["tui"]["providers"]["github"]["enabled"])
+        self.assertTrue(config["tui"]["providers"]["gitlab"]["enabled"])
+        self.assertEqual(
+            config["tui"]["providers"]["gitlab"]["base_url"],
+            "https://gitlab.example.com",
+        )
+
+
+class InitWizardStateTests(unittest.TestCase):
+    """Full-screen init wizard state tests."""
+
+    def test_gitlab_targets_are_mutually_exclusive(self) -> None:
+        state = InitWizardState()
+
+        state.toggle_provider("gitlab.com")
+        self.assertTrue(state.gitlab_enabled)
+        self.assertEqual(state.gitlab_base_url, "https://gitlab.com")
+
+        state.toggle_provider("gitlab.self_hosted")
+        self.assertTrue(state.gitlab_enabled)
+        self.assertEqual(state.gitlab_base_url, "")
+
+        state.toggle_provider("gitlab.com")
+        self.assertTrue(state.gitlab_enabled)
+        self.assertEqual(state.gitlab_base_url, "https://gitlab.com")
+
+    def test_summary_lists_selected_config_values(self) -> None:
+        state = InitWizardState(
+            config_path=Path("custom.yml"),
+            github_enabled=False,
+            gitlab_enabled=True,
+            gitlab_base_url="https://gitlab.example.com",
+            output=Path("reports"),
+            interval="weekly",
+            since="2026-01-01",
+            until="2026-05-01",
+            no_plot_show=False,
+            cache_policy="update",
+            exclude_dirs=["node_modules"],
+        )
+
+        summary = render_init_config_summary(state)
+
+        self.assertIn("Config: custom.yml", summary)
+        self.assertIn("Providers: Self-hosted GitLab", summary)
+        self.assertIn("Output: reports", summary)
+        self.assertIn("Interval: weekly", summary)
+        self.assertIn("Period: 2026-01-01 -> 2026-05-01", summary)
+        self.assertIn("Auto display: on", summary)
+        self.assertIn("Cache: update", summary)
+        self.assertIn("Exclude dirs: node_modules", summary)
+
+    def test_back_moves_to_previous_field_inside_current_step(self) -> None:
+        controller = _InitWizardController(Path("config.yml"))
+        controller.step = 2
+        controller.field = 2
+
+        controller.back()
+
+        self.assertEqual(controller.step, 2)
+        self.assertEqual(controller.field, 1)
+
+    def test_back_from_self_hosted_url_returns_to_provider_checklist(self) -> None:
+        controller = _InitWizardController(Path("config.yml"))
+        controller.step = 1
+        controller.state.gitlab_enabled = True
+        controller.state.gitlab_base_url = ""
+        controller.self_hosted_url_prompt = True
+
+        controller.back()
+
+        self.assertEqual(controller.step, 1)
+        self.assertIn("Self-hosted GitLab", controller.render())
+        self.assertIn("[x] Self-hosted GitLab", controller.render())
+
+    def test_cancel_finishes_without_keyboard_interrupt_traceback(self) -> None:
+        controller = _InitWizardController(Path("config.yml"))
+
+        controller.cancel()
+
+        self.assertTrue(controller.cancelled)
+        self.assertFalse(controller.confirmed)
+
+    def test_bool_fields_use_blank_input_with_current_default(self) -> None:
+        controller = _InitWizardController(Path("config.yml"))
+        controller.step = 3
+        controller.state.no_plot_show = False
+
+        self.assertEqual(controller.current_value(), "")
+        self.assertIn("Open plots automatically [Y/n]", controller.render())
+
+        controller.apply_current_input("")
+
+        self.assertFalse(controller.state.no_plot_show)
+
+    def test_overwrite_uses_blank_input_with_current_default(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config_path = Path(tmp_dir) / "config.yml"
+            config_path.write_text("existing: true\n", encoding="utf-8")
+            controller = _InitWizardController(config_path)
+            controller.state.overwrite_existing = True
+            controller.field = 1
+
+            self.assertEqual(controller.current_value(), "")
+            self.assertIn("Overwrite", controller.render())
+            self.assertIn("[Y/n]", controller.render())
+
+            controller.apply_current_input("")
+
+        self.assertTrue(controller.state.overwrite_existing)
+
+    def test_colored_summary_styles_labels_and_values(self) -> None:
+        state = InitWizardState(config_path=Path("config.yml"))
+
+        summary = render_init_config_summary(state, color=True)
+
+        self.assertIn(Fore.CYAN + Style.BRIGHT + "Config:" + Style.RESET_ALL, summary)
+        self.assertIn(Fore.WHITE + Style.BRIGHT + "config.yml" + Style.RESET_ALL, summary)
 
 
 class InitConfigPathTests(unittest.TestCase):

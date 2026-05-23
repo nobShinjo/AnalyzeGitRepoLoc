@@ -40,7 +40,7 @@ from analyze_git_repo_loc.analysis_helpers import (
 from analyze_git_repo_loc.chart_builder import ChartBuilder, ChartStrategy
 from analyze_git_repo_loc.colored_console_printer import ColoredConsolePrinter
 from analyze_git_repo_loc.html_report import ProgressEvent, generate_html_report
-from analyze_git_repo_loc.init_config import run_init_config
+from analyze_git_repo_loc.init_wizard import run_init_config_wizard
 from analyze_git_repo_loc.markdown_summary import generate_markdown_summary
 from analyze_git_repo_loc.remote_catalog import (
     RemoteCatalogError,
@@ -393,7 +393,7 @@ def main() -> None:
     )
     args = parse_arguments(parser)
     if getattr(args, "init", False):
-        run_init_config()
+        run_init_config_wizard()
         return
 
     # Initialize ColoredConsolePrinter
