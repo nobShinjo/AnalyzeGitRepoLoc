@@ -176,7 +176,7 @@ def merge_yaml_config(
     """
     settings, repositories = load_yaml_config(
         args.config,
-        require_repositories=not getattr(args, "tui", False),
+        require_repositories=not getattr(args, "interactive", False),
     )
 
     args.output = _resolve_output_path(_pick_value(args, settings, "output"))

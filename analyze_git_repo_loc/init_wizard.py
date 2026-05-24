@@ -1,12 +1,12 @@
 """Run the full-screen first-run configuration wizard.
 
 Description:
-    Provides the prompt_toolkit-backed `--init` wizard UI. Keeps YAML data
+    Provides the prompt_toolkit-backed `init` wizard UI. Keeps YAML data
     generation in `init_config` and only owns editable wizard state, rendering,
     validation, and final file writing.
 Classes:
     InitWizardState:
-        Stores editable state for the full-screen `--init` wizard.
+        Stores editable state for the full-screen `init` wizard.
 Functions:
     render_init_config_summary:
         Render a concise final summary for generated config values.
@@ -147,7 +147,7 @@ class _InitWizardController:
         self.field = 0
         self.provider_cursor = 0
         self.self_hosted_url_prompt = False
-        self.message = "Create a TUI-ready YAML config for AnalyzeGitRepoLoc."
+        self.message = "Create an interactive-ready YAML config for AnalyzeGitRepoLoc."
         self.confirmed = False
         self.cancelled = False
 
@@ -396,7 +396,7 @@ class _InitWizardController:
                     self._color("Config summary", Fore.CYAN + Style.BRIGHT),
                     render_init_config_summary(self.state, color=True),
                     "",
-                    "Next: python -m analyze_git_repo_loc wizard --config "
+                    "Next: python -m analyze_git_repo_loc run -i --config "
                     f"{self.state.config_path}",
                 ]
             )
@@ -585,5 +585,5 @@ def run_init_config_wizard(default_path: Path = Path("config.yml")) -> Path:
         + f"Created config: {config_path}"
         + Style.RESET_ALL
     )
-    print(f"Next: python -m analyze_git_repo_loc wizard --config {config_path}")
+    print(f"Next: python -m analyze_git_repo_loc run -i --config {config_path}")
     return config_path

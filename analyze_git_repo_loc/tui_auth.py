@@ -1,5 +1,5 @@
 """
-Runtime authentication selection for the repository selector TUI.
+Runtime authentication selection for interactive repository discovery.
 
 Description:
     Detects environment tokens, GitHub/GitLab CLI login tokens, Device Code
@@ -7,7 +7,7 @@ Description:
     into the current process environment for downstream clone compatibility.
 Classes:
     AuthChoice:
-        Authentication method and runtime values selected by the TUI.
+        Authentication method and runtime values selected interactively.
     AuthMethodStatus:
         Availability details for one authentication method.
 Functions:
@@ -20,7 +20,7 @@ Functions:
     run_tui_auth_selection:
         Resolve runtime authentication and display labels.
     run_tui_auth_selector:
-        Prompt for authentication for all enabled TUI providers.
+        Prompt for authentication for all enabled interactive providers.
 """
 
 from __future__ import annotations
@@ -58,7 +58,7 @@ class AuthChoice:
 
 @dataclass(frozen=True)
 class AuthMethodStatus:
-    """Availability of one TUI authentication method."""
+    """Availability of one interactive authentication method."""
 
     method: str
     label: str
@@ -292,7 +292,7 @@ def _prompt_choice(provider: str, statuses: list[AuthMethodStatus]) -> AuthMetho
         from prompt_toolkit import prompt
     except ImportError as ex:
         raise RuntimeError(
-            "prompt_toolkit is required for wizard. "
+            "prompt_toolkit is required for interactive runs. "
             "Install dependencies with `uv sync --active`."
         ) from ex
 
@@ -325,7 +325,7 @@ def _prompt_one_time_token(provider: str) -> str:
         from prompt_toolkit import prompt
     except ImportError as ex:
         raise RuntimeError(
-            "prompt_toolkit is required for wizard. "
+            "prompt_toolkit is required for interactive runs. "
             "Install dependencies with `uv sync --active`."
         ) from ex
     return prompt(f"Paste {_provider_label(provider)} token: ", is_password=True).strip()
@@ -336,7 +336,7 @@ def _prompt_gitlab_device_client_id() -> str:
         from prompt_toolkit import prompt
     except ImportError as ex:
         raise RuntimeError(
-            "prompt_toolkit is required for wizard. "
+            "prompt_toolkit is required for interactive runs. "
             "Install dependencies with `uv sync --active`."
         ) from ex
     return prompt("GitLab OAuth Application ID for this run: ").strip()

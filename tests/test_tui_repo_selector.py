@@ -16,7 +16,7 @@ from analyze_git_repo_loc import remote_catalog
 from analyze_git_repo_loc import remote_oauth
 from analyze_git_repo_loc import tui_wizard
 from analyze_git_repo_loc import utils
-from analyze_git_repo_loc.__main__ import _apply_tui_repository_selection
+from analyze_git_repo_loc.__main__ import _apply_interactive_repository_selection
 from analyze_git_repo_loc.__main__ import _format_output_summary
 from analyze_git_repo_loc.remote_catalog import (
     RemoteCatalogError,
@@ -67,11 +67,11 @@ from analyze_git_repo_loc.utils import parse_arguments
 
 
 class TuiConfigTests(unittest.TestCase):
-    """TUI config loading tests."""
+    """Interactive config loading tests."""
 
-    def test_loads_tui_settings_with_defaults(self) -> None:
+    def test_loads_interactive_settings_with_defaults(self) -> None:
         config = {
-            "tui": {
+            "interactive": {
                 "providers": {
                     "github": {"enabled": True},
                     "gitlab": {"enabled": True, "base_url": "https://git.example"},
@@ -89,12 +89,16 @@ class TuiConfigTests(unittest.TestCase):
 
     def test_rejects_config_without_enabled_provider(self) -> None:
         with self.assertRaisesRegex(RemoteCatalogError, "At least one"):
-            load_tui_settings({"tui": {"providers": {}}})
+            load_tui_settings({"interactive": {"providers": {}}})
+
+    def test_rejects_legacy_tui_settings_section(self) -> None:
+        with self.assertRaisesRegex(RemoteCatalogError, "interactive.providers"):
+            load_tui_settings({"tui": {"providers": {"github": {"enabled": True}}}})
 
     def test_ignores_legacy_provider_auth_settings(self) -> None:
         settings = load_tui_settings(
             {
-                "tui": {
+                "interactive": {
                     "providers": {
                         "github": {
                             "enabled": True,
@@ -114,7 +118,7 @@ class TuiConfigTests(unittest.TestCase):
 
 
 class CliTuiArgumentTests(unittest.TestCase):
-    """CLI validation tests for wizard/run subcommands."""
+    """CLI validation tests for interactive run subcommands."""
 
     def test_legacy_tui_flag_is_rejected(self) -> None:
         parser = argparse.ArgumentParser(prog="analyze_git_repo_loc")
@@ -125,13 +129,13 @@ class CliTuiArgumentTests(unittest.TestCase):
 
         self.assertEqual(ctx.exception.code, 2)
 
-    def test_wizard_config_allows_missing_repositories(self) -> None:
+    def test_interactive_run_config_allows_missing_repositories(self) -> None:
         parser = argparse.ArgumentParser(prog="analyze_git_repo_loc")
         with tempfile.TemporaryDirectory() as tmp_dir:
             config_path = Path(tmp_dir) / "config.yml"
             config_path.write_text(
                 "settings:\n  output: ./out\n"
-                "tui:\n"
+                "interactive:\n"
                 "  providers:\n"
                 "    github:\n"
                 "      enabled: true\n",
@@ -141,19 +145,78 @@ class CliTuiArgumentTests(unittest.TestCase):
             with patch.object(
                 sys,
                 "argv",
-                ["analyze_git_repo_loc", "wizard", "--config", str(config_path)],
+                ["analyze_git_repo_loc", "run", "-i", "--config", str(config_path)],
             ):
                 args = parse_arguments(parser)
 
-        self.assertEqual(args.command, "wizard")
-        self.assertTrue(args.tui)
+        self.assertEqual(args.command, "run")
+        self.assertTrue(args.interactive)
         self.assertIsNone(args.repo_paths)
         self.assertEqual(args.output, Path("./out"))
+
+    def test_long_interactive_run_flag_is_supported(self) -> None:
+        parser = argparse.ArgumentParser(prog="analyze_git_repo_loc")
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config_path = Path(tmp_dir) / "config.yml"
+            config_path.write_text(
+                "settings:\n  output: ./out\n"
+                "interactive:\n"
+                "  providers:\n"
+                "    github:\n"
+                "      enabled: true\n",
+                encoding="utf-8",
+            )
+
+            with patch.object(
+                sys,
+                "argv",
+                [
+                    "analyze_git_repo_loc",
+                    "run",
+                    "--interactive",
+                    "--config",
+                    str(config_path),
+                ],
+            ):
+                args = parse_arguments(parser)
+
+        self.assertTrue(args.interactive)
+
+    def test_run_defaults_to_non_interactive(self) -> None:
+        parser = argparse.ArgumentParser(prog="analyze_git_repo_loc")
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config_path = Path(tmp_dir) / "config.yml"
+            config_path.write_text(
+                "settings:\n"
+                "  output: ./out\n"
+                "repositories:\n"
+                "  - path: https://github.com/org/alpha.git\n"
+                "    branch: main\n",
+                encoding="utf-8",
+            )
+
+            with patch.object(
+                sys,
+                "argv",
+                ["analyze_git_repo_loc", "run", "--config", str(config_path)],
+            ):
+                args = parse_arguments(parser)
+
+        self.assertFalse(args.interactive)
 
     def test_tui_subcommand_is_rejected(self) -> None:
         parser = argparse.ArgumentParser(prog="analyze_git_repo_loc")
 
         with patch.object(sys, "argv", ["analyze_git_repo_loc", "tui"]):
+            with self.assertRaises(SystemExit) as ctx:
+                parse_arguments(parser)
+
+        self.assertEqual(ctx.exception.code, 2)
+
+    def test_wizard_subcommand_is_rejected(self) -> None:
+        parser = argparse.ArgumentParser(prog="analyze_git_repo_loc")
+
+        with patch.object(sys, "argv", ["analyze_git_repo_loc", "wizard"]):
             with self.assertRaises(SystemExit) as ctx:
                 parse_arguments(parser)
 
@@ -334,7 +397,7 @@ class RemoteCatalogTests(unittest.TestCase):
 
     def test_enabled_github_provider_requires_resolved_token(self) -> None:
         settings = load_tui_settings(
-            {"tui": {"providers": {"github": {"enabled": True}}}}
+            {"interactive": {"providers": {"github": {"enabled": True}}}}
         )
 
         with self.assertRaisesRegex(RemoteCatalogError, "GitHub authentication"):
@@ -342,7 +405,7 @@ class RemoteCatalogTests(unittest.TestCase):
 
     def test_fetch_remote_repositories_uses_resolved_token(self) -> None:
         settings = load_tui_settings(
-            {"tui": {"providers": {"github": {"enabled": True}}}}
+            {"interactive": {"providers": {"github": {"enabled": True}}}}
         )
 
         with patch.object(
@@ -370,7 +433,7 @@ class RemoteCatalogTests(unittest.TestCase):
 
     def test_api_failure_is_wrapped_as_catalog_error(self) -> None:
         settings = load_tui_settings(
-            {"tui": {"providers": {"github": {"enabled": True}}}}
+            {"interactive": {"providers": {"github": {"enabled": True}}}}
         )
 
         with patch.object(remote_catalog, "_request_json", side_effect=OSError("boom")):
@@ -379,7 +442,7 @@ class RemoteCatalogTests(unittest.TestCase):
 
     def test_empty_provider_result_is_catalog_error(self) -> None:
         settings = load_tui_settings(
-            {"tui": {"providers": {"github": {"enabled": True}}}}
+            {"interactive": {"providers": {"github": {"enabled": True}}}}
         )
 
         with patch.object(remote_catalog, "_request_json", return_value=[]):
@@ -388,26 +451,30 @@ class RemoteCatalogTests(unittest.TestCase):
 
 
 class TuiStartupTests(unittest.TestCase):
-    """TUI startup failure tests."""
+    """Interactive startup failure tests."""
 
-    def test_tui_cancel_exits_before_analysis(self) -> None:
+    def test_interactive_cancel_exits_before_analysis(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             config_path = Path(tmp_dir) / "config.yml"
             config_path.write_text(
-                "tui:\n"
+                "interactive:\n"
                 "  providers:\n"
                 "    github:\n"
                 "      enabled: true\n",
                 encoding="utf-8",
             )
-            args = argparse.Namespace(tui=True, config=config_path, repo_paths=None)
+            args = argparse.Namespace(
+                interactive=True,
+                config=config_path,
+                repo_paths=None,
+            )
 
             with patch(
                 "analyze_git_repo_loc.__main__.run_tui_wizard",
                 side_effect=TuiSelectionCancelled("cancelled"),
             ):
                 with self.assertRaises(SystemExit) as ctx:
-                    _apply_tui_repository_selection(args)
+                    _apply_interactive_repository_selection(args)
 
         self.assertEqual(ctx.exception.code, 1)
 
@@ -558,7 +625,7 @@ class TuiAuthTests(unittest.TestCase):
     def test_run_tui_auth_selection_sets_host_specific_token(self) -> None:
         settings = load_tui_settings(
             {
-                "tui": {
+                "interactive": {
                     "providers": {
                         "gitlab": {
                             "enabled": True,
@@ -762,10 +829,10 @@ class RepositorySelectorStateTests(unittest.TestCase):
 class TuiWizardStateTests(unittest.TestCase):
     """Terminal-independent full wizard state tests."""
 
-    def test_load_quick_defaults_reads_non_secret_tui_presets(self) -> None:
+    def test_load_quick_defaults_reads_non_secret_interactive_presets(self) -> None:
         defaults = load_quick_defaults(
             {
-                "tui": {
+                "interactive": {
                     "quick_defaults": {
                         "interval": "weekly",
                         "lang": ["Python", "Markdown"],
@@ -869,7 +936,7 @@ class TuiWizardStateTests(unittest.TestCase):
     ) -> None:
         settings = load_tui_settings(
             {
-                "tui": {
+                "interactive": {
                     "providers": {
                         "github": {"enabled": True},
                         "gitlab": {
@@ -894,7 +961,9 @@ class TuiWizardStateTests(unittest.TestCase):
         self.assertEqual(candidates[2].base_url, "https://gitlab.example.com")
 
     def test_choose_auto_provider_targets_returns_single_enabled_provider(self) -> None:
-        settings = load_tui_settings({"tui": {"providers": {"github": {"enabled": True}}}})
+        settings = load_tui_settings(
+            {"interactive": {"providers": {"github": {"enabled": True}}}}
+        )
 
         targets = choose_auto_provider_targets(settings)
 
@@ -904,7 +973,7 @@ class TuiWizardStateTests(unittest.TestCase):
     def test_choose_auto_provider_targets_returns_none_for_multiple_providers(self) -> None:
         settings = load_tui_settings(
             {
-                "tui": {
+                "interactive": {
                     "providers": {
                         "github": {"enabled": True},
                         "gitlab": {"enabled": True},
@@ -1100,7 +1169,11 @@ class TuiWizardStateTests(unittest.TestCase):
         self.assertNotIn("secret", rendered)
         self.assertEqual(exported["repositories"][0]["path"], "https://github.com/org/alpha.git")
         self.assertEqual(exported["settings"]["no_plot_show"], True)
-        self.assertEqual(exported["tui"]["quick_defaults"]["cache_policy"], "use")
+        self.assertEqual(
+            exported["interactive"]["quick_defaults"]["cache_policy"],
+            "use",
+        )
+        self.assertNotIn("tui", exported)
         self.assertNotIn("auth_tokens", rendered)
 
     def test_fetch_repository_catalog_wraps_provider_errors(self) -> None:

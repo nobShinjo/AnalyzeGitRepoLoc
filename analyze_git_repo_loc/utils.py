@@ -357,32 +357,7 @@ def parse_arguments(parser: argparse.ArgumentParser) -> argparse.Namespace:
         help="YAML configuration file path to create (default: config.yml).",
     )
     init_parser.set_defaults(
-        tui=False,
-        repo_paths=None,
-        output=None,
-        since=None,
-        until=None,
-        interval=None,
-        lang=None,
-        author_name=None,
-        exclude_dirs=None,
-        workers=None,
-        clear_cache=None,
-        no_plot_show=None,
-    )
-
-    wizard_parser = subparsers.add_parser(
-        "wizard",
-        help="Run the interactive pre-analysis wizard.",
-    )
-    wizard_parser.add_argument(
-        "--config",
-        type=Path,
-        default=Path("config.yml"),
-        help="YAML configuration file path (default: config.yml).",
-    )
-    wizard_parser.set_defaults(
-        tui=True,
+        interactive=False,
         repo_paths=None,
         output=None,
         since=None,
@@ -398,7 +373,7 @@ def parse_arguments(parser: argparse.ArgumentParser) -> argparse.Namespace:
 
     run_parser = subparsers.add_parser(
         "run",
-        help="Run analysis from a YAML configuration file.",
+        help="Run analysis from a YAML configuration file, optionally interactively.",
     )
     run_parser.add_argument(
         "--config",
@@ -407,6 +382,13 @@ def parse_arguments(parser: argparse.ArgumentParser) -> argparse.Namespace:
         help="YAML configuration file path (default: config.yml).",
     )
     run_parser.add_argument("-o", "--output", type=Path, default=None, help="Output path")
+    run_parser.add_argument(
+        "-i",
+        "--interactive",
+        action="store_true",
+        default=False,
+        help="Review and adjust analysis settings interactively before running.",
+    )
     run_parser.add_argument(
         "--since",
         type=str,
@@ -432,7 +414,6 @@ def parse_arguments(parser: argparse.ArgumentParser) -> argparse.Namespace:
         help="If set, the plots will not be shown.",
     )
     run_parser.set_defaults(
-        tui=False,
         repo_paths=None,
         lang=None,
         author_name=None,

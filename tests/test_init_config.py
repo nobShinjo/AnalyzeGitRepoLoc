@@ -30,7 +30,7 @@ from analyze_git_repo_loc.utils import parse_arguments
 class InitConfigGenerationTests(unittest.TestCase):
     """Config data and YAML rendering tests."""
 
-    def test_builds_minimal_tui_ready_config_without_repositories_or_secrets(
+    def test_builds_minimal_interactive_ready_config_without_repositories_or_secrets(
         self,
     ) -> None:
         options = InitConfigOptions(
@@ -54,10 +54,11 @@ class InitConfigGenerationTests(unittest.TestCase):
         self.assertEqual(config["settings"]["until"], "2026-05-31")
         self.assertTrue(config["settings"]["no_plot_show"])
         self.assertFalse(config["settings"]["clear_cache"])
-        self.assertTrue(config["tui"]["providers"]["github"]["enabled"])
-        self.assertFalse(config["tui"]["providers"]["gitlab"]["enabled"])
+        self.assertNotIn("tui", config)
+        self.assertTrue(config["interactive"]["providers"]["github"]["enabled"])
+        self.assertFalse(config["interactive"]["providers"]["gitlab"]["enabled"])
         self.assertEqual(
-            config["tui"]["quick_defaults"]["exclude_dirs"],
+            config["interactive"]["quick_defaults"]["exclude_dirs"],
             ["node_modules", ".venv"],
         )
         rendered = repr(config)
@@ -96,10 +97,10 @@ class InitConfigGenerationTests(unittest.TestCase):
             )
         )
 
-        self.assertFalse(config["tui"]["providers"]["github"]["enabled"])
-        self.assertTrue(config["tui"]["providers"]["gitlab"]["enabled"])
+        self.assertFalse(config["interactive"]["providers"]["github"]["enabled"])
+        self.assertTrue(config["interactive"]["providers"]["gitlab"]["enabled"])
         self.assertEqual(
-            config["tui"]["providers"]["gitlab"]["base_url"],
+            config["interactive"]["providers"]["gitlab"]["base_url"],
             "https://gitlab.example.com",
         )
 

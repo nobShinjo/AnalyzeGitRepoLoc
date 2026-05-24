@@ -1,5 +1,5 @@
 """
-OAuth Device Code login helpers for TUI repository discovery.
+OAuth Device Code login helpers for interactive repository discovery.
 
 Description:
     Implements GitHub OAuth Device Flow and GitLab Device Authorization Grant

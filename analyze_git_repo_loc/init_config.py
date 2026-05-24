@@ -1,8 +1,8 @@
 """Create first-run YAML configuration files.
 
 Description:
-    Provides the interactive `--init` setup flow for creating a minimal
-    TUI-ready YAML configuration file. Keeps authentication secrets and
+    Provides the interactive `init` setup flow for creating a minimal
+    interactive-ready YAML configuration file. Keeps authentication secrets and
     repository selections out of generated config files.
 Classes:
     InitConfigOptions:
@@ -51,7 +51,7 @@ class InitConfigOptions:
 
 
 def build_init_config_data(options: InitConfigOptions) -> dict[str, Any]:
-    """Build a minimal TUI-ready config mapping.
+    """Build a minimal interactive-ready config mapping.
 
     Args:
         options (InitConfigOptions): First-run configuration choices.
@@ -72,7 +72,7 @@ def build_init_config_data(options: InitConfigOptions) -> dict[str, Any]:
 
     return {
         "settings": settings,
-        "tui": {
+        "interactive": {
             "providers": {
                 "github": {
                     "enabled": options.github_enabled,
@@ -256,5 +256,5 @@ def run_init_config(
     config_path.parent.mkdir(parents=True, exist_ok=True)
     config_path.write_text(render_init_config_yaml(config_data), encoding="utf-8")
     print(f"Created config: {config_path}")
-    print(f"Next: python -m analyze_git_repo_loc wizard --config {config_path}")
+    print(f"Next: python -m analyze_git_repo_loc run -i --config {config_path}")
     return config_path

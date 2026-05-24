@@ -1,8 +1,8 @@
 """
-Full pre-analysis wizard for TUI repository runs.
+Full pre-analysis flow for interactive repository runs.
 
 Description:
-    Builds and applies the runtime TUI state used before analysis. The wizard
+    Builds and applies the runtime interactive state used before analysis. The flow
     reuses provider authentication and repository selection, then lets the user
     confirm branches, filters, output, cache, and display behavior.
 Classes:
@@ -11,10 +11,10 @@ Classes:
     SelectedRepositoryConfig:
         Per-repository runtime settings selected in the wizard.
     TuiWizardState:
-        Complete pre-analysis TUI state before it is applied to CLI args.
+        Complete pre-analysis interactive state before it is applied to CLI args.
 Functions:
     run_tui_wizard:
-        Run the interactive full wizard and update parsed CLI args.
+        Run the interactive pre-analysis flow and update parsed CLI args.
     choose_auto_provider_targets:
         Choose the configured provider automatically when unambiguous.
     normalize_final_action:
@@ -294,7 +294,7 @@ def _parse_optional_bool(value: Any, key: str) -> bool | None:
             return True
         if normalized in {"0", "false", "no", "off"}:
             return False
-    raise ValueError(f"Invalid tui.quick_defaults.{key} value '{value}'.")
+    raise ValueError(f"Invalid interactive.quick_defaults.{key} value '{value}'.")
 
 
 def _parse_optional_int(value: Any, key: str) -> int | None:
@@ -303,9 +303,13 @@ def _parse_optional_int(value: Any, key: str) -> int | None:
     try:
         parsed = int(value)
     except (TypeError, ValueError) as ex:
-        raise ValueError(f"Invalid tui.quick_defaults.{key} value '{value}'.") from ex
+        raise ValueError(
+            f"Invalid interactive.quick_defaults.{key} value '{value}'."
+        ) from ex
     if parsed < 1:
-        raise ValueError(f"Invalid tui.quick_defaults.{key}; use 1 or higher.")
+        raise ValueError(
+            f"Invalid interactive.quick_defaults.{key}; use 1 or higher."
+        )
     return parsed
 
 
@@ -319,21 +323,27 @@ def load_quick_defaults(config_data: dict[str, Any]) -> TuiQuickDefaults:
     Returns:
         TuiQuickDefaults: Parsed quick defaults.
     """
-    tui = config_data.get("tui") or {}
-    if not isinstance(tui, dict):
-        raise ValueError("YAML config 'tui' must be a mapping.")
-    quick_defaults = tui.get("quick_defaults") or {}
+    interactive = config_data.get("interactive") or {}
+    if not isinstance(interactive, dict):
+        raise ValueError("YAML config 'interactive' must be a mapping.")
+    quick_defaults = interactive.get("quick_defaults") or {}
     if not isinstance(quick_defaults, dict):
-        raise ValueError("YAML config 'tui.quick_defaults' must be a mapping.")
+        raise ValueError(
+            "YAML config 'interactive.quick_defaults' must be a mapping."
+        )
 
     interval = quick_defaults.get("interval")
     if interval is not None and interval not in {"daily", "weekly", "monthly"}:
-        raise ValueError("tui.quick_defaults.interval must be daily, weekly, or monthly.")
+        raise ValueError(
+            "interactive.quick_defaults.interval must be daily, weekly, or monthly."
+        )
     cache_policy = quick_defaults.get("cache_policy")
     if cache_policy is not None:
         cache_policy = str(cache_policy).strip().casefold()
         if cache_policy not in {"use", "update", "clear"}:
-            raise ValueError("tui.quick_defaults.cache_policy must be use, update, or clear.")
+            raise ValueError(
+                "interactive.quick_defaults.cache_policy must be use, update, or clear."
+            )
 
     return TuiQuickDefaults(
         since=_parse_date(str(quick_defaults.get("since") or "")),
@@ -387,7 +397,7 @@ def _prompt(text: str, default: str | None = None) -> str:
         from prompt_toolkit import prompt
     except ImportError as ex:
         raise RuntimeError(
-            "prompt_toolkit is required for wizard. "
+            "prompt_toolkit is required for interactive runs. "
             "Install dependencies with `uv sync --active`."
         ) from ex
     suffix = f" [{default}]" if default not in {None, ""} else ""
@@ -1125,7 +1135,7 @@ def wizard_state_to_config(state: TuiWizardState) -> dict[str, Any]:
     return {
         "settings": settings,
         "repositories": repositories,
-        "tui": {
+        "interactive": {
             "providers": providers,
             "defaults": {"clone_protocol": state.clone_protocol},
             "quick_defaults": quick_defaults,
@@ -1240,7 +1250,7 @@ def _run_wizard_steps(state: TuiWizardState) -> str:
                 _prompt_output_cache_display(state)
                 state.recommendations = build_lightweight_recommendations(state)
             elif category == "providers":
-                print("Provider changes require restarting the TUI wizard.")
+                print("Provider changes require restarting the interactive run.")
 
 
 def run_tui_wizard(
@@ -1248,7 +1258,7 @@ def run_tui_wizard(
     config_data: dict[str, Any],
 ) -> argparse.Namespace:
     """
-    Run the full TUI wizard and apply confirmed settings to CLI args.
+    Run the full interactive flow and apply confirmed settings to CLI args.
 
     Args:
         args (argparse.Namespace): Parsed CLI arguments.
@@ -1284,7 +1294,7 @@ def run_tui_wizard(
     if action == "cancel":
         from analyze_git_repo_loc.tui_selector import TuiSelectionCancelled
 
-        raise TuiSelectionCancelled("TUI wizard cancelled.")
+        raise TuiSelectionCancelled("Interactive run cancelled.")
     if action == "save":
         save_wizard_config(args.config, state)
     return apply_wizard_state(args, state)

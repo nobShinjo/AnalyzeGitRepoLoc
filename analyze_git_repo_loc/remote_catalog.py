@@ -1,20 +1,20 @@
 """
-Remote repository catalog loading for the TUI selector.
+Remote repository catalog loading for interactive runs.
 
 Description:
-    Loads non-secret TUI settings, fetches GitHub/GitLab repository lists via
+    Loads non-secret interactive settings, fetches GitHub/GitLab repository lists via
     standard-library HTTP calls, and normalizes provider responses into a common
     internal model.
 Classes:
     RemoteCatalogError:
-        Raised when TUI repository discovery cannot continue.
+        Raised when interactive repository discovery cannot continue.
     RemoteRepositoryRef:
         Normalized reference to a remote repository.
     TuiSettings:
-        Validated TUI provider and default settings.
+        Validated interactive provider and default settings.
 Functions:
     load_tui_settings:
-        Parse and validate the `tui` YAML section.
+        Parse and validate the `interactive` YAML section.
     fetch_remote_repositories:
         Fetch repositories from enabled providers.
     selected_refs_to_repo_paths:
@@ -63,7 +63,7 @@ class RemoteRepositoryRef:
 
 @dataclass(frozen=True)
 class GitHubProviderSettings:
-    """GitHub TUI provider settings."""
+    """GitHub interactive provider settings."""
 
     enabled: bool = False
     api_base_url: str = "https://api.github.com"
@@ -71,7 +71,7 @@ class GitHubProviderSettings:
 
 @dataclass(frozen=True)
 class GitLabProviderSettings:
-    """GitLab TUI provider settings."""
+    """GitLab interactive provider settings."""
 
     enabled: bool = False
     base_url: str = "https://gitlab.com"
@@ -79,7 +79,7 @@ class GitLabProviderSettings:
 
 @dataclass(frozen=True)
 class TuiProviderSettings:
-    """All supported TUI provider settings."""
+    """All supported interactive provider settings."""
 
     github: GitHubProviderSettings
     gitlab: GitLabProviderSettings
@@ -87,14 +87,14 @@ class TuiProviderSettings:
 
 @dataclass(frozen=True)
 class TuiDefaults:
-    """TUI defaults."""
+    """Interactive defaults."""
 
     clone_protocol: str = "https"
 
 
 @dataclass(frozen=True)
 class TuiSettings:
-    """Validated TUI settings."""
+    """Validated interactive settings."""
 
     providers: TuiProviderSettings
     defaults: TuiDefaults
@@ -133,7 +133,7 @@ def _read_text(value: Any, *, default: str) -> str:
 
 def load_tui_settings(config_data: dict) -> TuiSettings:
     """
-    Load and validate TUI settings from parsed YAML data.
+    Load and validate interactive settings from parsed YAML data.
 
     Args:
         config_data (dict): Parsed YAML mapping.
@@ -142,15 +142,32 @@ def load_tui_settings(config_data: dict) -> TuiSettings:
         TuiSettings: Validated settings with defaults.
 
     Raises:
-        RemoteCatalogError: If the TUI configuration is invalid.
+        RemoteCatalogError: If the interactive configuration is invalid.
     """
     if not isinstance(config_data, dict):
         raise RemoteCatalogError("YAML config must be a mapping at the top level.")
-    tui = _require_mapping(config_data.get("tui"), "tui")
-    providers = _require_mapping(tui.get("providers"), "tui.providers")
-    github = _require_mapping(providers.get("github"), "tui.providers.github")
-    gitlab = _require_mapping(providers.get("gitlab"), "tui.providers.gitlab")
-    defaults = _require_mapping(tui.get("defaults"), "tui.defaults")
+    if "interactive" not in config_data:
+        raise RemoteCatalogError("interactive.providers must be configured.")
+    interactive = _require_mapping(
+        config_data.get("interactive"),
+        "interactive",
+    )
+    providers = _require_mapping(
+        interactive.get("providers"),
+        "interactive.providers",
+    )
+    github = _require_mapping(
+        providers.get("github"),
+        "interactive.providers.github",
+    )
+    gitlab = _require_mapping(
+        providers.get("gitlab"),
+        "interactive.providers.gitlab",
+    )
+    defaults = _require_mapping(
+        interactive.get("defaults"),
+        "interactive.defaults",
+    )
 
     github_settings = GitHubProviderSettings(
         enabled=_read_bool(github.get("enabled"), default=False),
@@ -168,10 +185,12 @@ def load_tui_settings(config_data: dict) -> TuiSettings:
     )
     clone_protocol = _read_text(defaults.get("clone_protocol"), default="https").lower()
     if clone_protocol not in {"https", "ssh"}:
-        raise RemoteCatalogError("tui.defaults.clone_protocol must be 'https' or 'ssh'.")
+        raise RemoteCatalogError(
+            "interactive.defaults.clone_protocol must be 'https' or 'ssh'."
+        )
 
     if not github_settings.enabled and not gitlab_settings.enabled:
-        raise RemoteCatalogError("At least one TUI provider must be enabled.")
+        raise RemoteCatalogError("At least one interactive provider must be enabled.")
 
     return TuiSettings(
         providers=TuiProviderSettings(github=github_settings, gitlab=gitlab_settings),
@@ -333,10 +352,10 @@ def fetch_remote_repositories(
     auth_tokens: dict[str, str] | None = None,
 ) -> list[RemoteRepositoryRef]:
     """
-    Fetch repositories from all enabled TUI providers.
+    Fetch repositories from all enabled interactive providers.
 
     Args:
-        settings (TuiSettings): Validated TUI settings.
+        settings (TuiSettings): Validated interactive settings.
 
     Returns:
         list[RemoteRepositoryRef]: Sorted repository refs.

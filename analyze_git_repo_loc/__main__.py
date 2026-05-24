@@ -115,14 +115,14 @@ def _print_start(console: ColoredConsolePrinter, parser: argparse.ArgumentParser
     print(Style.DIM + f"- {parser.description}", end=os.linesep + os.linesep)
 
 
-def _apply_tui_repository_selection(args: argparse.Namespace) -> None:
+def _apply_interactive_repository_selection(args: argparse.Namespace) -> None:
     """
-    Run TUI repository selection and update args.repo_paths.
+    Run interactive repository selection and update args.repo_paths.
 
     Args:
         args (argparse.Namespace): Parsed CLI arguments.
     """
-    if not getattr(args, "tui", False):
+    if not getattr(args, "interactive", False):
         return
     try:
         config_data = load_yaml_data(args.config)
@@ -398,7 +398,7 @@ def main() -> None:
 
     # Initialize ColoredConsolePrinter
     console = ColoredConsolePrinter()
-    _apply_tui_repository_selection(args)
+    _apply_interactive_repository_selection(args)
 
     # Output program name and description.
     _print_start(console, parser)
