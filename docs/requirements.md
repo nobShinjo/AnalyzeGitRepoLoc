@@ -11,7 +11,7 @@ Git リポジトリのコミット履歴から LOC（実質的なコード行数
 
 ## 機能要件
 
-- FR-01: `python -m analyze_git_repo_loc {init,wizard,run}` で CLI を起動できること。
+- FR-01: `python -m analyze_git_repo_loc {init,run}` で CLI を起動できること。
 - FR-02: リポジトリ指定は YAML 設定ファイルの `repositories` で定義できること。
 - FR-03: 各リポジトリ設定は `path` と任意の `branch` を指定でき、未指定の場合は `main` を使用すること。
 - FR-04: 解析対象は Git のコミット履歴（マージコミット除外）であり、以下の情報を抽出すること。
@@ -62,8 +62,8 @@ Git リポジトリのコミット履歴から LOC（実質的なコード行数
 
 ```bash
 python -m analyze_git_repo_loc init [--config config.yml]
-python -m analyze_git_repo_loc wizard [--config config.yml]
 python -m analyze_git_repo_loc run [--config config.yml] \
+  --interactive \
   --output ./out \
   --since YYYY-MM-DD \
   --until YYYY-MM-DD \
@@ -74,8 +74,8 @@ python -m analyze_git_repo_loc run [--config config.yml] \
 ### 引数仕様
 
 - `init`: 初期 YAML 設定ファイルを作成する。
-- `wizard`: YAML 設定を既定値として対話 wizard を起動し、実行条件を確認して解析する。
 - `run`: YAML 設定ファイルから非対話で解析する。
+- `-i` / `--interactive`: `run` の実行前に対話フローで条件を確認・補正する。
 - `--config`: YAML 設定ファイル（既定: `config.yml`）。
 - `--output`: `run` の出力先上書き。
 - `--since` / `--until`: ISO 形式の日付（`YYYY-MM-DD`）。

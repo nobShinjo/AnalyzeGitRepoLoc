@@ -34,19 +34,19 @@ Analyze Git repositories and visualize code LOC.
 
 ### Command line
 
-The CLI is organized around three subcommands:
+The CLI is organized around two subcommands:
 
 ```shell
 python -m analyze_git_repo_loc init [--config config.yml]
-python -m analyze_git_repo_loc wizard [--config config.yml]
 python -m analyze_git_repo_loc run [--config config.yml] [options]
+python -m analyze_git_repo_loc run -i [--config config.yml]
 ```
 
-Use `init` to create a starter config, `wizard` for the guided interactive
+Use `init` to create a starter config, `run -i` for the guided interactive
 workflow, and `run` for non-interactive batch analysis from YAML.
 
 Direct `repo_paths` arguments are no longer a command-line entry point. Define
-repositories in YAML, or select them with `wizard` and save the generated config.
+repositories in YAML, or select them with `run -i` and save the generated config.
 
 ### Remote authentication
 
@@ -66,7 +66,7 @@ Set one of the following environment variables before running the CLI:
 python -m analyze_git_repo_loc init
 ```
 
-`init` interactively creates a minimal TUI-ready YAML config. The default
+`init` interactively creates a minimal interactive-ready YAML config. The default
 output file is `config.yml`. If the file already exists, the CLI asks for
 another file name; entering the same existing path requires explicit overwrite
 confirmation.
@@ -76,21 +76,21 @@ repositories, tokens, client IDs, or authentication choices. After creation,
 run:
 
 ```shell
-python -m analyze_git_repo_loc wizard
+python -m analyze_git_repo_loc run -i
 ```
 
-#### Example : Guided wizard analysis
+#### Example : Guided interactive analysis
 
 ```shell
-python -m analyze_git_repo_loc wizard --config ./config.yml
+python -m analyze_git_repo_loc run -i --config ./config.yml
 ```
 
-The TUI lists repositories from enabled GitHub/GitLab providers, lets you
+The interactive run lists repositories from enabled GitHub/GitLab providers, lets you
 search and select multiple repositories, then immediately runs the normal
 analysis pipeline with the selected repositories.
 
 When only one provider is configured and `GITHUB_TOKEN` / `GITLAB_TOKEN` or an
-existing `gh` / `glab` login is available, `wizard` starts at Quick Review.
+existing `gh` / `glab` login is available, `run -i` starts at Quick Review.
 Press Enter to run, `e` to edit, `d` for details, `s` to save config then run,
 or `c` to cancel.
 
@@ -138,7 +138,7 @@ repositories:
   - path: https://github.com/user/repo2.git
     branch: develop
 
-tui:
+interactive:
   providers:
     github:
       enabled: true
@@ -163,26 +163,26 @@ Notes:
   `branch`, and `exclude_dirs`. Branch defaults to `main`.
 - `lang`, `author_name`, and `exclude_dirs` accept a YAML list or a
   comma-separated string.
-- `init` can create a minimal starter config for TUI usage.
-- `wizard` uses `config.yml` by default and may use a YAML file without
+- `init` can create a minimal starter config for interactive usage.
+- `run -i` uses `config.yml` by default and may use a YAML file without
   `repositories`.
-- `wizard` runs a pre-analysis wizard. YAML values are loaded as
-  defaults, then the wizard confirms repository selection, branches, filters,
+- `run -i` runs a pre-analysis review. YAML values are loaded as
+  defaults, then the interactive flow confirms repository selection, branches, filters,
   path rules, output, cache policy, and display behavior before analysis starts.
-- The wizard can ask which providers to use: GitHub, GitLab.com, and
+- The interactive flow can ask which providers to use: GitHub, GitLab.com, and
   self-hosted GitLab. If exactly one provider is configured, that provider is
   selected automatically. The self-hosted GitLab URL can be entered at runtime.
-- `tui.quick_defaults` stores non-secret defaults used by the Quick Review
+- `interactive.quick_defaults` stores non-secret defaults used by the Quick Review
   screen. It never stores tokens, client IDs, or authentication choices.
-- In the TUI wizard, global excludes and per-repository excludes are combined
+- In the interactive flow, global excludes and per-repository excludes are combined
   into the repository entries passed to the existing analysis pipeline. Quick
   Review excludes are applied only when the path exists in the cached repo.
 - Quick Review starts with a compact summary and uses terminal colors when
   supported to distinguish headings, summary values, actions, and cache states.
   Press `d` to show repository-level details and full execution conditions.
-- TUI-selected repositories may include `include_subpath` when saving config;
+- Interactive-selected repositories may include `include_subpath` when saving config;
   the analysis run treats it as a repository-root-relative subpath.
-- TUI authentication is selected at runtime. It offers environment tokens
+- Interactive authentication is selected at runtime. It offers environment tokens
   (`GITHUB_TOKEN` / `GITLAB_TOKEN`), existing `gh` / `glab` CLI login tokens,
   OAuth Device Code login when an application client ID is available, or a
   one-time token entered for the current run.
@@ -190,10 +190,10 @@ Notes:
   automatically when they are the configured provider's available non-interactive
   option. Device Code and one-time token authentication still require explicit
   selection.
-- TUI authentication details are not stored in YAML, files, or keyrings by this
+- Interactive authentication details are not stored in YAML, files, or keyrings by this
   application. Resolved tokens are mirrored only into the current process
   environment for downstream clone compatibility.
-- `tui.defaults.clone_protocol` accepts `https` or `ssh`.
+- `interactive.defaults.clone_protocol` accepts `https` or `ssh`.
 
 ### Output files
 
@@ -262,15 +262,14 @@ python -m analyze_git_repo_loc --help
 ```
 
 ```text
-usage: analyze_git_repo_loc [-h] {init,wizard,run} ...
+usage: analyze_git_repo_loc [-h] {init,run} ...
 
 Analyze Git repositories and visualize code LOC.
 
 positional arguments:
-  {init,wizard,run}
+  {init,run}
     init          Create an initial YAML configuration file interactively.
-    wizard        Run the interactive pre-analysis wizard.
-    run           Run analysis from a YAML configuration file.
+    run           Run analysis from a YAML configuration file, optionally interactively.
 
 options:
   -h, --help      show this help message and exit
