@@ -28,9 +28,12 @@ from analyze_git_repo_loc.init_config import (
     render_init_config_yaml,
 )
 from analyze_git_repo_loc.language_extensions import LanguageExtensions
+from analyze_git_repo_loc.yaml_config import load_yaml_data
 
 
 INTERVAL_OPTIONS = ["daily", "weekly", "monthly"]
+CACHE_POLICY_OPTIONS = ["use", "update", "clear"]
+YES_NO_OPTIONS = ["yes", "no"]
 COMMON_LANGUAGE_CHOICES = [
     "C#",
     "Python",
@@ -104,6 +107,126 @@ class InitWizardState:
         )
 
 
+def _load_existing_init_wizard_state(config_path: Path) -> InitWizardState:
+    """Load existing config values into first-run wizard state."""
+    state = InitWizardState(config_path=config_path)
+    if not config_path.exists():
+        return state
+
+    config_data = load_yaml_data(config_path)
+    settings = _as_mapping(config_data.get("settings"), "settings")
+    interactive = _as_mapping(config_data.get("interactive"), "interactive")
+    providers = _as_mapping(interactive.get("providers"), "interactive.providers")
+    quick_defaults = _as_mapping(
+        interactive.get("quick_defaults"),
+        "interactive.quick_defaults",
+    )
+
+    _apply_provider_defaults(state, providers)
+    state.output = Path(_pick_existing_value(settings, quick_defaults, "output", "out"))
+    state.interval = _validate_choice(
+        str(_pick_existing_value(settings, quick_defaults, "interval", "monthly")),
+        {"daily", "weekly", "monthly"},
+        "interval",
+    )
+    state.since = _normalize_optional_date(
+        _pick_existing_value(settings, quick_defaults, "since", None)
+    )
+    state.until = _normalize_optional_date(
+        _pick_existing_value(settings, quick_defaults, "until", None)
+    )
+    state.lang = _normalize_string_list(
+        _pick_existing_value(settings, quick_defaults, "lang", [])
+    )
+    state.no_plot_show = _normalize_bool(
+        _pick_existing_value(settings, quick_defaults, "no_plot_show", True),
+        "no_plot_show",
+    )
+    state.cache_policy = _validate_choice(
+        str(quick_defaults.get("cache_policy") or "use").strip().casefold(),
+        {"use", "update", "clear"},
+        "cache_policy",
+    )
+    state.exclude_dirs = _normalize_string_list(
+        quick_defaults.get("exclude_dirs", settings.get("exclude_dirs"))
+    ) or ["node_modules", ".venv"]
+    return state
+
+
+def _as_mapping(value: object, key: str) -> dict:
+    if value is None:
+        return {}
+    if not isinstance(value, dict):
+        raise ValueError(f"YAML config '{key}' must be a mapping.")
+    return value
+
+
+def _pick_existing_value(
+    settings: dict,
+    quick_defaults: dict,
+    key: str,
+    default: object,
+) -> object:
+    value = settings.get(key)
+    if value is not None and value != "":
+        return value
+    value = quick_defaults.get(key)
+    if value is not None and value != "":
+        return value
+    return default
+
+
+def _normalize_optional_date(value: object) -> str | None:
+    if value is None or value == "":
+        return None
+    normalized = str(value)
+    try:
+        datetime.fromisoformat(normalized)
+    except ValueError as ex:
+        raise ValueError(f"Invalid date '{normalized}'. Use YYYY-MM-DD.") from ex
+    return normalized
+
+
+def _normalize_string_list(value: object) -> list[str]:
+    if value is None or value == "":
+        return []
+    if isinstance(value, str):
+        return [item.strip() for item in value.split(",") if item.strip()]
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()]
+    raise ValueError(f"Expected a string or list value, got {type(value).__name__}.")
+
+
+def _normalize_bool(value: object, key: str) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().casefold()
+        if normalized in {"1", "true", "yes", "on", "y"}:
+            return True
+        if normalized in {"0", "false", "no", "off", "n"}:
+            return False
+    raise ValueError(f"Invalid {key} value '{value}'.")
+
+
+def _validate_choice(value: str, choices: set[str], key: str) -> str:
+    normalized = value.strip().casefold()
+    if normalized not in choices:
+        raise ValueError(f"Invalid {key} value '{value}'.")
+    return normalized
+
+
+def _apply_provider_defaults(state: InitWizardState, providers: dict) -> None:
+    github = _as_mapping(providers.get("github"), "interactive.providers.github")
+    gitlab = _as_mapping(providers.get("gitlab"), "interactive.providers.gitlab")
+    if "enabled" in github:
+        state.github_enabled = _normalize_bool(github["enabled"], "github.enabled")
+    if "enabled" in gitlab:
+        state.gitlab_enabled = _normalize_bool(gitlab["enabled"], "gitlab.enabled")
+    if gitlab.get("base_url"):
+        state.gitlab_base_url = str(gitlab["base_url"]).rstrip("/")
+
+
 def render_init_config_summary(state: InitWizardState, *, color: bool = False) -> str:
     """Render a concise summary of the config that will be written.
 
@@ -164,19 +287,21 @@ class _InitWizardController:
     _provider_keys = ["github", "gitlab.com", "gitlab.self_hosted"]
 
     def __init__(self, default_path: Path) -> None:
-        self.state = InitWizardState(config_path=default_path)
+        self.state = _load_existing_init_wizard_state(default_path)
         self.step = 0
         self.field = 0
         self.provider_cursor = 0
-        self.interval_cursor = INTERVAL_OPTIONS.index(self.state.interval)
+        self.interval_cursor = 0
+        self.cache_policy_cursor = 0
+        self.yes_no_cursor = 0
         self.language_cursor = 0
         self.language_suggestion_cursor = 0
-        self.language_input_active = False
         self.language_query = ""
         self.self_hosted_url_prompt = False
         self.message = "Create an interactive-ready YAML config for AnalyzeGitRepoLoc."
         self.confirmed = False
         self.cancelled = False
+        self._sync_cursors_to_state()
 
     def current_value(self) -> str:
         """Return the editable value for the current text field."""
@@ -192,7 +317,7 @@ class _InitWizardController:
         if key == "interval":
             return ""
         if key == "languages":
-            return self.language_query if self.language_input_active else ""
+            return self.language_query
         if key == "since":
             return self.state.since or ""
         if key == "until":
@@ -200,7 +325,7 @@ class _InitWizardController:
         if key == "open_plots":
             return ""
         if key == "cache_policy":
-            return self.state.cache_policy
+            return ""
         if key == "exclude_dirs":
             return ",".join(self.state.exclude_dirs)
         return ""
@@ -240,13 +365,19 @@ class _InitWizardController:
         if key == "interval":
             self.interval_cursor = max(0, self.interval_cursor - 1)
             return
-        if key == "languages" and self.language_input_active:
+        if key == "cache_policy":
+            self.cache_policy_cursor = max(0, self.cache_policy_cursor - 1)
+            return
+        if key in {"overwrite", "open_plots"}:
+            self.yes_no_cursor = max(0, self.yes_no_cursor - 1)
+            return
+        if key == "languages" and self.language_query:
             self.language_suggestion_cursor = max(
                 0,
                 self.language_suggestion_cursor - 1,
             )
             return
-        if key == "languages" and not self.language_input_active:
+        if key == "languages":
             self.language_cursor = max(0, self.language_cursor - 1)
 
     def move_down(self) -> None:
@@ -264,7 +395,19 @@ class _InitWizardController:
                 self.interval_cursor + 1,
             )
             return
-        if key == "languages" and self.language_input_active:
+        if key == "cache_policy":
+            self.cache_policy_cursor = min(
+                len(CACHE_POLICY_OPTIONS) - 1,
+                self.cache_policy_cursor + 1,
+            )
+            return
+        if key in {"overwrite", "open_plots"}:
+            self.yes_no_cursor = min(
+                len(YES_NO_OPTIONS) - 1,
+                self.yes_no_cursor + 1,
+            )
+            return
+        if key == "languages" and self.language_query:
             suggestions = self.language_suggestions()
             if suggestions:
                 self.language_suggestion_cursor = min(
@@ -272,9 +415,9 @@ class _InitWizardController:
                     self.language_suggestion_cursor + 1,
                 )
             return
-        if key == "languages" and not self.language_input_active:
+        if key == "languages":
             self.language_cursor = min(
-                len(COMMON_LANGUAGE_CHOICES) - 1,
+                len(self._visible_language_choices()) - 1,
                 self.language_cursor + 1,
             )
 
@@ -291,26 +434,41 @@ class _InitWizardController:
         self.state.interval = INTERVAL_OPTIONS[self.interval_cursor]
         self.message = f"Interval set to {self.state.interval}."
 
+    def select_current_cache_policy(self) -> None:
+        """Select the highlighted cache policy option."""
+        self.state.cache_policy = CACHE_POLICY_OPTIONS[self.cache_policy_cursor]
+        self.message = f"Cache policy set to {self.state.cache_policy}."
+
+    def select_current_yes_no(self) -> None:
+        """Select the highlighted yes/no value for the current field."""
+        self._apply_yes_no_value(YES_NO_OPTIONS[self.yes_no_cursor] == "yes")
+
+    def apply_yes_no_shortcut(self, key: str) -> None:
+        """Apply y/n shortcut to the current yes/no field."""
+        normalized = key.strip().casefold()
+        if normalized == "y":
+            self._apply_yes_no_value(True)
+            return
+        if normalized == "n":
+            self._apply_yes_no_value(False)
+            return
+        raise ValueError("Use y or n.")
+
     def toggle_current_language(self) -> None:
         """Toggle the highlighted common language checkbox."""
         if self._current_field_key() != "languages":
             return
-        language = COMMON_LANGUAGE_CHOICES[self.language_cursor]
+        choices = self._visible_language_choices()
+        if not choices:
+            return
+        self.language_cursor = min(self.language_cursor, len(choices) - 1)
+        language = choices[self.language_cursor]
         if language in self.state.lang:
             self.state.lang = [item for item in self.state.lang if item != language]
             self.message = f"Removed language: {language}."
             return
         self.state.lang.append(language)
         self.message = f"Added language: {language}."
-
-    def start_language_input(self) -> None:
-        """Start text input mode for adding a supported language."""
-        if self._current_field_key() != "languages":
-            return
-        self.language_input_active = True
-        self.language_query = ""
-        self.language_suggestion_cursor = 0
-        self.message = "Type a supported language name."
 
     def update_language_query(self, value: str) -> None:
         """Update the language suggestion query."""
@@ -327,39 +485,43 @@ class _InitWizardController:
             for language in COMMON_LANGUAGE_CHOICES
             if query in language.lower()
         ]
+        selected_matches = [
+            language
+            for language in self.state.lang
+            if query in language.lower()
+            and language not in common_matches
+        ]
         all_matches = [
             language
             for language in sorted(LanguageExtensions.language_to_extensions)
             if query in language.lower()
             and language not in common_matches
+            and language not in selected_matches
         ]
-        return [*common_matches, *all_matches][:8]
+        return [*common_matches, *selected_matches, *all_matches][:8]
 
-    def add_selected_language_suggestion(self) -> bool:
-        """Add the highlighted suggestion from language input mode."""
+    def toggle_selected_language_suggestion(self) -> bool:
+        """Toggle the highlighted language suggestion."""
         suggestions = self.language_suggestions()
         if not suggestions:
             self.message = "Type to search supported languages."
             return False
         self._clamp_language_suggestion_cursor()
-        return self.add_language_from_query(
-            suggestions[self.language_suggestion_cursor]
-        )
-
-    def add_language_from_query(self, value: str) -> bool:
-        """Add a supported language by exact query match."""
-        query = value.strip()
-        self.language_query = query
-        matched_language = self._resolve_supported_language(query)
-        if matched_language is None:
-            self.message = "Select a supported language from the suggestions."
-            return False
+        matched_language = suggestions[self.language_suggestion_cursor]
         if matched_language not in self.state.lang:
             self.state.lang.append(matched_language)
-        self.language_input_active = False
+            self.message = f"Added language: {matched_language}."
+        else:
+            self.state.lang = [
+                language for language in self.state.lang if language != matched_language
+            ]
+            self.message = f"Removed language: {matched_language}."
+        self.language_cursor = min(
+            self.language_cursor,
+            max(0, len(self._visible_language_choices()) - 1),
+        )
         self.language_query = ""
         self.language_suggestion_cursor = 0
-        self.message = f"Added language: {matched_language}."
         return True
 
     def back(self) -> None:
@@ -368,14 +530,14 @@ class _InitWizardController:
             self.self_hosted_url_prompt = False
             self.message = "Review or adjust provider selection."
             return
-        if self._current_field_key() == "languages" and self.language_input_active:
-            self.language_input_active = False
+        if self._current_field_key() == "languages" and self.language_query:
             self.language_query = ""
             self.language_suggestion_cursor = 0
             self.message = "Review language defaults."
             return
         if self.field > 0:
             self.field -= 1
+            self._sync_current_field_cursor()
             self.message = "Review or adjust the previous value."
             return
         if self.step == 0:
@@ -383,6 +545,7 @@ class _InitWizardController:
         self.step -= 1
         fields = self._fields_for_current_step()
         self.field = max(0, len(fields) - 1)
+        self._sync_current_field_cursor()
         self.message = "Review or adjust the previous step."
 
     def apply_current_input(self, value: str) -> bool:
@@ -401,11 +564,21 @@ class _InitWizardController:
                 else:
                     self.select_current_interval()
                 return self._advance_field()
+            if key == "cache_policy":
+                if value:
+                    self._apply_field(key, value)
+                else:
+                    self.select_current_cache_policy()
+                return self._advance_field()
+            if key in {"overwrite", "open_plots"}:
+                if value:
+                    self._apply_field(key, value)
+                else:
+                    self.select_current_yes_no()
+                return self._advance_field()
             if key == "languages":
-                if self.language_input_active:
-                    if value:
-                        return self.add_language_from_query(value)
-                    return self.add_selected_language_suggestion()
+                self.language_query = ""
+                self.language_suggestion_cursor = 0
                 return self._advance_field()
             self._apply_field(self._current_field_key(), value)
         except ValueError as ex:
@@ -436,10 +609,12 @@ class _InitWizardController:
         fields = self._fields_for_current_step()
         if self.field + 1 < len(fields):
             self.field += 1
+            self._sync_current_field_cursor()
             self.message = f"Set {fields[self.field][1]}."
             return True
         self.step += 1
         self.field = 0
+        self._sync_current_field_cursor()
         self.message = (
             "Review generated config before writing."
             if self.step == 4
@@ -449,14 +624,18 @@ class _InitWizardController:
 
     def _apply_field(self, key: str, value: str) -> None:
         if key == "config_path":
-            self.state.config_path = Path(value or "config.yml")
+            self.state = _load_existing_init_wizard_state(Path(value or "config.yml"))
             self.state.overwrite_existing = False
+            self.language_query = ""
+            self.language_suggestion_cursor = 0
+            self._sync_cursors_to_state()
             return
         if key == "overwrite":
             self.state.overwrite_existing = self._parse_bool(
                 value,
                 default=self.state.overwrite_existing,
             )
+            self.yes_no_cursor = 0 if self.state.overwrite_existing else 1
             if self.state.config_path.exists() and not self.state.overwrite_existing:
                 self.field = 0
                 raise ValueError("Enter another config path or confirm overwrite.")
@@ -485,11 +664,13 @@ class _InitWizardController:
                 value,
                 default=not self.state.no_plot_show,
             )
+            self.yes_no_cursor = 0 if not self.state.no_plot_show else 1
             return
         if key == "cache_policy":
             if value not in {"use", "update", "clear"}:
                 raise ValueError("Invalid cache policy. Use use, update, or clear.")
             self.state.cache_policy = value
+            self.cache_policy_cursor = CACHE_POLICY_OPTIONS.index(value)
             return
         if key == "exclude_dirs":
             self.state.exclude_dirs = [
@@ -553,6 +734,10 @@ class _InitWizardController:
         key = self._current_field_key()
         if key == "interval":
             return self._render_interval_step()
+        if key == "cache_policy":
+            return self._render_cache_policy_step()
+        if key in {"overwrite", "open_plots"}:
+            return self._render_yes_no_step()
         if key == "languages":
             return self._render_language_step()
         if self.step == 4:
@@ -609,26 +794,47 @@ class _InitWizardController:
         rows.extend(["", "Use Up/Down, Space to select, Enter to continue."])
         return "\n".join(rows)
 
+    def _render_cache_policy_step(self) -> str:
+        rows = [self._color("Cache policy", Fore.YELLOW + Style.BRIGHT)]
+        for index, option in enumerate(CACHE_POLICY_OPTIONS):
+            cursor = ">" if index == self.cache_policy_cursor else " "
+            checked = "x" if option == self.state.cache_policy else " "
+            rows.append(f"{cursor} [{checked}] {option}")
+        rows.extend(["", "Use Up/Down, Space to select, Enter to continue."])
+        return "\n".join(rows)
+
+    def _render_yes_no_step(self) -> str:
+        label = self._fields_for_current_step()[self.field][1]
+        current_value = self._current_yes_no_value()
+        rows = [self._color(label, Fore.YELLOW + Style.BRIGHT)]
+        for index, option in enumerate(YES_NO_OPTIONS):
+            cursor = ">" if index == self.yes_no_cursor else " "
+            checked = "x" if (option == "yes") == current_value else " "
+            rows.append(f"{cursor} [{checked}] {option}")
+        rows.extend(["", "Use Up/Down, Space to select. Y/N shortcut available."])
+        return "\n".join(rows)
+
     def _render_language_step(self) -> str:
         rows = [self._color("Default languages", Fore.YELLOW + Style.BRIGHT)]
-        for index, language in enumerate(COMMON_LANGUAGE_CHOICES):
+        for index, language in enumerate(self._visible_language_choices()):
             cursor = ">" if index == self.language_cursor else " "
             checked = "x" if language in self.state.lang else " "
-            rows.append(f"{cursor} [{checked}] {language}")
+            rows.append(f"{cursor} - [{checked}] {language}")
         selected = ", ".join(self.state.lang) if self.state.lang else "(all)"
         rows.extend(["", f"Selected: {selected}"])
-        if self.language_input_active:
+        if self.language_query:
             rows.append("Suggestions:")
             suggestions = self.language_suggestions()
             if suggestions:
                 for index, language in enumerate(suggestions):
                     cursor = ">" if index == self.language_suggestion_cursor else " "
-                    rows.append(f"{cursor} {language}")
+                    checked = "x" if language in self.state.lang else " "
+                    rows.append(f"{cursor} [{checked}] {language}")
             else:
                 rows.append("- Type to search supported languages.")
-            rows.append("Use Up/Down, Space to add a suggested language.")
+            rows.append("Use Up/Down, Space to toggle a suggested language.")
         else:
-            rows.append("Press A to add another supported language.")
+            rows.append("Type to search supported languages.")
             rows.append("Use Up/Down, Space to toggle, Enter to continue.")
         return "\n".join(rows)
 
@@ -649,29 +855,30 @@ class _InitWizardController:
                 "Up/Down move   Space select   Enter continue   Ctrl-B Back",
                 Fore.YELLOW,
             )
-        if key == "languages" and self.language_input_active:
+        if key == "cache_policy":
             return self._color(
-                "Up/Down move   Space add suggestion   Enter add exact match",
+                "Up/Down move   Space select   Enter continue   Ctrl-B Back",
+                Fore.YELLOW,
+            )
+        if key in {"overwrite", "open_plots"}:
+            return self._color(
+                "Up/Down move   Space select   Y/N shortcut   Ctrl-B Back",
+                Fore.YELLOW,
+            )
+        if key == "languages" and self.language_query:
+            return self._color(
+                "Up/Down move   Space toggle suggestion   Enter continue",
                 Fore.YELLOW,
             )
         if key == "languages":
             return self._color(
-                "Space toggle   A add language   Enter continue   Ctrl-B Back",
+                "Type search   Space toggle   Enter continue   Ctrl-B Back",
                 Fore.YELLOW,
             )
         return self._color(
             "Enter accept value   Ctrl-B Back   Esc/Ctrl-C Cancel",
             Fore.YELLOW,
         )
-
-    @staticmethod
-    def _resolve_supported_language(query: str) -> str | None:
-        if not query:
-            return None
-        for language in LanguageExtensions.language_to_extensions:
-            if language.lower() == query.lower():
-                return language
-        return None
 
     def _clamp_language_suggestion_cursor(self) -> None:
         suggestions = self.language_suggestions()
@@ -682,6 +889,67 @@ class _InitWizardController:
             self.language_suggestion_cursor,
             len(suggestions) - 1,
         )
+
+    def _visible_language_choices(self) -> list[str]:
+        choices = list(COMMON_LANGUAGE_CHOICES)
+        choices.extend(
+            language
+            for language in self.state.lang
+            if language not in COMMON_LANGUAGE_CHOICES
+        )
+        return choices
+
+    def _sync_cursors_to_state(self) -> None:
+        self.interval_cursor = INTERVAL_OPTIONS.index(self.state.interval)
+        self.cache_policy_cursor = CACHE_POLICY_OPTIONS.index(self.state.cache_policy)
+        self.yes_no_cursor = 0 if self._current_yes_no_value(default=True) else 1
+        self.language_cursor = min(
+            self.language_cursor,
+            max(0, len(self._visible_language_choices()) - 1),
+        )
+
+    def _sync_current_field_cursor(self) -> None:
+        key = self._current_field_key()
+        if key == "interval":
+            self.interval_cursor = INTERVAL_OPTIONS.index(self.state.interval)
+            return
+        if key == "cache_policy":
+            self.cache_policy_cursor = CACHE_POLICY_OPTIONS.index(
+                self.state.cache_policy
+            )
+            return
+        if key in {"overwrite", "open_plots"}:
+            self.yes_no_cursor = 0 if self._current_yes_no_value() else 1
+            return
+        if key == "languages":
+            self.language_cursor = min(
+                self.language_cursor,
+                max(0, len(self._visible_language_choices()) - 1),
+            )
+
+    def _current_yes_no_value(self, *, default: bool | None = None) -> bool:
+        key = self._current_field_key()
+        if key == "overwrite":
+            return self.state.overwrite_existing
+        if key == "open_plots":
+            return not self.state.no_plot_show
+        if default is not None:
+            return default
+        raise ValueError("Current field is not a yes/no field.")
+
+    def _apply_yes_no_value(self, value: bool) -> None:
+        key = self._current_field_key()
+        if key == "overwrite":
+            self.state.overwrite_existing = value
+            self.yes_no_cursor = 0 if value else 1
+            self.message = f"Overwrite set to {'yes' if value else 'no'}."
+            return
+        if key == "open_plots":
+            self.state.no_plot_show = not value
+            self.yes_no_cursor = 0 if value else 1
+            self.message = f"Open plots automatically set to {'yes' if value else 'no'}."
+            return
+        raise ValueError("Current field is not a yes/no field.")
 
     @staticmethod
     def _parse_optional_date(value: str) -> str | None:
@@ -744,7 +1012,7 @@ def run_init_config_wizard(default_path: Path = Path("config.yml")) -> Path:
     input_field.text = controller.current_value()
 
     def render_control() -> object:
-        if controller.language_input_active:
+        if controller._current_field_key() == "languages":
             controller.update_language_query(input_field.text)
         return ANSI(controller.render())
 
@@ -763,16 +1031,19 @@ def run_init_config_wizard(default_path: Path = Path("config.yml")) -> Path:
         lambda: controller.step == 1 and not controller._needs_self_hosted_url()
     )
     interval_filter = Condition(lambda: controller._current_field_key() == "interval")
-    language_filter = Condition(
-        lambda: controller._current_field_key() == "languages"
-        and not controller.language_input_active
+    cache_policy_filter = Condition(
+        lambda: controller._current_field_key() == "cache_policy"
     )
-    language_input_filter = Condition(
-        lambda: controller._current_field_key() == "languages"
-        and controller.language_input_active
+    yes_no_filter = Condition(
+        lambda: controller._current_field_key() in {"overwrite", "open_plots"}
     )
+    language_filter = Condition(lambda: controller._current_field_key() == "languages")
     selection_filter = (
-        provider_filter | interval_filter | language_filter | language_input_filter
+        provider_filter
+        | interval_filter
+        | cache_policy_filter
+        | yes_no_filter
+        | language_filter
     )
 
     @kb.add("up", filter=selection_filter)
@@ -795,19 +1066,33 @@ def run_init_config_wizard(default_path: Path = Path("config.yml")) -> Path:
         controller.select_current_interval()
         refresh_input()
 
+    @kb.add(" ", filter=cache_policy_filter)
+    def _(_: object) -> None:
+        controller.select_current_cache_policy()
+        refresh_input()
+
+    @kb.add(" ", filter=yes_no_filter)
+    def _(_: object) -> None:
+        controller.select_current_yes_no()
+        refresh_input()
+
+    @kb.add("y", filter=yes_no_filter)
+    def _(_: object) -> None:
+        controller.apply_yes_no_shortcut("y")
+        refresh_input()
+
+    @kb.add("n", filter=yes_no_filter)
+    def _(_: object) -> None:
+        controller.apply_yes_no_shortcut("n")
+        refresh_input()
+
     @kb.add(" ", filter=language_filter)
     def _(_: object) -> None:
-        controller.toggle_current_language()
-        refresh_input()
-
-    @kb.add(" ", filter=language_input_filter)
-    def _(_: object) -> None:
-        controller.add_selected_language_suggestion()
-        refresh_input()
-
-    @kb.add("a", filter=language_filter)
-    def _(_: object) -> None:
-        controller.start_language_input()
+        controller.update_language_query(input_field.text)
+        if controller.language_query:
+            controller.toggle_selected_language_suggestion()
+        else:
+            controller.toggle_current_language()
         refresh_input()
 
     @kb.add("c-b")
@@ -817,7 +1102,7 @@ def run_init_config_wizard(default_path: Path = Path("config.yml")) -> Path:
 
     @kb.add("enter")
     def _(_: object) -> None:
-        if language_input_filter():
+        if language_filter():
             controller.update_language_query(input_field.text)
         if controller.apply_current_input(input_field.text):
             if controller.confirmed and app is not None:

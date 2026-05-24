@@ -167,7 +167,7 @@ class InitWizardStateTests(unittest.TestCase):
         self.assertIn("Languages: C#, Python", summary)
 
     def test_interval_field_renders_as_select_options(self) -> None:
-        controller = _InitWizardController(Path("config.yml"))
+        controller = _InitWizardController(Path("missing-test-config.yml"))
         controller.step = 2
         controller.field = 1
 
@@ -179,7 +179,7 @@ class InitWizardStateTests(unittest.TestCase):
         self.assertNotIn("Edit the value below", rendered)
 
     def test_interval_selection_updates_state(self) -> None:
-        controller = _InitWizardController(Path("config.yml"))
+        controller = _InitWizardController(Path("missing-test-config.yml"))
         controller.step = 2
         controller.field = 1
 
@@ -188,8 +188,30 @@ class InitWizardStateTests(unittest.TestCase):
 
         self.assertEqual(controller.state.interval, "weekly")
 
+    def test_cache_policy_field_renders_as_select_options(self) -> None:
+        controller = _InitWizardController(Path("missing-test-config.yml"))
+        controller.step = 3
+        controller.field = 1
+
+        rendered = controller.render()
+
+        self.assertIn("[x] use", rendered)
+        self.assertIn("[ ] update", rendered)
+        self.assertIn("Use Up/Down, Space to select", rendered)
+        self.assertNotIn("Edit the value below", rendered)
+
+    def test_cache_policy_selection_updates_state(self) -> None:
+        controller = _InitWizardController(Path("missing-test-config.yml"))
+        controller.step = 3
+        controller.field = 1
+
+        controller.move_down()
+        controller.select_current_cache_policy()
+
+        self.assertEqual(controller.state.cache_policy, "update")
+
     def test_language_field_renders_common_language_checkboxes(self) -> None:
-        controller = _InitWizardController(Path("config.yml"))
+        controller = _InitWizardController(Path("missing-test-config.yml"))
         controller.step = 2
         controller.field = 2
 
@@ -197,10 +219,10 @@ class InitWizardStateTests(unittest.TestCase):
 
         self.assertIn("[ ] C#", rendered)
         self.assertIn("[ ] Python", rendered)
-        self.assertIn("Press A to add another supported language.", rendered)
+        self.assertIn("Type to search supported languages.", rendered)
 
     def test_language_toggle_updates_state(self) -> None:
-        controller = _InitWizardController(Path("config.yml"))
+        controller = _InitWizardController(Path("missing-test-config.yml"))
         controller.step = 2
         controller.field = 2
         controller.language_cursor = 1
@@ -210,10 +232,9 @@ class InitWizardStateTests(unittest.TestCase):
         self.assertEqual(controller.state.lang, ["Python"])
 
     def test_language_suggestions_match_input_text(self) -> None:
-        controller = _InitWizardController(Path("config.yml"))
+        controller = _InitWizardController(Path("missing-test-config.yml"))
         controller.step = 2
         controller.field = 2
-        controller.start_language_input()
 
         controller.update_language_query("script")
 
@@ -221,10 +242,9 @@ class InitWizardStateTests(unittest.TestCase):
         self.assertIn("TypeScript", controller.language_suggestions())
 
     def test_language_suggestion_cursor_moves_inside_input_mode(self) -> None:
-        controller = _InitWizardController(Path("config.yml"))
+        controller = _InitWizardController(Path("missing-test-config.yml"))
         controller.step = 2
         controller.field = 2
-        controller.start_language_input()
         controller.update_language_query("script")
 
         controller.move_down()
@@ -232,55 +252,164 @@ class InitWizardStateTests(unittest.TestCase):
         self.assertEqual(controller.language_suggestion_cursor, 1)
 
     def test_selected_language_suggestion_can_be_added(self) -> None:
-        controller = _InitWizardController(Path("config.yml"))
+        controller = _InitWizardController(Path("missing-test-config.yml"))
         controller.step = 2
         controller.field = 2
-        controller.start_language_input()
         controller.update_language_query("script")
         controller.move_down()
 
-        self.assertTrue(controller.add_selected_language_suggestion())
+        self.assertTrue(controller.toggle_selected_language_suggestion())
 
         self.assertEqual(controller.state.lang, ["TypeScript"])
-        self.assertFalse(controller.language_input_active)
+        self.assertEqual(controller.language_query, "")
 
     def test_language_input_render_highlights_selected_suggestion(self) -> None:
-        controller = _InitWizardController(Path("config.yml"))
+        controller = _InitWizardController(Path("missing-test-config.yml"))
         controller.step = 2
         controller.field = 2
-        controller.start_language_input()
         controller.update_language_query("script")
         controller.move_down()
 
         rendered = controller.render()
 
-        self.assertIn("> TypeScript", rendered)
+        self.assertIn("> [ ] TypeScript", rendered)
 
-    def test_supported_language_input_adds_matching_language(self) -> None:
-        controller = _InitWizardController(Path("config.yml"))
+    def test_selected_suggestion_renders_as_language_checkbox(self) -> None:
+        controller = _InitWizardController(Path("missing-test-config.yml"))
         controller.step = 2
         controller.field = 2
-        controller.start_language_input()
+        controller.update_language_query("powershell")
 
-        self.assertTrue(controller.add_language_from_query("PowerShell"))
+        controller.toggle_selected_language_suggestion()
 
-        self.assertEqual(controller.state.lang, ["PowerShell"])
-        self.assertFalse(controller.language_input_active)
+        rendered = controller.render()
 
-    def test_unsupported_language_input_is_rejected(self) -> None:
-        controller = _InitWizardController(Path("config.yml"))
+        self.assertIn("[x] PowerShell", rendered)
+
+    def test_selected_language_suggestion_can_be_removed(self) -> None:
+        controller = _InitWizardController(Path("missing-test-config.yml"))
         controller.step = 2
         controller.field = 2
-        controller.start_language_input()
+        controller.state.lang = ["PowerShell"]
+        controller.update_language_query("powershell")
 
-        self.assertFalse(controller.add_language_from_query("MadeUpLang"))
+        controller.toggle_selected_language_suggestion()
 
         self.assertEqual(controller.state.lang, [])
-        self.assertTrue(controller.language_input_active)
-        self.assertIn("Select a supported language", controller.message)
+        self.assertEqual(controller.language_query, "")
+
+    def test_enter_from_language_field_advances_without_adding_exact_match(self) -> None:
+        controller = _InitWizardController(Path("missing-test-config.yml"))
+        controller.step = 2
+        controller.field = 2
+        controller.update_language_query("PowerShell")
+
+        controller.apply_current_input(controller.current_value())
+
+        self.assertEqual(controller.state.lang, [])
+        self.assertEqual(controller.field, 3)
+
+    def test_supported_language_input_adds_matching_language(self) -> None:
+        controller = _InitWizardController(Path("missing-test-config.yml"))
+        controller.step = 2
+        controller.field = 2
+
+        controller.update_language_query("PowerShell")
+        self.assertTrue(controller.toggle_selected_language_suggestion())
+
+        self.assertEqual(controller.state.lang, ["PowerShell"])
+
+    def test_unsupported_language_input_is_rejected(self) -> None:
+        controller = _InitWizardController(Path("missing-test-config.yml"))
+        controller.step = 2
+        controller.field = 2
+
+        controller.update_language_query("MadeUpLang")
+        self.assertFalse(controller.toggle_selected_language_suggestion())
+
+        self.assertEqual(controller.state.lang, [])
+        self.assertEqual(controller.language_query, "MadeUpLang")
+        self.assertIn("Type to search supported languages", controller.message)
+
+    def test_existing_config_populates_init_wizard_defaults(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config_path = Path(tmp_dir) / "config.yml"
+            config_path.write_text(
+                "\n".join(
+                    [
+                        "settings:",
+                        "  output: reports",
+                        "  interval: weekly",
+                        "  since: '2026-01-01'",
+                        "  until: '2026-05-01'",
+                        "  lang:",
+                        "    - Python",
+                        "  no_plot_show: false",
+                        "interactive:",
+                        "  providers:",
+                        "    github:",
+                        "      enabled: false",
+                        "    gitlab:",
+                        "      enabled: true",
+                        "      base_url: https://gitlab.example.com",
+                        "  quick_defaults:",
+                        "    cache_policy: update",
+                        "    exclude_dirs:",
+                        "      - node_modules",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            controller = _InitWizardController(config_path)
+
+        self.assertFalse(controller.state.github_enabled)
+        self.assertTrue(controller.state.gitlab_enabled)
+        self.assertEqual(controller.state.gitlab_base_url, "https://gitlab.example.com")
+        self.assertEqual(controller.state.output, Path("reports"))
+        self.assertEqual(controller.state.interval, "weekly")
+        self.assertEqual(controller.state.since, "2026-01-01")
+        self.assertEqual(controller.state.until, "2026-05-01")
+        self.assertEqual(controller.state.lang, ["Python"])
+        self.assertFalse(controller.state.no_plot_show)
+        self.assertEqual(controller.state.cache_policy, "update")
+        self.assertEqual(controller.state.exclude_dirs, ["node_modules"])
+
+    def test_existing_config_uses_quick_defaults_when_settings_are_blank(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config_path = Path(tmp_dir) / "config.yml"
+            config_path.write_text(
+                "\n".join(
+                    [
+                        "settings:",
+                        "  output: reports",
+                        "interactive:",
+                        "  quick_defaults:",
+                        "    output: quick-out",
+                        "    interval: daily",
+                        "    since: '2026-02-01'",
+                        "    until: '2026-03-01'",
+                        "    lang:",
+                        "      - Rust",
+                        "    no_plot_show: true",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            controller = _InitWizardController(config_path)
+
+        self.assertEqual(controller.state.output, Path("reports"))
+        self.assertEqual(controller.state.interval, "daily")
+        self.assertEqual(controller.state.since, "2026-02-01")
+        self.assertEqual(controller.state.until, "2026-03-01")
+        self.assertEqual(controller.state.lang, ["Rust"])
+        self.assertTrue(controller.state.no_plot_show)
 
     def test_back_moves_to_previous_field_inside_current_step(self) -> None:
-        controller = _InitWizardController(Path("config.yml"))
+        controller = _InitWizardController(Path("missing-test-config.yml"))
         controller.step = 2
         controller.field = 3
 
@@ -290,7 +419,7 @@ class InitWizardStateTests(unittest.TestCase):
         self.assertEqual(controller.field, 2)
 
     def test_back_from_self_hosted_url_returns_to_provider_checklist(self) -> None:
-        controller = _InitWizardController(Path("config.yml"))
+        controller = _InitWizardController(Path("missing-test-config.yml"))
         controller.step = 1
         controller.state.gitlab_enabled = True
         controller.state.gitlab_base_url = ""
@@ -303,26 +432,37 @@ class InitWizardStateTests(unittest.TestCase):
         self.assertIn("[x] Self-hosted GitLab", controller.render())
 
     def test_cancel_finishes_without_keyboard_interrupt_traceback(self) -> None:
-        controller = _InitWizardController(Path("config.yml"))
+        controller = _InitWizardController(Path("missing-test-config.yml"))
 
         controller.cancel()
 
         self.assertTrue(controller.cancelled)
         self.assertFalse(controller.confirmed)
 
-    def test_bool_fields_use_blank_input_with_current_default(self) -> None:
-        controller = _InitWizardController(Path("config.yml"))
+    def test_bool_field_renders_as_yes_no_select_options(self) -> None:
+        controller = _InitWizardController(Path("missing-test-config.yml"))
         controller.step = 3
         controller.state.no_plot_show = False
 
         self.assertEqual(controller.current_value(), "")
-        self.assertIn("Open plots automatically [Y/n]", controller.render())
+        self.assertIn("[x] yes", controller.render())
+        self.assertIn("[ ] no", controller.render())
+        self.assertIn("Y/N shortcut", controller.render())
 
-        controller.apply_current_input("")
+    def test_yes_no_shortcuts_update_bool_field(self) -> None:
+        controller = _InitWizardController(Path("missing-test-config.yml"))
+        controller.step = 3
+        controller.state.no_plot_show = False
+
+        controller.apply_yes_no_shortcut("n")
+
+        self.assertTrue(controller.state.no_plot_show)
+
+        controller.apply_yes_no_shortcut("y")
 
         self.assertFalse(controller.state.no_plot_show)
 
-    def test_overwrite_uses_blank_input_with_current_default(self) -> None:
+    def test_overwrite_renders_as_yes_no_select_options(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             config_path = Path(tmp_dir) / "config.yml"
             config_path.write_text("existing: true\n", encoding="utf-8")
@@ -332,11 +472,12 @@ class InitWizardStateTests(unittest.TestCase):
 
             self.assertEqual(controller.current_value(), "")
             self.assertIn("Overwrite", controller.render())
-            self.assertIn("[Y/n]", controller.render())
+            self.assertIn("[x] yes", controller.render())
+            self.assertIn("[ ] no", controller.render())
 
-            controller.apply_current_input("")
+            controller.apply_yes_no_shortcut("n")
 
-        self.assertTrue(controller.state.overwrite_existing)
+        self.assertFalse(controller.state.overwrite_existing)
 
     def test_colored_summary_styles_labels_and_values(self) -> None:
         state = InitWizardState(config_path=Path("config.yml"))
