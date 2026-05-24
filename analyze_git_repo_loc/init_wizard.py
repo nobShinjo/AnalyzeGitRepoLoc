@@ -27,6 +27,24 @@ from analyze_git_repo_loc.init_config import (
     build_init_config_data,
     render_init_config_yaml,
 )
+from analyze_git_repo_loc.language_extensions import LanguageExtensions
+
+
+INTERVAL_OPTIONS = ["daily", "weekly", "monthly"]
+COMMON_LANGUAGE_CHOICES = [
+    "C#",
+    "Python",
+    "C++",
+    "C",
+    "Java",
+    "JavaScript",
+    "TypeScript",
+    "Go",
+    "Rust",
+    "Kotlin",
+    "PHP",
+    "Ruby",
+]
 
 
 @dataclass
@@ -45,6 +63,7 @@ class InitWizardState:
     no_plot_show: bool = True
     cache_policy: str = "use"
     exclude_dirs: list[str] = field(default_factory=lambda: ["node_modules", ".venv"])
+    lang: list[str] = field(default_factory=list)
 
     def toggle_provider(self, key: str) -> None:
         """Toggle a provider checkbox while keeping GitLab targets exclusive."""
@@ -81,6 +100,7 @@ class InitWizardState:
             no_plot_show=self.no_plot_show,
             cache_policy=self.cache_policy,
             exclude_dirs=self.exclude_dirs,
+            lang=self.lang,
         )
 
 
@@ -106,11 +126,13 @@ def render_init_config_summary(state: InitWizardState, *, color: bool = False) -
         providers.append(label)
     period = f"{state.since or '(blank)'} -> {state.until or '(blank)'}"
     excludes = ", ".join(state.exclude_dirs) if state.exclude_dirs else "(none)"
+    languages = ", ".join(state.lang) if state.lang else "(all)"
     rows = [
         ("Config", str(state.config_path)),
         ("Providers", ", ".join(providers) if providers else "(none)"),
         ("Output", str(state.output)),
         ("Interval", state.interval),
+        ("Languages", languages),
         ("Period", period),
         ("Auto display", "off" if state.no_plot_show else "on"),
         ("Cache", state.cache_policy),
@@ -146,6 +168,10 @@ class _InitWizardController:
         self.step = 0
         self.field = 0
         self.provider_cursor = 0
+        self.interval_cursor = INTERVAL_OPTIONS.index(self.state.interval)
+        self.language_cursor = 0
+        self.language_input_active = False
+        self.language_query = ""
         self.self_hosted_url_prompt = False
         self.message = "Create an interactive-ready YAML config for AnalyzeGitRepoLoc."
         self.confirmed = False
@@ -163,7 +189,9 @@ class _InitWizardController:
         if key == "output":
             return str(self.state.output)
         if key == "interval":
-            return self.state.interval
+            return ""
+        if key == "languages":
+            return self.language_query if self.language_input_active else ""
         if key == "since":
             return self.state.since or ""
         if key == "until":
@@ -206,6 +234,13 @@ class _InitWizardController:
         """Move the cursor up inside the current selectable step."""
         if self.step == 1:
             self.provider_cursor = max(0, self.provider_cursor - 1)
+            return
+        key = self._current_field_key()
+        if key == "interval":
+            self.interval_cursor = max(0, self.interval_cursor - 1)
+            return
+        if key == "languages" and not self.language_input_active:
+            self.language_cursor = max(0, self.language_cursor - 1)
 
     def move_down(self) -> None:
         """Move the cursor down inside the current selectable step."""
@@ -213,6 +248,19 @@ class _InitWizardController:
             self.provider_cursor = min(
                 len(self._provider_keys) - 1,
                 self.provider_cursor + 1,
+            )
+            return
+        key = self._current_field_key()
+        if key == "interval":
+            self.interval_cursor = min(
+                len(INTERVAL_OPTIONS) - 1,
+                self.interval_cursor + 1,
+            )
+            return
+        if key == "languages" and not self.language_input_active:
+            self.language_cursor = min(
+                len(COMMON_LANGUAGE_CHOICES) - 1,
+                self.language_cursor + 1,
             )
 
     def toggle_current_provider(self) -> None:
@@ -223,11 +271,78 @@ class _InitWizardController:
         self.state.toggle_provider(self._provider_keys[self.provider_cursor])
         self.message = "Provider selection updated."
 
+    def select_current_interval(self) -> None:
+        """Select the highlighted interval option."""
+        self.state.interval = INTERVAL_OPTIONS[self.interval_cursor]
+        self.message = f"Interval set to {self.state.interval}."
+
+    def toggle_current_language(self) -> None:
+        """Toggle the highlighted common language checkbox."""
+        if self._current_field_key() != "languages":
+            return
+        language = COMMON_LANGUAGE_CHOICES[self.language_cursor]
+        if language in self.state.lang:
+            self.state.lang = [item for item in self.state.lang if item != language]
+            self.message = f"Removed language: {language}."
+            return
+        self.state.lang.append(language)
+        self.message = f"Added language: {language}."
+
+    def start_language_input(self) -> None:
+        """Start text input mode for adding a supported language."""
+        if self._current_field_key() != "languages":
+            return
+        self.language_input_active = True
+        self.language_query = ""
+        self.message = "Type a supported language name."
+
+    def update_language_query(self, value: str) -> None:
+        """Update the language suggestion query."""
+        self.language_query = value.strip()
+
+    def language_suggestions(self) -> list[str]:
+        """Return supported languages matching the active query."""
+        query = self.language_query.lower()
+        if not query:
+            return []
+        common_matches = [
+            language
+            for language in COMMON_LANGUAGE_CHOICES
+            if query in language.lower()
+        ]
+        all_matches = [
+            language
+            for language in sorted(LanguageExtensions.language_to_extensions)
+            if query in language.lower()
+            and language not in common_matches
+        ]
+        return [*common_matches, *all_matches][:8]
+
+    def add_language_from_query(self, value: str) -> bool:
+        """Add a supported language by exact query match."""
+        query = value.strip()
+        self.language_query = query
+        matched_language = self._resolve_supported_language(query)
+        if matched_language is None:
+            self.message = "Select a supported language from the suggestions."
+            return False
+        if matched_language not in self.state.lang:
+            self.state.lang.append(matched_language)
+        self.language_input_active = False
+        self.language_query = ""
+        self.message = f"Added language: {matched_language}."
+        return True
+
     def back(self) -> None:
         """Move back to the previous field or step."""
         if self.step == 1 and self.self_hosted_url_prompt:
             self.self_hosted_url_prompt = False
             self.message = "Review or adjust provider selection."
+            return
+        if self._current_field_key() == "languages" and self.language_input_active:
+            self.language_input_active = False
+            self.language_query = ""
+            self.message = "Review language defaults."
             return
         if self.field > 0:
             self.field -= 1
@@ -249,6 +364,17 @@ class _InitWizardController:
             if self.step == 4:
                 self.confirmed = True
                 return True
+            key = self._current_field_key()
+            if key == "interval":
+                if value:
+                    self._apply_field(key, value)
+                else:
+                    self.select_current_interval()
+                return self._advance_field()
+            if key == "languages":
+                if self.language_input_active:
+                    return self.add_language_from_query(value)
+                return self._advance_field()
             self._apply_field(self._current_field_key(), value)
         except ValueError as ex:
             self.message = str(ex)
@@ -316,6 +442,7 @@ class _InitWizardController:
             if value not in {"daily", "weekly", "monthly"}:
                 raise ValueError("Invalid interval. Use daily, weekly, or monthly.")
             self.state.interval = value
+            self.interval_cursor = INTERVAL_OPTIONS.index(value)
             return
         if key in {"since", "until"}:
             parsed = self._parse_optional_date(value)
@@ -356,7 +483,8 @@ class _InitWizardController:
         if self.step == 2:
             return [
                 ("output", "Output directory"),
-                ("interval", "Analysis interval (daily/weekly/monthly)"),
+                ("interval", "Analysis interval"),
+                ("languages", "Default languages"),
                 ("since", "Start date YYYY-MM-DD"),
                 ("until", "End date YYYY-MM-DD"),
             ]
@@ -390,6 +518,11 @@ class _InitWizardController:
     def _render_step(self) -> str:
         if self.step == 1 and not self._needs_self_hosted_url():
             return self._render_provider_step()
+        key = self._current_field_key()
+        if key == "interval":
+            return self._render_interval_step()
+        if key == "languages":
+            return self._render_language_step()
         if self.step == 4:
             return "\n".join(
                 [
@@ -435,6 +568,36 @@ class _InitWizardController:
         rows.extend(["", "Use Up/Down, Space to toggle, Enter to continue."])
         return "\n".join(rows)
 
+    def _render_interval_step(self) -> str:
+        rows = [self._color("Analysis interval", Fore.YELLOW + Style.BRIGHT)]
+        for index, option in enumerate(INTERVAL_OPTIONS):
+            cursor = ">" if index == self.interval_cursor else " "
+            checked = "x" if option == self.state.interval else " "
+            rows.append(f"{cursor} [{checked}] {option}")
+        rows.extend(["", "Use Up/Down, Space to select, Enter to continue."])
+        return "\n".join(rows)
+
+    def _render_language_step(self) -> str:
+        rows = [self._color("Default languages", Fore.YELLOW + Style.BRIGHT)]
+        for index, language in enumerate(COMMON_LANGUAGE_CHOICES):
+            cursor = ">" if index == self.language_cursor else " "
+            checked = "x" if language in self.state.lang else " "
+            rows.append(f"{cursor} [{checked}] {language}")
+        selected = ", ".join(self.state.lang) if self.state.lang else "(all)"
+        rows.extend(["", f"Selected: {selected}"])
+        if self.language_input_active:
+            rows.append("Suggestions:")
+            suggestions = self.language_suggestions()
+            if suggestions:
+                rows.extend([f"- {language}" for language in suggestions])
+            else:
+                rows.append("- Type to search supported languages.")
+            rows.append("Enter adds an exact supported language match.")
+        else:
+            rows.append("Press A to add another supported language.")
+            rows.append("Use Up/Down, Space to toggle, Enter to continue.")
+        return "\n".join(rows)
+
     def _render_footer(self) -> str:
         if self.step == 4:
             return self._color(
@@ -446,10 +609,35 @@ class _InitWizardController:
                 "Space toggle   Enter continue   Ctrl-B Back   Esc/Ctrl-C Cancel",
                 Fore.YELLOW,
             )
+        key = self._current_field_key()
+        if key == "interval":
+            return self._color(
+                "Up/Down move   Space select   Enter continue   Ctrl-B Back",
+                Fore.YELLOW,
+            )
+        if key == "languages" and self.language_input_active:
+            return self._color(
+                "Enter add language   Ctrl-B Back   Esc/Ctrl-C Cancel",
+                Fore.YELLOW,
+            )
+        if key == "languages":
+            return self._color(
+                "Space toggle   A add language   Enter continue   Ctrl-B Back",
+                Fore.YELLOW,
+            )
         return self._color(
             "Enter accept value   Ctrl-B Back   Esc/Ctrl-C Cancel",
             Fore.YELLOW,
         )
+
+    @staticmethod
+    def _resolve_supported_language(query: str) -> str | None:
+        if not query:
+            return None
+        for language in LanguageExtensions.language_to_extensions:
+            if language.lower() == query.lower():
+                return language
+        return None
 
     @staticmethod
     def _parse_optional_date(value: str) -> str | None:
@@ -510,7 +698,13 @@ def run_init_config_wizard(default_path: Path = Path("config.yml")) -> Path:
     controller = _InitWizardController(default_path)
     input_field = TextArea(height=1, prompt="Value: ", multiline=False)
     input_field.text = controller.current_value()
-    control = FormattedTextControl(lambda: ANSI(controller.render()))
+
+    def render_control() -> object:
+        if controller.language_input_active:
+            controller.update_language_query(input_field.text)
+        return ANSI(controller.render())
+
+    control = FormattedTextControl(render_control)
     kb = KeyBindings()
     app: Application | None = None
 
@@ -524,18 +718,46 @@ def run_init_config_wizard(default_path: Path = Path("config.yml")) -> Path:
     provider_filter = Condition(
         lambda: controller.step == 1 and not controller._needs_self_hosted_url()
     )
+    interval_filter = Condition(lambda: controller._current_field_key() == "interval")
+    language_filter = Condition(
+        lambda: controller._current_field_key() == "languages"
+        and not controller.language_input_active
+    )
+    language_input_filter = Condition(
+        lambda: controller._current_field_key() == "languages"
+        and controller.language_input_active
+    )
+    selection_filter = provider_filter | interval_filter | language_filter
 
-    @kb.add("up", filter=provider_filter)
+    @kb.add("up", filter=selection_filter)
     def _(_: object) -> None:
         controller.move_up()
+        refresh_input()
 
-    @kb.add("down", filter=provider_filter)
+    @kb.add("down", filter=selection_filter)
     def _(_: object) -> None:
         controller.move_down()
+        refresh_input()
 
     @kb.add(" ", filter=provider_filter)
     def _(_: object) -> None:
         controller.toggle_current_provider()
+        refresh_input()
+
+    @kb.add(" ", filter=interval_filter)
+    def _(_: object) -> None:
+        controller.select_current_interval()
+        refresh_input()
+
+    @kb.add(" ", filter=language_filter)
+    def _(_: object) -> None:
+        controller.toggle_current_language()
+        refresh_input()
+
+    @kb.add("a", filter=language_filter)
+    def _(_: object) -> None:
+        controller.start_language_input()
+        refresh_input()
 
     @kb.add("c-b")
     def _(_: object) -> None:
@@ -544,6 +766,8 @@ def run_init_config_wizard(default_path: Path = Path("config.yml")) -> Path:
 
     @kb.add("enter")
     def _(_: object) -> None:
+        if language_input_filter():
+            controller.update_language_query(input_field.text)
         if controller.apply_current_input(input_field.text):
             if controller.confirmed and app is not None:
                 app.exit()

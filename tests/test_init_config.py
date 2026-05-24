@@ -61,6 +61,8 @@ class InitConfigGenerationTests(unittest.TestCase):
             config["interactive"]["quick_defaults"]["exclude_dirs"],
             ["node_modules", ".venv"],
         )
+        self.assertNotIn("lang", config["settings"])
+        self.assertNotIn("lang", config["interactive"]["quick_defaults"])
         rendered = repr(config)
         self.assertNotIn("TOKEN", rendered)
         self.assertNotIn("client_id", rendered)
@@ -104,6 +106,19 @@ class InitConfigGenerationTests(unittest.TestCase):
             "https://gitlab.example.com",
         )
 
+    def test_language_defaults_are_saved_for_batch_and_interactive_runs(self) -> None:
+        config = build_init_config_data(
+            InitConfigOptions(
+                lang=["C#", "Python"],
+            )
+        )
+
+        self.assertEqual(config["settings"]["lang"], ["C#", "Python"])
+        self.assertEqual(
+            config["interactive"]["quick_defaults"]["lang"],
+            ["C#", "Python"],
+        )
+
 
 class InitWizardStateTests(unittest.TestCase):
     """Full-screen init wizard state tests."""
@@ -136,6 +151,7 @@ class InitWizardStateTests(unittest.TestCase):
             no_plot_show=False,
             cache_policy="update",
             exclude_dirs=["node_modules"],
+            lang=["C#", "Python"],
         )
 
         summary = render_init_config_summary(state)
@@ -148,16 +164,94 @@ class InitWizardStateTests(unittest.TestCase):
         self.assertIn("Auto display: on", summary)
         self.assertIn("Cache: update", summary)
         self.assertIn("Exclude dirs: node_modules", summary)
+        self.assertIn("Languages: C#, Python", summary)
 
-    def test_back_moves_to_previous_field_inside_current_step(self) -> None:
+    def test_interval_field_renders_as_select_options(self) -> None:
+        controller = _InitWizardController(Path("config.yml"))
+        controller.step = 2
+        controller.field = 1
+
+        rendered = controller.render()
+
+        self.assertIn("[x] monthly", rendered)
+        self.assertIn("[ ] weekly", rendered)
+        self.assertIn("Use Up/Down, Space to select", rendered)
+        self.assertNotIn("Edit the value below", rendered)
+
+    def test_interval_selection_updates_state(self) -> None:
+        controller = _InitWizardController(Path("config.yml"))
+        controller.step = 2
+        controller.field = 1
+
+        controller.move_up()
+        controller.select_current_interval()
+
+        self.assertEqual(controller.state.interval, "weekly")
+
+    def test_language_field_renders_common_language_checkboxes(self) -> None:
         controller = _InitWizardController(Path("config.yml"))
         controller.step = 2
         controller.field = 2
 
+        rendered = controller.render()
+
+        self.assertIn("[ ] C#", rendered)
+        self.assertIn("[ ] Python", rendered)
+        self.assertIn("Press A to add another supported language.", rendered)
+
+    def test_language_toggle_updates_state(self) -> None:
+        controller = _InitWizardController(Path("config.yml"))
+        controller.step = 2
+        controller.field = 2
+        controller.language_cursor = 1
+
+        controller.toggle_current_language()
+
+        self.assertEqual(controller.state.lang, ["Python"])
+
+    def test_language_suggestions_match_input_text(self) -> None:
+        controller = _InitWizardController(Path("config.yml"))
+        controller.step = 2
+        controller.field = 2
+        controller.start_language_input()
+
+        controller.update_language_query("script")
+
+        self.assertIn("JavaScript", controller.language_suggestions())
+        self.assertIn("TypeScript", controller.language_suggestions())
+
+    def test_supported_language_input_adds_matching_language(self) -> None:
+        controller = _InitWizardController(Path("config.yml"))
+        controller.step = 2
+        controller.field = 2
+        controller.start_language_input()
+
+        self.assertTrue(controller.add_language_from_query("PowerShell"))
+
+        self.assertEqual(controller.state.lang, ["PowerShell"])
+        self.assertFalse(controller.language_input_active)
+
+    def test_unsupported_language_input_is_rejected(self) -> None:
+        controller = _InitWizardController(Path("config.yml"))
+        controller.step = 2
+        controller.field = 2
+        controller.start_language_input()
+
+        self.assertFalse(controller.add_language_from_query("MadeUpLang"))
+
+        self.assertEqual(controller.state.lang, [])
+        self.assertTrue(controller.language_input_active)
+        self.assertIn("Select a supported language", controller.message)
+
+    def test_back_moves_to_previous_field_inside_current_step(self) -> None:
+        controller = _InitWizardController(Path("config.yml"))
+        controller.step = 2
+        controller.field = 3
+
         controller.back()
 
         self.assertEqual(controller.step, 2)
-        self.assertEqual(controller.field, 1)
+        self.assertEqual(controller.field, 2)
 
     def test_back_from_self_hosted_url_returns_to_provider_checklist(self) -> None:
         controller = _InitWizardController(Path("config.yml"))

@@ -48,6 +48,7 @@ class InitConfigOptions:
     no_plot_show: bool = True
     cache_policy: str = "use"
     exclude_dirs: list[str] = field(default_factory=lambda: ["node_modules", ".venv"])
+    lang: list[str] = field(default_factory=list)
 
 
 def build_init_config_data(options: InitConfigOptions) -> dict[str, Any]:
@@ -69,6 +70,17 @@ def build_init_config_data(options: InitConfigOptions) -> dict[str, Any]:
         settings["since"] = options.since
     if options.until:
         settings["until"] = options.until
+    if options.lang:
+        settings["lang"] = options.lang
+
+    quick_defaults: dict[str, Any] = {
+        "interval": options.interval,
+        "cache_policy": options.cache_policy,
+        "no_plot_show": options.no_plot_show,
+        "exclude_dirs": options.exclude_dirs,
+    }
+    if options.lang:
+        quick_defaults["lang"] = options.lang
 
     return {
         "settings": settings,
@@ -86,12 +98,7 @@ def build_init_config_data(options: InitConfigOptions) -> dict[str, Any]:
             "defaults": {
                 "clone_protocol": "https",
             },
-            "quick_defaults": {
-                "interval": options.interval,
-                "cache_policy": options.cache_policy,
-                "no_plot_show": options.no_plot_show,
-                "exclude_dirs": options.exclude_dirs,
-            },
+            "quick_defaults": quick_defaults,
         },
     }
 
@@ -190,6 +197,11 @@ def _prompt_exclude_dirs(prompt: PromptFunc) -> list[str]:
     return [item.strip() for item in raw_value.split(",") if item.strip()]
 
 
+def _prompt_languages(prompt: PromptFunc) -> list[str]:
+    raw_value = prompt("Default language filter [blank for all]: ").strip()
+    return [item.strip() for item in raw_value.split(",") if item.strip()]
+
+
 def _default_confirm_overwrite(path: Path) -> bool:
     answer = input(f"Overwrite {path}? [y/N]: ").strip().lower()
     return answer in {"y", "yes"}
@@ -234,6 +246,7 @@ def run_init_config(
     gitlab_enabled = _prompt_bool(prompt, "Enable GitLab provider", False)
     output = Path(_prompt_text(prompt, "Output directory", "out"))
     interval = _prompt_interval(prompt)
+    lang = _prompt_languages(prompt)
     since = _prompt_optional_date(prompt, "Start date YYYY-MM-DD")
     until = _prompt_optional_date(prompt, "End date YYYY-MM-DD")
     no_plot_show = not _prompt_bool(prompt, "Open plots automatically", False)
@@ -246,6 +259,7 @@ def run_init_config(
             gitlab_enabled=gitlab_enabled,
             output=output,
             interval=interval,
+            lang=lang,
             since=since,
             until=until,
             no_plot_show=no_plot_show,
