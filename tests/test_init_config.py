@@ -220,6 +220,42 @@ class InitWizardStateTests(unittest.TestCase):
         self.assertIn("JavaScript", controller.language_suggestions())
         self.assertIn("TypeScript", controller.language_suggestions())
 
+    def test_language_suggestion_cursor_moves_inside_input_mode(self) -> None:
+        controller = _InitWizardController(Path("config.yml"))
+        controller.step = 2
+        controller.field = 2
+        controller.start_language_input()
+        controller.update_language_query("script")
+
+        controller.move_down()
+
+        self.assertEqual(controller.language_suggestion_cursor, 1)
+
+    def test_selected_language_suggestion_can_be_added(self) -> None:
+        controller = _InitWizardController(Path("config.yml"))
+        controller.step = 2
+        controller.field = 2
+        controller.start_language_input()
+        controller.update_language_query("script")
+        controller.move_down()
+
+        self.assertTrue(controller.add_selected_language_suggestion())
+
+        self.assertEqual(controller.state.lang, ["TypeScript"])
+        self.assertFalse(controller.language_input_active)
+
+    def test_language_input_render_highlights_selected_suggestion(self) -> None:
+        controller = _InitWizardController(Path("config.yml"))
+        controller.step = 2
+        controller.field = 2
+        controller.start_language_input()
+        controller.update_language_query("script")
+        controller.move_down()
+
+        rendered = controller.render()
+
+        self.assertIn("> TypeScript", rendered)
+
     def test_supported_language_input_adds_matching_language(self) -> None:
         controller = _InitWizardController(Path("config.yml"))
         controller.step = 2

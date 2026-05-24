@@ -170,6 +170,7 @@ class _InitWizardController:
         self.provider_cursor = 0
         self.interval_cursor = INTERVAL_OPTIONS.index(self.state.interval)
         self.language_cursor = 0
+        self.language_suggestion_cursor = 0
         self.language_input_active = False
         self.language_query = ""
         self.self_hosted_url_prompt = False
@@ -239,6 +240,12 @@ class _InitWizardController:
         if key == "interval":
             self.interval_cursor = max(0, self.interval_cursor - 1)
             return
+        if key == "languages" and self.language_input_active:
+            self.language_suggestion_cursor = max(
+                0,
+                self.language_suggestion_cursor - 1,
+            )
+            return
         if key == "languages" and not self.language_input_active:
             self.language_cursor = max(0, self.language_cursor - 1)
 
@@ -256,6 +263,14 @@ class _InitWizardController:
                 len(INTERVAL_OPTIONS) - 1,
                 self.interval_cursor + 1,
             )
+            return
+        if key == "languages" and self.language_input_active:
+            suggestions = self.language_suggestions()
+            if suggestions:
+                self.language_suggestion_cursor = min(
+                    len(suggestions) - 1,
+                    self.language_suggestion_cursor + 1,
+                )
             return
         if key == "languages" and not self.language_input_active:
             self.language_cursor = min(
@@ -294,11 +309,13 @@ class _InitWizardController:
             return
         self.language_input_active = True
         self.language_query = ""
+        self.language_suggestion_cursor = 0
         self.message = "Type a supported language name."
 
     def update_language_query(self, value: str) -> None:
         """Update the language suggestion query."""
         self.language_query = value.strip()
+        self._clamp_language_suggestion_cursor()
 
     def language_suggestions(self) -> list[str]:
         """Return supported languages matching the active query."""
@@ -318,6 +335,17 @@ class _InitWizardController:
         ]
         return [*common_matches, *all_matches][:8]
 
+    def add_selected_language_suggestion(self) -> bool:
+        """Add the highlighted suggestion from language input mode."""
+        suggestions = self.language_suggestions()
+        if not suggestions:
+            self.message = "Type to search supported languages."
+            return False
+        self._clamp_language_suggestion_cursor()
+        return self.add_language_from_query(
+            suggestions[self.language_suggestion_cursor]
+        )
+
     def add_language_from_query(self, value: str) -> bool:
         """Add a supported language by exact query match."""
         query = value.strip()
@@ -330,6 +358,7 @@ class _InitWizardController:
             self.state.lang.append(matched_language)
         self.language_input_active = False
         self.language_query = ""
+        self.language_suggestion_cursor = 0
         self.message = f"Added language: {matched_language}."
         return True
 
@@ -342,6 +371,7 @@ class _InitWizardController:
         if self._current_field_key() == "languages" and self.language_input_active:
             self.language_input_active = False
             self.language_query = ""
+            self.language_suggestion_cursor = 0
             self.message = "Review language defaults."
             return
         if self.field > 0:
@@ -373,7 +403,9 @@ class _InitWizardController:
                 return self._advance_field()
             if key == "languages":
                 if self.language_input_active:
-                    return self.add_language_from_query(value)
+                    if value:
+                        return self.add_language_from_query(value)
+                    return self.add_selected_language_suggestion()
                 return self._advance_field()
             self._apply_field(self._current_field_key(), value)
         except ValueError as ex:
@@ -589,10 +621,12 @@ class _InitWizardController:
             rows.append("Suggestions:")
             suggestions = self.language_suggestions()
             if suggestions:
-                rows.extend([f"- {language}" for language in suggestions])
+                for index, language in enumerate(suggestions):
+                    cursor = ">" if index == self.language_suggestion_cursor else " "
+                    rows.append(f"{cursor} {language}")
             else:
                 rows.append("- Type to search supported languages.")
-            rows.append("Enter adds an exact supported language match.")
+            rows.append("Use Up/Down, Space to add a suggested language.")
         else:
             rows.append("Press A to add another supported language.")
             rows.append("Use Up/Down, Space to toggle, Enter to continue.")
@@ -617,7 +651,7 @@ class _InitWizardController:
             )
         if key == "languages" and self.language_input_active:
             return self._color(
-                "Enter add language   Ctrl-B Back   Esc/Ctrl-C Cancel",
+                "Up/Down move   Space add suggestion   Enter add exact match",
                 Fore.YELLOW,
             )
         if key == "languages":
@@ -638,6 +672,16 @@ class _InitWizardController:
             if language.lower() == query.lower():
                 return language
         return None
+
+    def _clamp_language_suggestion_cursor(self) -> None:
+        suggestions = self.language_suggestions()
+        if not suggestions:
+            self.language_suggestion_cursor = 0
+            return
+        self.language_suggestion_cursor = min(
+            self.language_suggestion_cursor,
+            len(suggestions) - 1,
+        )
 
     @staticmethod
     def _parse_optional_date(value: str) -> str | None:
@@ -727,7 +771,9 @@ def run_init_config_wizard(default_path: Path = Path("config.yml")) -> Path:
         lambda: controller._current_field_key() == "languages"
         and controller.language_input_active
     )
-    selection_filter = provider_filter | interval_filter | language_filter
+    selection_filter = (
+        provider_filter | interval_filter | language_filter | language_input_filter
+    )
 
     @kb.add("up", filter=selection_filter)
     def _(_: object) -> None:
@@ -752,6 +798,11 @@ def run_init_config_wizard(default_path: Path = Path("config.yml")) -> Path:
     @kb.add(" ", filter=language_filter)
     def _(_: object) -> None:
         controller.toggle_current_language()
+        refresh_input()
+
+    @kb.add(" ", filter=language_input_filter)
+    def _(_: object) -> None:
+        controller.add_selected_language_suggestion()
         refresh_input()
 
     @kb.add("a", filter=language_filter)
