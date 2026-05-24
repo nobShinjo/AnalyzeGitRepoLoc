@@ -197,7 +197,7 @@ class ChartBuilder:
             fig_lang_traces.append(fig_lang["data"][trace])
 
         for traces in fig_lang_traces:
-            self._fig.append_trace(traces, row=1, col=1)
+            self._fig.add_trace(traces, row=1, col=1)
 
         return self
 

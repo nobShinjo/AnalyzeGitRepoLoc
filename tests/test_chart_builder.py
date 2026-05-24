@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import warnings
+
 import pandas as pd
 
 from analyze_git_repo_loc.chart_builder import ChartBuilder, ChartStrategy
@@ -63,3 +65,17 @@ def test_daily_trend_chart_uses_sparse_ticks_for_medium_ranges() -> None:
     assert len(fig.layout.xaxis.tickvals) <= 10
     assert fig.layout.xaxis.tickvals[0] == dates[0]
     assert fig.layout.xaxis.tickvals[-1] == dates[-1]
+
+
+def test_trend_chart_build_does_not_emit_plotly_deprecation_warning() -> None:
+    """Chart generation should avoid deprecated Plotly append_trace calls."""
+    dates = pd.date_range("2026-01-01", periods=3, freq="D")
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", DeprecationWarning)
+        ChartBuilder().set_strategy(ChartStrategy.TREND).build(
+            trend_data=_trend_data("Date", dates),
+            summary_data=_summary_data("Date", dates),
+            interval="Date",
+            title="Daily trend",
+        )
