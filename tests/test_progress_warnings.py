@@ -12,6 +12,7 @@ import pandas as pd
 
 from analyze_git_repo_loc import utils
 from analyze_git_repo_loc.git_repo_loc_analyzer import GitRepoLOCAnalyzer
+from analyze_git_repo_loc.i18n import tr
 
 
 class RepositoryWarningTests(unittest.TestCase):
@@ -81,7 +82,7 @@ class RepositoryWarningTests(unittest.TestCase):
 
         self.assertEqual(
             stderr.getvalue(),
-            "Warnings:\n"
+            f"{tr('warnings.title')}\n"
             "- SoFiRA: excluded path does not exist: node_modules\n"
             "- AgvController: excluded path does not exist: .venv\n",
         )

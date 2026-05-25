@@ -40,6 +40,7 @@ from analyze_git_repo_loc.analysis_helpers import (
 from analyze_git_repo_loc.chart_builder import ChartBuilder, ChartStrategy
 from analyze_git_repo_loc.colored_console_printer import ColoredConsolePrinter
 from analyze_git_repo_loc.html_report import ProgressEvent, generate_html_report
+from analyze_git_repo_loc.i18n import tr
 from analyze_git_repo_loc.init_wizard import run_init_config_wizard
 from analyze_git_repo_loc.markdown_summary import generate_markdown_summary
 from analyze_git_repo_loc.remote_catalog import (
@@ -353,7 +354,7 @@ def _format_output_summary(
     """
     resolved_output_root = output_root or output_dir.parent
     return [
-        "Finished",
+        tr("output.finished"),
         f"Report: {output_dir / 'report.html'}",
         f"Summary: {output_dir / 'summary.md'}",
         f"Data: {output_dir / '*.csv'}",
@@ -389,7 +390,7 @@ def main() -> None:
     # Parsing command line arguments
     parser = argparse.ArgumentParser(
         prog="analyze_git_repo_loc",
-        description="Analyze Git repositories and visualize code LOC.",
+        description=tr("cli.description"),
     )
     args = parse_arguments(parser)
     if args.command == "init":

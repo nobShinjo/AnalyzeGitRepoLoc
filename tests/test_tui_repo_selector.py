@@ -18,6 +18,7 @@ from analyze_git_repo_loc import tui_wizard
 from analyze_git_repo_loc import utils
 from analyze_git_repo_loc.__main__ import _apply_interactive_repository_selection
 from analyze_git_repo_loc.__main__ import _format_output_summary
+from analyze_git_repo_loc.i18n import tr
 from analyze_git_repo_loc.remote_catalog import (
     RemoteCatalogError,
     RemoteRepositoryRef,
@@ -1216,9 +1217,9 @@ class TuiWizardStateTests(unittest.TestCase):
         review = render_final_review(state, detailed=True)
 
         self.assertIn("1 repo | monthly", review)
-        self.assertIn("Interval: monthly", review)
+        self.assertIn(tr("tui.interval", value="monthly"), review)
         self.assertIn("cache=cached", review)
-        self.assertIn("Auto display: off", review)
+        self.assertIn(tr("tui.auto_display", value=tr("tui.off")), review)
 
     def test_compact_final_review_hides_repository_detail(self) -> None:
         ref = RemoteRepositoryRef(
@@ -1249,9 +1250,16 @@ class TuiWizardStateTests(unittest.TestCase):
         review = render_final_review(state)
 
         self.assertIn("GitHub via gh | 1 repo | monthly", review)
-        self.assertIn("Suggestions: Markdown, Python, YAML", review)
-        self.assertIn("[Enter] Run", review)
-        self.assertNotIn("Repositories:", review)
+        self.assertIn(
+            tr(
+                "tui.suggestions",
+                value="Markdown, Python, YAML, JSON, Bourne Shell (+1 more)",
+                source="existing cache",
+            ),
+            review,
+        )
+        self.assertIn(tr("tui.final_actions").split("   ")[0], review)
+        self.assertNotIn(tr("tui.repositories"), review)
         self.assertNotIn("cache=cached", review)
 
     def test_normalize_final_action_supports_short_keys(self) -> None:
@@ -1281,7 +1289,7 @@ class CliOutputSummaryTests(unittest.TestCase):
     def test_format_output_summary_lists_artifacts(self) -> None:
         lines = _format_output_summary(Path("out/20260520123456"))
 
-        self.assertIn("Finished", lines)
+        self.assertIn(tr("output.finished"), lines)
         self.assertIn("Report: out\\20260520123456\\report.html", lines)
         self.assertIn("Summary: out\\20260520123456\\summary.md", lines)
         self.assertIn("Data: out\\20260520123456\\*.csv", lines)

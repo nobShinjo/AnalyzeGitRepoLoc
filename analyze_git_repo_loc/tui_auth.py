@@ -33,6 +33,7 @@ from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlparse
 
+from analyze_git_repo_loc.i18n import tr
 from analyze_git_repo_loc.remote_auth import build_host_token_env_var
 from analyze_git_repo_loc.remote_oauth import (
     DEFAULT_GITHUB_SCOPES,
@@ -297,7 +298,7 @@ def _prompt_choice(provider: str, statuses: list[AuthMethodStatus]) -> AuthMetho
         ) from ex
 
     print()
-    print(f"{_provider_label(provider)} authentication")
+    print(tr("auth.provider_title", provider=_provider_label(provider)))
     for index, status in enumerate(statuses, start=1):
         mark = "available" if status.available else "unavailable"
         print(f"{index}. {status.label} [{mark}] - {status.detail}")
@@ -309,15 +310,15 @@ def _prompt_choice(provider: str, statuses: list[AuthMethodStatus]) -> AuthMetho
         try:
             selected = default_index if not raw else int(raw)
         except ValueError:
-            print("Enter a number from the list.")
+            print(tr("auth.enter_number"))
             continue
         if 1 <= selected <= len(statuses):
             status = statuses[selected - 1]
             if status.available:
                 return status
-            print(f"{status.label} is not available.")
+            print(tr("auth.not_available", label=status.label))
         else:
-            print("Enter a number from the list.")
+            print(tr("auth.enter_number"))
 
 
 def _prompt_one_time_token(provider: str) -> str:
@@ -339,7 +340,7 @@ def _prompt_gitlab_device_client_id() -> str:
             "prompt_toolkit is required for interactive runs. "
             "Install dependencies with `uv sync --active`."
         ) from ex
-    return prompt("GitLab OAuth Application ID for this run: ").strip()
+    return prompt(tr("auth.gitlab_client_id_prompt")).strip()
 
 
 def _choice_from_status(provider: str, status: AuthMethodStatus) -> AuthChoice:

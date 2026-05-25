@@ -27,6 +27,7 @@ from analyze_git_repo_loc.init_config import (
     build_init_config_data,
     render_init_config_yaml,
 )
+from analyze_git_repo_loc.i18n import tr
 from analyze_git_repo_loc.language_extensions import LanguageExtensions
 from analyze_git_repo_loc.yaml_config import load_yaml_data
 
@@ -247,19 +248,19 @@ def render_init_config_summary(state: InitWizardState, *, color: bool = False) -
             else "Self-hosted GitLab"
         )
         providers.append(label)
-    period = f"{state.since or '(blank)'} -> {state.until or '(blank)'}"
-    excludes = ", ".join(state.exclude_dirs) if state.exclude_dirs else "(none)"
-    languages = ", ".join(state.lang) if state.lang else "(all)"
+    period = f"{state.since or tr('init.value.blank')} -> {state.until or tr('init.value.blank')}"
+    excludes = ", ".join(state.exclude_dirs) if state.exclude_dirs else tr("init.value.none")
+    languages = ", ".join(state.lang) if state.lang else tr("init.value.all")
     rows = [
-        ("Config", str(state.config_path)),
-        ("Providers", ", ".join(providers) if providers else "(none)"),
-        ("Output", str(state.output)),
-        ("Interval", state.interval),
-        ("Languages", languages),
-        ("Period", period),
-        ("Auto display", "off" if state.no_plot_show else "on"),
-        ("Cache", state.cache_policy),
-        ("Exclude dirs", excludes),
+        (tr("init.label.config"), str(state.config_path)),
+        (tr("init.label.providers"), ", ".join(providers) if providers else tr("init.value.none")),
+        (tr("init.label.output"), str(state.output)),
+        (tr("init.label.interval"), state.interval),
+        (tr("init.label.languages"), languages),
+        (tr("init.label.period"), period),
+        (tr("init.label.auto_display"), tr("tui.off") if state.no_plot_show else tr("tui.on")),
+        (tr("init.label.cache"), state.cache_policy),
+        (tr("init.label.exclude_dirs"), excludes),
     ]
     if color:
         label_style = Fore.CYAN + Style.BRIGHT
@@ -278,11 +279,11 @@ def render_init_config_summary(state: InitWizardState, *, color: bool = False) -
 
 class _InitWizardController:
     _steps = [
-        "Config file",
-        "Providers",
-        "Analysis defaults",
-        "Runtime behavior",
-        "Review",
+        "init.step.config_file",
+        "init.step.providers",
+        "init.step.analysis_defaults",
+        "init.step.runtime_behavior",
+        "init.step.review",
     ]
     _provider_keys = ["github", "gitlab.com", "gitlab.self_hosted"]
 
@@ -298,7 +299,7 @@ class _InitWizardController:
         self.language_suggestion_cursor = 0
         self.language_query = ""
         self.self_hosted_url_prompt = False
-        self.message = "Create an interactive-ready YAML config for AnalyzeGitRepoLoc."
+        self.message = tr("init.initial_message")
         self.confirmed = False
         self.cancelled = False
         self._sync_cursors_to_state()
@@ -333,11 +334,11 @@ class _InitWizardController:
     def render(self) -> str:
         """Render the full-screen wizard content as ANSI text."""
         lines = [
-            self._color("AnalyzeGitRepoLoc init wizard", Fore.CYAN + Style.BRIGHT),
+            self._color(tr("init.title"), Fore.CYAN + Style.BRIGHT),
             self._color(self.message, Fore.WHITE),
             "",
         ]
-        for index, step_name in enumerate(self._steps):
+        for index, step_key in enumerate(self._steps):
             marker = ">" if index == self.step else " "
             checked = "x" if index < self.step else " "
             color = (
@@ -349,7 +350,8 @@ class _InitWizardController:
             )
             lines.append(
                 self._color(
-                    f"{marker} [{checked}] Step {index + 1}/5 {step_name}",
+                    f"{marker} [{checked}] "
+                    f"{tr('init.step', current=index + 1, name=tr(step_key))}",
                     color,
                 )
             )
@@ -427,7 +429,7 @@ class _InitWizardController:
             return
         self.self_hosted_url_prompt = False
         self.state.toggle_provider(self._provider_keys[self.provider_cursor])
-        self.message = "Provider selection updated."
+        self.message = tr("init.provider.updated")
 
     def select_current_interval(self) -> None:
         """Select the highlighted interval option."""
@@ -504,7 +506,7 @@ class _InitWizardController:
         """Toggle the highlighted language suggestion."""
         suggestions = self.language_suggestions()
         if not suggestions:
-            self.message = "Type to search supported languages."
+            self.message = tr("init.language.search")
             return False
         self._clamp_language_suggestion_cursor()
         matched_language = suggestions[self.language_suggestion_cursor]
@@ -679,39 +681,40 @@ class _InitWizardController:
 
     def _fields_for_current_step(self) -> list[tuple[str, str]]:
         if self.step == 0:
-            fields = [("config_path", "Config file path")]
+            fields = [("config_path", tr("init.field.config_path"))]
             if self.state.config_path.exists():
                 fields.append(
                     (
                         "overwrite",
-                        (
-                            f"Overwrite {self.state.config_path}? "
-                            f"[{self._bool_suffix(self.state.overwrite_existing)}]"
+                        tr(
+                            "init.field.overwrite",
+                            path=self.state.config_path,
+                            suffix=self._bool_suffix(self.state.overwrite_existing),
                         ),
                     )
                 )
             return fields
         if self.step == 1 and self._needs_self_hosted_url():
-            return [("gitlab_base_url", "Self-hosted GitLab base URL")]
+            return [("gitlab_base_url", tr("init.field.gitlab_base_url"))]
         if self.step == 2:
             return [
-                ("output", "Output directory"),
-                ("interval", "Analysis interval"),
-                ("languages", "Default languages"),
-                ("since", "Start date YYYY-MM-DD"),
-                ("until", "End date YYYY-MM-DD"),
+                ("output", tr("init.field.output")),
+                ("interval", tr("init.interval")),
+                ("languages", tr("init.default_languages")),
+                ("since", tr("init.field.since")),
+                ("until", tr("init.field.until")),
             ]
         if self.step == 3:
             return [
                 (
                     "open_plots",
-                    (
-                        "Open plots automatically "
-                        f"[{self._bool_suffix(not self.state.no_plot_show)}]"
+                    tr(
+                        "init.field.open_plots",
+                        suffix=self._bool_suffix(not self.state.no_plot_show),
                     ),
                 ),
-                ("cache_policy", "Cache policy (use/update/clear)"),
-                ("exclude_dirs", "Common exclude directories"),
+                ("cache_policy", tr("init.cache_policy")),
+                ("exclude_dirs", tr("init.field.common_exclude_dirs")),
             ]
         return []
 
@@ -743,11 +746,10 @@ class _InitWizardController:
         if self.step == 4:
             return "\n".join(
                 [
-                    self._color("Config summary", Fore.CYAN + Style.BRIGHT),
+                    self._color(tr("init.config_summary"), Fore.CYAN + Style.BRIGHT),
                     render_init_config_summary(self.state, color=True),
                     "",
-                    "Next: python -m analyze_git_repo_loc run -i --config "
-                    f"{self.state.config_path}",
+                    tr("init.next", path=self.state.config_path),
                 ]
             )
         fields = self._fields_for_current_step()
@@ -757,7 +759,7 @@ class _InitWizardController:
         return "\n".join(
             [
                 self._color(label, Fore.YELLOW + Style.BRIGHT),
-                "Edit the value below, then press Enter.",
+                tr("init.edit_value"),
             ]
         )
 
@@ -782,25 +784,25 @@ class _InitWizardController:
             cursor = ">" if index == self.provider_cursor else " "
             checked = "x" if selected[key] else " "
             rows.append(f"{cursor} [{checked}] {labels[key]}")
-        rows.extend(["", "Use Up/Down, Space to toggle, Enter to continue."])
+        rows.extend(["", tr("init.provider.instructions")])
         return "\n".join(rows)
 
     def _render_interval_step(self) -> str:
-        rows = [self._color("Analysis interval", Fore.YELLOW + Style.BRIGHT)]
+        rows = [self._color(tr("init.interval"), Fore.YELLOW + Style.BRIGHT)]
         for index, option in enumerate(INTERVAL_OPTIONS):
             cursor = ">" if index == self.interval_cursor else " "
             checked = "x" if option == self.state.interval else " "
             rows.append(f"{cursor} [{checked}] {option}")
-        rows.extend(["", "Use Up/Down, Space to select, Enter to continue."])
+        rows.extend(["", tr("init.select.instructions")])
         return "\n".join(rows)
 
     def _render_cache_policy_step(self) -> str:
-        rows = [self._color("Cache policy", Fore.YELLOW + Style.BRIGHT)]
+        rows = [self._color(tr("init.cache_policy"), Fore.YELLOW + Style.BRIGHT)]
         for index, option in enumerate(CACHE_POLICY_OPTIONS):
             cursor = ">" if index == self.cache_policy_cursor else " "
             checked = "x" if option == self.state.cache_policy else " "
             rows.append(f"{cursor} [{checked}] {option}")
-        rows.extend(["", "Use Up/Down, Space to select, Enter to continue."])
+        rows.extend(["", tr("init.select.instructions")])
         return "\n".join(rows)
 
     def _render_yes_no_step(self) -> str:
@@ -811,19 +813,19 @@ class _InitWizardController:
             cursor = ">" if index == self.yes_no_cursor else " "
             checked = "x" if (option == "yes") == current_value else " "
             rows.append(f"{cursor} [{checked}] {option}")
-        rows.extend(["", "Use Up/Down, Space to select. Y/N shortcut available."])
+        rows.extend(["", tr("init.yes_no.instructions")])
         return "\n".join(rows)
 
     def _render_language_step(self) -> str:
-        rows = [self._color("Default languages", Fore.YELLOW + Style.BRIGHT)]
+        rows = [self._color(tr("init.default_languages"), Fore.YELLOW + Style.BRIGHT)]
         for index, language in enumerate(self._visible_language_choices()):
             cursor = ">" if index == self.language_cursor else " "
             checked = "x" if language in self.state.lang else " "
             rows.append(f"{cursor} - [{checked}] {language}")
-        selected = ", ".join(self.state.lang) if self.state.lang else "(all)"
-        rows.extend(["", f"Selected: {selected}"])
+        selected = ", ".join(self.state.lang) if self.state.lang else tr("init.value.all")
+        rows.extend(["", tr("init.selected", value=selected)])
         if self.language_query:
-            rows.append("Suggestions:")
+            rows.append(tr("init.suggestions"))
             suggestions = self.language_suggestions()
             if suggestions:
                 for index, language in enumerate(suggestions):
@@ -831,52 +833,52 @@ class _InitWizardController:
                     checked = "x" if language in self.state.lang else " "
                     rows.append(f"{cursor} [{checked}] {language}")
             else:
-                rows.append("- Type to search supported languages.")
-            rows.append("Use Up/Down, Space to toggle a suggested language.")
+                rows.append(tr("init.language.suggestion_empty"))
+            rows.append(tr("init.language.suggestion_instructions"))
         else:
-            rows.append("Type to search supported languages.")
-            rows.append("Use Up/Down, Space to toggle, Enter to continue.")
+            rows.append(tr("init.language.search"))
+            rows.append(tr("init.language.instructions"))
         return "\n".join(rows)
 
     def _render_footer(self) -> str:
         if self.step == 4:
             return self._color(
-                "Enter write config   Ctrl-B Back   Esc/Ctrl-C Cancel",
+                tr("init.footer.review"),
                 Fore.YELLOW,
             )
         if self.step == 1 and not self._needs_self_hosted_url():
             return self._color(
-                "Space toggle   Enter continue   Ctrl-B Back   Esc/Ctrl-C Cancel",
+                tr("init.footer.provider"),
                 Fore.YELLOW,
             )
         key = self._current_field_key()
         if key == "interval":
             return self._color(
-                "Up/Down move   Space select   Enter continue   Ctrl-B Back",
+                tr("init.footer.interval"),
                 Fore.YELLOW,
             )
         if key == "cache_policy":
             return self._color(
-                "Up/Down move   Space select   Enter continue   Ctrl-B Back",
+                tr("init.footer.interval"),
                 Fore.YELLOW,
             )
         if key in {"overwrite", "open_plots"}:
             return self._color(
-                "Up/Down move   Space select   Y/N shortcut   Ctrl-B Back",
+                tr("init.footer.yes_no"),
                 Fore.YELLOW,
             )
         if key == "languages" and self.language_query:
             return self._color(
-                "Up/Down move   Space toggle suggestion   Enter continue",
+                tr("init.footer.language_suggestion"),
                 Fore.YELLOW,
             )
         if key == "languages":
             return self._color(
-                "Type search   Space toggle   Enter continue   Ctrl-B Back",
+                tr("init.footer.language"),
                 Fore.YELLOW,
             )
         return self._color(
-            "Enter accept value   Ctrl-B Back   Esc/Ctrl-C Cancel",
+            tr("init.footer.enter_value"),
             Fore.YELLOW,
         )
 
@@ -1132,7 +1134,7 @@ def run_init_config_wizard(default_path: Path = Path("config.yml")) -> Path:
     app = application
     application.run()
     if controller.cancelled or not controller.confirmed:
-        print("Config initialization cancelled.")
+        print(tr("init.cancelled"))
         raise SystemExit(130)
 
     config_path = controller.state.config_path
@@ -1142,8 +1144,8 @@ def run_init_config_wizard(default_path: Path = Path("config.yml")) -> Path:
     print(
         Fore.GREEN
         + Style.BRIGHT
-        + f"Created config: {config_path}"
+        + tr("init.created_config", path=config_path)
         + Style.RESET_ALL
     )
-    print(f"Next: python -m analyze_git_repo_loc run -i --config {config_path}")
+    print(tr("init.next", path=config_path))
     return config_path

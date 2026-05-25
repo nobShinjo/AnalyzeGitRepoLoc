@@ -37,6 +37,7 @@ from typing import Any
 import yaml
 from colorama import Fore, Style, just_fix_windows_console
 
+from analyze_git_repo_loc.i18n import tr
 from analyze_git_repo_loc.language_extensions import LanguageExtensions
 from analyze_git_repo_loc.remote_catalog import (
     GitHubProviderSettings,
@@ -413,7 +414,7 @@ def _prompt_bool(text: str, default: bool) -> bool:
             return True
         if raw in {"n", "no"}:
             return False
-        print("Enter y or n.")
+        print(tr("tui.enter_yes_no"))
 
 
 def _prompt_provider_selection(settings: TuiSettings) -> list[ProviderTarget]:
@@ -422,15 +423,15 @@ def _prompt_provider_selection(settings: TuiSettings) -> list[ProviderTarget]:
     selected: list[ProviderTarget] = []
 
     print()
-    print("Provider selection")
+    print(tr("tui.provider_selection"))
     for target in candidates:
         default = target.key in enabled_defaults
-        if _prompt_bool(f"Use {target.label}", default):
+        if _prompt_bool(tr("tui.use_provider", label=target.label), default):
             base_url = target.base_url
             if target.key == "gitlab.self_hosted":
-                base_url = _prompt("Self-hosted GitLab base URL", base_url)
+                base_url = _prompt(tr("tui.self_hosted_gitlab_base_url"), base_url)
                 if not base_url:
-                    raise ValueError("Self-hosted GitLab base URL is required.")
+                    raise ValueError(tr("tui.self_hosted_gitlab_base_url_required"))
             selected.append(
                 ProviderTarget(
                     key=target.key,
@@ -440,7 +441,7 @@ def _prompt_provider_selection(settings: TuiSettings) -> list[ProviderTarget]:
                 )
             )
     if not selected:
-        raise ValueError("At least one provider must be selected.")
+        raise ValueError(tr("tui.provider_required"))
     return selected
 
 
@@ -800,24 +801,24 @@ def apply_repository_overrides(
 
 def _prompt_branch_selection(state: TuiWizardState) -> None:
     print()
-    print("Branch selection")
-    branch = _prompt("Bulk branch override (blank/default keeps repository defaults)", "")
+    print(tr("tui.branch_selection"))
+    branch = _prompt(tr("tui.bulk_branch"), "")
     apply_branch_selection(state, branch or None)
-    if not _prompt_bool("Edit individual repositories", False):
+    if not _prompt_bool(tr("tui.edit_individual_repos"), False):
         return
     for repository in state.selected_repositories:
         branch = _prompt(
-            f"{repository.ref.full_name} branch",
+            tr("tui.repo_branch_prompt", repo=repository.ref.full_name),
             repository.branch,
         )
         repository.branch = branch or repository.branch
         include_subpath = _prompt(
-            f"{repository.ref.full_name} include subpath",
+            tr("tui.include_subpath_prompt", repo=repository.ref.full_name),
             repository.include_subpath or "",
         )
         repository.include_subpath = include_subpath or None
         exclude_dirs = _prompt(
-            f"{repository.ref.full_name} exclude paths",
+            tr("tui.repo_excludes_prompt", repo=repository.ref.full_name),
             ", ".join(repository.exclude_dirs),
         )
         repository.exclude_dirs = split_csv(exclude_dirs) or []
@@ -825,39 +826,39 @@ def _prompt_branch_selection(state: TuiWizardState) -> None:
 
 def _prompt_analysis_scope(state: TuiWizardState) -> None:
     print()
-    print("Analysis scope")
-    state.since = _parse_date(_prompt("Since yyyy-mm-dd", _format_date(state.since)))
-    state.until = _parse_date(_prompt("Until yyyy-mm-dd", _format_date(state.until)))
-    state.interval = _prompt("Interval (daily/weekly/monthly)", state.interval)
+    print(tr("tui.analysis_scope"))
+    state.since = _parse_date(_prompt(tr("tui.since_prompt"), _format_date(state.since)))
+    state.until = _parse_date(_prompt(tr("tui.until_prompt"), _format_date(state.until)))
+    state.interval = _prompt(tr("tui.interval_prompt"), state.interval)
     if state.interval not in {"daily", "weekly", "monthly"}:
-        raise ValueError("interval must be daily, weekly, or monthly.")
-    state.author_name = split_csv(_prompt("Author filter", _prompt_list_default(state.author_name)))
-    state.lang = split_csv(_prompt("Language filter", _prompt_list_default(state.lang)))
+        raise ValueError(tr("tui.interval_error"))
+    state.author_name = split_csv(_prompt(tr("tui.author_filter"), _prompt_list_default(state.author_name)))
+    state.lang = split_csv(_prompt(tr("tui.language_filter"), _prompt_list_default(state.lang)))
     workers = _prompt(
-        "Workers/concurrency",
+        tr("tui.workers_prompt"),
         "" if state.workers is None else str(state.workers),
     )
     state.workers = int(workers) if workers else None
     if state.workers is not None and state.workers < 1:
-        raise ValueError("workers must be 1 or higher.")
+        raise ValueError(tr("tui.workers_error"))
 
 
 def _prompt_path_rules(state: TuiWizardState) -> None:
     print()
-    print("Path rules")
+    print(tr("tui.path_rules"))
     state.global_exclude_dirs = split_csv(
-        _prompt("Global exclude paths", _prompt_list_default(state.global_exclude_dirs))
+        _prompt(tr("tui.global_excludes_prompt"), _prompt_list_default(state.global_exclude_dirs))
     )
-    if not _prompt_bool("Edit per-repository path rules", False):
+    if not _prompt_bool(tr("tui.edit_per_repo_paths"), False):
         return
     for repository in state.selected_repositories:
         include_subpath = _prompt(
-            f"{repository.ref.full_name} include subpath",
+            tr("tui.include_subpath_prompt", repo=repository.ref.full_name),
             repository.include_subpath or "",
         )
         repository.include_subpath = include_subpath or None
         exclude_dirs = _prompt(
-            f"{repository.ref.full_name} extra exclude paths",
+            tr("tui.repo_extra_excludes_prompt", repo=repository.ref.full_name),
             ", ".join(repository.exclude_dirs),
         )
         repository.exclude_dirs = split_csv(exclude_dirs) or []
@@ -865,17 +866,17 @@ def _prompt_path_rules(state: TuiWizardState) -> None:
 
 def _prompt_output_cache_display(state: TuiWizardState) -> None:
     print()
-    print("Output / Cache / Display")
-    state.output = Path(_prompt("Output directory", str(state.output)))
+    print(tr("tui.output_cache_display"))
+    state.output = Path(_prompt(tr("tui.output_directory"), str(state.output)))
     cache_choice = _prompt(
-        "Cache policy (use/update/clear)",
+        tr("tui.cache_policy_prompt"),
         "clear" if state.clear_cache else "use",
     ).casefold()
     if cache_choice not in {"use", "update", "clear"}:
-        raise ValueError("cache policy must be use, update, or clear.")
+        raise ValueError(tr("tui.cache_policy_error"))
     state.clear_cache = cache_choice == "clear"
     state.refresh_remote_cache_only = cache_choice == "update"
-    state.no_plot_show = not _prompt_bool("Automatically show charts/reports", False)
+    state.no_plot_show = not _prompt_bool(tr("tui.auto_display_prompt"), False)
 
 
 def _color(text: str, color: str, *, enabled: bool) -> str:
@@ -931,62 +932,61 @@ def render_final_review(
     """
     providers = ", ".join(
         f"{target.label} ({target.base_url})" for target in state.provider_targets
-    ) or "(none)"
+    ) or tr("tui.none")
     cache_policy = _cache_policy_label(state)
     recommended_languages = (
         format_compact_list(state.recommendations.languages, limit=5)
         if state.recommendations.languages
-        else "(none)"
+        else tr("tui.none")
     )
     summary = _review_summary(state)
     if not detailed:
         return "\n".join(
             [
-                _color("Quick Review", Fore.CYAN + Style.BRIGHT, enabled=color),
+                _color(tr("tui.quick_review"), Fore.CYAN + Style.BRIGHT, enabled=color),
                 _color(summary, Fore.WHITE + Style.BRIGHT, enabled=color),
-                f"Output: {state.output}",
-                (
-                    "Suggestions: "
-                    f"{recommended_languages} ({state.recommendations.language_source})"
+                tr("tui.output_line", path=state.output),
+                tr(
+                    "tui.suggestions",
+                    value=recommended_languages,
+                    source=state.recommendations.language_source,
                 ),
                 "",
                 _color(
-                    "[Enter] Run   e Edit   d Details   s Save+Run   c Cancel",
+                    tr("tui.final_actions"),
                     Fore.YELLOW,
                     enabled=color,
                 ),
             ]
         )
     lines = [
-        _color("Quick Review", Fore.CYAN + Style.BRIGHT, enabled=color),
+        _color(tr("tui.quick_review"), Fore.CYAN + Style.BRIGHT, enabled=color),
         _color(summary, Fore.WHITE + Style.BRIGHT, enabled=color),
-        f"Providers: {providers}",
-        f"Repositories: {len(state.selected_repositories)}",
-        (
-            f"Period: {_format_date(state.since) or '(none)'} -> "
-            f"{_format_date(state.until) or '(none)'}"
+        tr("tui.providers", value=providers),
+        tr("tui.repository_count", count=len(state.selected_repositories)),
+        tr(
+            "tui.period",
+            since=_format_date(state.since) or tr("tui.none"),
+            until=_format_date(state.until) or tr("tui.none"),
         ),
-        f"Interval: {state.interval}",
-        f"Authors: {format_optional_list(state.author_name)}",
-        f"Languages: {format_compact_list(state.lang)}",
-        (
-            "Recommended languages: "
-            f"{recommended_languages} ({state.recommendations.language_source})"
+        tr("tui.interval", value=state.interval),
+        tr("tui.authors", value=format_optional_list(state.author_name)),
+        tr("tui.languages", value=format_compact_list(state.lang)),
+        tr(
+            "tui.recommended_languages",
+            value=recommended_languages,
+            source=state.recommendations.language_source,
         ),
-        (
-            "Global excludes: "
-            f"{format_optional_list(state.global_exclude_dirs)} "
-            "(applied only when present)"
+        tr("tui.global_excludes", value=format_optional_list(state.global_exclude_dirs)),
+        tr(
+            "tui.recommended_excludes",
+            value=format_compact_list(state.recommendations.exclude_dirs, limit=5),
         ),
-        (
-            "Recommended excludes: "
-            f"{format_compact_list(state.recommendations.exclude_dirs, limit=5)}"
-        ),
-        f"Output: {state.output}",
-        f"Cache: {cache_policy}",
-        f"Auto display: {'off' if state.no_plot_show else 'on'}",
+        tr("tui.output_line", path=state.output),
+        tr("tui.cache", policy=cache_policy),
+        tr("tui.auto_display", value=tr("tui.off") if state.no_plot_show else tr("tui.on")),
         "",
-        _color("Repositories:", Fore.CYAN, enabled=color),
+        _color(tr("tui.repositories"), Fore.CYAN, enabled=color),
     ]
     for repository in state.selected_repositories:
         include = repository.include_subpath or "."
@@ -1183,27 +1183,27 @@ def _prompt_final_action(state: TuiWizardState) -> str:
     while True:
         print()
         print(render_final_review(state, color=True, detailed=detailed))
-        raw = _prompt("Action", "")
+        raw = _prompt(tr("tui.action"), "")
         action = normalize_final_action(raw)
         if action == "details":
             detailed = True
             continue
         if action in {"run", "edit", "cancel", "save"}:
             return action
-        print("Choose Enter, e, d, s, or c.")
+        print(tr("tui.choose_action"))
 
 
 def _prompt_edit_category() -> str:
     print()
-    print(_color("Edit Settings", Fore.CYAN + Style.BRIGHT, enabled=True))
-    print("1. Repositories / Branches")
-    print("2. Analysis Scope")
-    print("3. Path Rules")
-    print("4. Output / Cache / Display")
-    print("5. Providers")
-    print("6. Done")
+    print(_color(tr("tui.edit_settings"), Fore.CYAN + Style.BRIGHT, enabled=True))
+    print(f"1. {tr('tui.category.repositories')}")
+    print(f"2. {tr('tui.category.analysis')}")
+    print(f"3. {tr('tui.category.paths')}")
+    print(f"4. {tr('tui.category.output')}")
+    print(f"5. {tr('tui.category.providers')}")
+    print(f"6. {tr('tui.category.done')}")
     while True:
-        choice = _prompt("Select category", "6").casefold()
+        choice = _prompt(tr("tui.select_category"), "6").casefold()
         category_map = {
             "1": "repositories",
             "repositories": "repositories",
@@ -1228,7 +1228,7 @@ def _prompt_edit_category() -> str:
         category = category_map.get(choice)
         if category is not None:
             return category
-        print("Choose a category number or name.")
+        print(tr("tui.choose_category"))
 
 
 def _run_wizard_steps(state: TuiWizardState) -> str:
@@ -1250,7 +1250,7 @@ def _run_wizard_steps(state: TuiWizardState) -> str:
                 _prompt_output_cache_display(state)
                 state.recommendations = build_lightweight_recommendations(state)
             elif category == "providers":
-                print("Provider changes require restarting the interactive run.")
+                print(tr("tui.provider_restart"))
 
 
 def run_tui_wizard(

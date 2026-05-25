@@ -13,6 +13,7 @@ import yaml
 from colorama import Fore, Style
 
 from analyze_git_repo_loc.__main__ import _format_output_summary
+from analyze_git_repo_loc.i18n import tr
 from analyze_git_repo_loc.init_config import (
     InitConfigOptions,
     build_init_config_data,
@@ -156,15 +157,15 @@ class InitWizardStateTests(unittest.TestCase):
 
         summary = render_init_config_summary(state)
 
-        self.assertIn("Config: custom.yml", summary)
-        self.assertIn("Providers: Self-hosted GitLab", summary)
-        self.assertIn("Output: reports", summary)
-        self.assertIn("Interval: weekly", summary)
-        self.assertIn("Period: 2026-01-01 -> 2026-05-01", summary)
-        self.assertIn("Auto display: on", summary)
-        self.assertIn("Cache: update", summary)
-        self.assertIn("Exclude dirs: node_modules", summary)
-        self.assertIn("Languages: C#, Python", summary)
+        self.assertIn(f"{tr('init.label.config')}: custom.yml", summary)
+        self.assertIn(f"{tr('init.label.providers')}: Self-hosted GitLab", summary)
+        self.assertIn(f"{tr('init.label.output')}: reports", summary)
+        self.assertIn(f"{tr('init.label.interval')}: weekly", summary)
+        self.assertIn(f"{tr('init.label.period')}: 2026-01-01 -> 2026-05-01", summary)
+        self.assertIn(f"{tr('init.label.auto_display')}: {tr('tui.on')}", summary)
+        self.assertIn(f"{tr('init.label.cache')}: update", summary)
+        self.assertIn(f"{tr('init.label.exclude_dirs')}: node_modules", summary)
+        self.assertIn(f"{tr('init.label.languages')}: C#, Python", summary)
 
     def test_interval_field_renders_as_select_options(self) -> None:
         controller = _InitWizardController(Path("missing-test-config.yml"))
@@ -175,7 +176,7 @@ class InitWizardStateTests(unittest.TestCase):
 
         self.assertIn("[x] monthly", rendered)
         self.assertIn("[ ] weekly", rendered)
-        self.assertIn("Use Up/Down, Space to select", rendered)
+        self.assertIn(tr("init.select.instructions"), rendered)
         self.assertNotIn("Edit the value below", rendered)
 
     def test_interval_selection_updates_state(self) -> None:
@@ -197,7 +198,7 @@ class InitWizardStateTests(unittest.TestCase):
 
         self.assertIn("[x] use", rendered)
         self.assertIn("[ ] update", rendered)
-        self.assertIn("Use Up/Down, Space to select", rendered)
+        self.assertIn(tr("init.select.instructions"), rendered)
         self.assertNotIn("Edit the value below", rendered)
 
     def test_cache_policy_selection_updates_state(self) -> None:
@@ -219,7 +220,7 @@ class InitWizardStateTests(unittest.TestCase):
 
         self.assertIn("[ ] C#", rendered)
         self.assertIn("[ ] Python", rendered)
-        self.assertIn("Type to search supported languages.", rendered)
+        self.assertIn(tr("init.language.search"), rendered)
 
     def test_language_toggle_updates_state(self) -> None:
         controller = _InitWizardController(Path("missing-test-config.yml"))
@@ -329,7 +330,7 @@ class InitWizardStateTests(unittest.TestCase):
 
         self.assertEqual(controller.state.lang, [])
         self.assertEqual(controller.language_query, "MadeUpLang")
-        self.assertIn("Type to search supported languages", controller.message)
+        self.assertIn(tr("init.language.search"), controller.message)
 
     def test_existing_config_populates_init_wizard_defaults(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -447,7 +448,7 @@ class InitWizardStateTests(unittest.TestCase):
         self.assertEqual(controller.current_value(), "")
         self.assertIn("[x] yes", controller.render())
         self.assertIn("[ ] no", controller.render())
-        self.assertIn("Y/N shortcut", controller.render())
+        self.assertIn(tr("init.yes_no.instructions"), controller.render())
 
     def test_yes_no_shortcuts_update_bool_field(self) -> None:
         controller = _InitWizardController(Path("missing-test-config.yml"))
@@ -471,7 +472,14 @@ class InitWizardStateTests(unittest.TestCase):
             controller.field = 1
 
             self.assertEqual(controller.current_value(), "")
-            self.assertIn("Overwrite", controller.render())
+            self.assertIn(
+                tr(
+                    "init.field.overwrite",
+                    path=config_path,
+                    suffix=controller._bool_suffix(controller.state.overwrite_existing),
+                ),
+                controller.render(),
+            )
             self.assertIn("[x] yes", controller.render())
             self.assertIn("[ ] no", controller.render())
 
@@ -484,7 +492,10 @@ class InitWizardStateTests(unittest.TestCase):
 
         summary = render_init_config_summary(state, color=True)
 
-        self.assertIn(Fore.CYAN + Style.BRIGHT + "Config:" + Style.RESET_ALL, summary)
+        self.assertIn(
+            Fore.CYAN + Style.BRIGHT + f"{tr('init.label.config')}:" + Style.RESET_ALL,
+            summary,
+        )
         self.assertIn(Fore.WHITE + Style.BRIGHT + "config.yml" + Style.RESET_ALL, summary)
 
 
@@ -580,7 +591,7 @@ class OutputSummaryTests(unittest.TestCase):
 
         lines = _format_output_summary(output_dir=output_dir, output_root=output_root)
 
-        self.assertEqual(lines[0], "Finished")
+        self.assertEqual(lines[0], tr("output.finished"))
         self.assertIn(f"Report: {output_dir / 'report.html'}", lines)
         self.assertIn(f"Summary: {output_dir / 'summary.md'}", lines)
         self.assertIn(f"Run data: {output_dir}", lines)

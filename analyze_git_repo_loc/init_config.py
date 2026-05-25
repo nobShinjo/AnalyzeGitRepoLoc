@@ -29,6 +29,7 @@ from typing import Any, Callable
 
 import yaml
 
+from analyze_git_repo_loc.i18n import tr
 
 PromptFunc = Callable[[str], str]
 ConfirmFunc = Callable[[Path], bool]
@@ -269,6 +270,6 @@ def run_init_config(
     )
     config_path.parent.mkdir(parents=True, exist_ok=True)
     config_path.write_text(render_init_config_yaml(config_data), encoding="utf-8")
-    print(f"Created config: {config_path}")
-    print(f"Next: python -m analyze_git_repo_loc run -i --config {config_path}")
+    print(tr("init.created_config", path=config_path))
+    print(tr("init.next", path=config_path))
     return config_path

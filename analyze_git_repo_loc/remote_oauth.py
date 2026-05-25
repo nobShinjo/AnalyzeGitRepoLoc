@@ -29,6 +29,8 @@ from urllib.parse import urlencode, urljoin
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
+from analyze_git_repo_loc.i18n import tr
+
 
 DEVICE_CODE_GRANT_TYPE = "urn:ietf:params:oauth:grant-type:device_code"
 DEFAULT_GITHUB_SCOPES = ("repo", "read:org")
@@ -97,10 +99,10 @@ def _read_device_authorization(payload: dict[str, Any]) -> DeviceAuthorization:
 
 def _default_notify(authorization: DeviceAuthorization) -> None:
     print()
-    print("OAuth Device Code login is required.")
-    print(f"Open: {authorization.verification_uri}")
-    print(f"Code: {authorization.user_code}")
-    print("Waiting for authorization in the browser...")
+    print(tr("auth.device.required"))
+    print(tr("auth.device.open", uri=authorization.verification_uri))
+    print(tr("auth.device.code", code=authorization.user_code))
+    print(tr("auth.device.waiting"))
     try:
         webbrowser.open(authorization.verification_uri)
     except Exception:

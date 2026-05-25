@@ -33,6 +33,7 @@ from tqdm import tqdm
 
 from analyze_git_repo_loc.colored_console_printer import ColoredConsolePrinter
 from analyze_git_repo_loc.git_repo_loc_analyzer import GitRepoLOCAnalyzer
+from analyze_git_repo_loc.i18n import tr
 from analyze_git_repo_loc.remote_auth import RemoteAuthError
 from analyze_git_repo_loc.remote_repos import RemoteRepoManager
 from analyze_git_repo_loc.yaml_config import merge_yaml_config
@@ -344,17 +345,18 @@ def parse_arguments(parser: argparse.ArgumentParser) -> argparse.Namespace:
     Returns:
         argparse.Namespace: Parsed command line arguments.
     """
+    parser.description = parser.description or tr("cli.description")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     init_parser = subparsers.add_parser(
         "init",
-        help="Create an initial YAML configuration file interactively.",
+        help=tr("cli.init_help"),
     )
     init_parser.add_argument(
         "--config",
         type=Path,
         default=Path("config.yml"),
-        help="YAML configuration file path to create (default: config.yml).",
+        help=tr("cli.init_config_help"),
     )
     init_parser.set_defaults(
         interactive=False,
@@ -373,45 +375,45 @@ def parse_arguments(parser: argparse.ArgumentParser) -> argparse.Namespace:
 
     run_parser = subparsers.add_parser(
         "run",
-        help="Run analysis from a YAML configuration file, optionally interactively.",
+        help=tr("cli.run_help"),
     )
     run_parser.add_argument(
         "--config",
         type=Path,
         default=Path("config.yml"),
-        help="YAML configuration file path (default: config.yml).",
+        help=tr("cli.config_help"),
     )
-    run_parser.add_argument("-o", "--output", type=Path, default=None, help="Output path")
+    run_parser.add_argument("-o", "--output", type=Path, default=None, help=tr("cli.output_help"))
     run_parser.add_argument(
         "-i",
         "--interactive",
         action="store_true",
         default=False,
-        help="Review and adjust analysis settings interactively before running.",
+        help=tr("cli.interactive_help"),
     )
     run_parser.add_argument(
         "--since",
         type=str,
         default=None,
-        help="Start Date yyyy-mm-dd",
+        help=tr("cli.since_help"),
     )
     run_parser.add_argument(
         "--until",
         type=str,
         default=None,
-        help="End Date yyyy-mm-dd",
+        help=tr("cli.until_help"),
     )
     run_parser.add_argument(
         "--interval",
         choices=["daily", "weekly", "monthly"],
         default=None,
-        help="Interval (default: monthly)",
+        help=tr("cli.interval_help"),
     )
     run_parser.add_argument(
         "--no-plot-show",
         action="store_true",
         default=None,
-        help="If set, the plots will not be shown.",
+        help=tr("cli.no_plot_show_help"),
     )
     run_parser.set_defaults(
         repo_paths=None,
@@ -457,10 +459,10 @@ def handle_exception(ex: Exception) -> None:
     if isinstance(ex, RemoteAuthError):
         tqdm.write(str(ex))
         sys.exit(1)
-    print("An unexpected error occurred:", file=sys.stderr)
-    print(f"Error type: {type(ex).__name__}", file=sys.stderr)
-    print(f"Error message: {str(ex)}", file=sys.stderr)
-    print("Stack trace:", file=sys.stderr)
+    print(tr("error.unexpected"), file=sys.stderr)
+    print(tr("error.type", type=type(ex).__name__), file=sys.stderr)
+    print(tr("error.message", message=str(ex)), file=sys.stderr)
+    print(tr("error.stack_trace"), file=sys.stderr)
     traceback.print_exc(file=sys.stderr)
     sys.exit(1)
 
@@ -970,7 +972,7 @@ def _print_repository_warnings(warnings: list[str]) -> None:
     """
     if not warnings:
         return
-    print("Warnings:", file=sys.stderr)
+    print(tr("warnings.title"), file=sys.stderr)
     for warning in warnings:
         print(f"- {warning}", file=sys.stderr)
 
