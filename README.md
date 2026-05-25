@@ -1,5 +1,7 @@
 # AnalyzeGitRepoLOC
 
+[日本語 README](./README.ja.md)
+
 ## Overview
 
 Analyze Git repositories and visualize code LOC.
