@@ -240,9 +240,12 @@ def _apply_repo_progress_event(
         if step:
             bar.update(step)
     elif kind == _REPO_EVENT_FINISH:
-        if bar.n < bar.total:
+        if bar.total is not None and bar.n < bar.total:
             bar.update(bar.total - bar.n)
-        bar.set_description_str(f"Repo: {label} (done)")
+        suffix = "done"
+        if bar.total == 0:
+            suffix = "done, 0 commits"
+        bar.set_description_str(f"Repo: {label} ({suffix})")
         bar.refresh()
     return True
 
@@ -891,10 +894,11 @@ def _build_repo_progress_bars(
         label = _truncate_repo_label(repo_name, label_width)
         repo_labels[index] = label
         repo_bars[index] = tqdm(
-            total=1,
+            total=None,
             desc=f"Repo: {label} (queued)",
             position=progress.pos + 1 + index,
             leave=False,
+            unit="commit",
         )
     return repo_bars, repo_labels
 

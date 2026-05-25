@@ -91,6 +91,70 @@ class RepositoryWarningTests(unittest.TestCase):
 class RepositoryProgressTests(unittest.TestCase):
     """Repository-level progress behavior tests."""
 
+    def test_repo_child_progress_starts_without_fake_total_and_uses_commit_unit(
+        self,
+    ) -> None:
+        progress = Mock()
+        progress.pos = 0
+
+        with patch.object(utils, "tqdm") as tqdm_mock:
+            utils._build_repo_progress_bars(
+                [(Path("alpha"), "main", [], None)],
+                progress=progress,
+                label_width=32,
+            )
+
+        tqdm_mock.assert_called_once_with(
+            total=None,
+            desc="Repo: alpha (queued)",
+            position=1,
+            leave=False,
+            unit="commit",
+        )
+
+    def test_repo_child_progress_uses_commit_total_and_advance_events(self) -> None:
+        bar = Mock()
+        bar.n = 0
+        bar.total = None
+
+        self.assertTrue(
+            utils._apply_repo_progress_event(
+                kind=utils._REPO_EVENT_TOTAL,
+                bar=bar,
+                label="alpha",
+                value=12,
+            )
+        )
+        utils._apply_repo_progress_event(
+            kind=utils._REPO_EVENT_ADVANCE,
+            bar=bar,
+            label="alpha",
+            value=3,
+        )
+
+        self.assertEqual(bar.total, 12)
+        self.assertEqual(bar.n, 0)
+        bar.update.assert_called_once_with(3)
+
+    def test_repo_child_progress_shows_zero_target_commits_on_finish(self) -> None:
+        bar = Mock()
+        bar.n = 0
+        bar.total = 0
+
+        self.assertTrue(
+            utils._apply_repo_progress_event(
+                kind=utils._REPO_EVENT_FINISH,
+                bar=bar,
+                label="alpha",
+                value=0,
+            )
+        )
+
+        bar.update.assert_not_called()
+        bar.set_description_str.assert_called_once_with(
+            "Repo: alpha (done, 0 commits)"
+        )
+
     def test_sequential_analysis_emits_child_progress_events_when_queue_is_provided(
         self,
     ) -> None:
