@@ -269,24 +269,36 @@ class GitRepoLOCAnalyzer:
             num_workers=os.cpu_count(),
         )
 
-    def _get_commits(self, repository: Repository) -> list:
+    def _get_commits(
+        self,
+        repository: Repository,
+        progress_callback: Callable[[str, int], None] | None = None,
+    ) -> list:
         """
         Collect commits from the repository traversal.
 
         Args:
             repository (Repository): Configured pydriller repository.
+            progress_callback (Callable[[str, int], None] | None): Optional
+                callback for commit scan progress events.
 
         Returns:
             list: List of commit objects.
         """
-        return list(
-            tqdm(
-                repository.traverse_commits(),
-                desc="Getting commits",
-                unit="commit",
-                disable=not self._show_progress,
-            )
-        )
+        commits = []
+        for commit in tqdm(
+            repository.traverse_commits(),
+            desc="Getting commits",
+            unit="commit",
+            disable=not self._show_progress,
+        ):
+            commits.append(commit)
+            if progress_callback is not None:
+                try:
+                    progress_callback("scan_advance", 1)
+                except (AttributeError, EOFError, OSError, TypeError, ValueError):
+                    continue
+        return commits
 
     @staticmethod
     def _find_commit_index(commits: list, target_hash: str | None) -> int | None:
@@ -494,7 +506,7 @@ class GitRepoLOCAnalyzer:
 
         # temporary list to store commit data
         commit_data_list = []
-        commits = self._get_commits(repository)
+        commits = self._get_commits(repository, progress_callback=progress_callback)
         self._latest_commit_hash = commits[0].hash if commits else None
         (
             commits_to_analyze,

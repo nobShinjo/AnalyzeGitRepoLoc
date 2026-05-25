@@ -112,6 +112,44 @@ class RepositoryProgressTests(unittest.TestCase):
             unit="commit",
         )
 
+    def test_repo_child_progress_tracks_commit_scan_before_analysis(self) -> None:
+        bar = Mock()
+        bar.n = 0
+        bar.total = None
+
+        self.assertTrue(
+            utils._apply_repo_progress_event(
+                kind=utils._REPO_EVENT_SCAN_ADVANCE,
+                bar=bar,
+                label="alpha",
+                value=7,
+            )
+        )
+
+        self.assertIsNone(bar.total)
+        bar.update.assert_called_once_with(7)
+
+    def test_repo_child_progress_switches_to_analysis_total(self) -> None:
+        bar = Mock()
+        bar.n = 21
+        bar.total = None
+
+        self.assertTrue(
+            utils._apply_repo_progress_event(
+                kind=utils._REPO_EVENT_TOTAL,
+                bar=bar,
+                label="alpha",
+                value=12,
+            )
+        )
+
+        self.assertEqual(bar.total, 12)
+        self.assertEqual(bar.n, 0)
+        bar.set_description_str.assert_called_once_with(
+            "Repo: alpha (analyzing commits)"
+        )
+        bar.refresh.assert_called_once()
+
     def test_repo_child_progress_uses_commit_total_and_advance_events(self) -> None:
         bar = Mock()
         bar.n = 0
@@ -152,7 +190,7 @@ class RepositoryProgressTests(unittest.TestCase):
 
         bar.update.assert_not_called()
         bar.set_description_str.assert_called_once_with(
-            "Repo: alpha (done, 0 commits)"
+            "Repo: alpha (done, 0 target commits)"
         )
 
     def test_sequential_analysis_emits_child_progress_events_when_queue_is_provided(
