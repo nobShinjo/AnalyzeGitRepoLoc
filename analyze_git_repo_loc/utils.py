@@ -45,6 +45,7 @@ _REPO_EVENT_TOTAL = "total"
 _REPO_EVENT_ADVANCE = "advance"
 _REPO_EVENT_FINISH = "finish"
 _REPO_EVENT_STOP = "stop"
+_REPO_PROGRESS_LABEL_WIDTH = 32
 
 
 def parse_repos_paths(
@@ -836,6 +837,7 @@ def _analyze_repositories_sequential(
     args: argparse.Namespace,
     repo_entries: list[tuple[Path | str, str, list[Path] | None]],
     progress: tqdm,
+    progress_queue: object | None = None,
     results: dict[int, pd.DataFrame],
     warnings: list[str],
 ) -> None:
@@ -861,6 +863,7 @@ def _analyze_repositories_sequential(
                 languages=args.lang,
                 clear_cache=args.clear_cache,
                 show_progress=False,
+                progress_queue=progress_queue,
             )
         except (OSError, ValueError) as ex:
             handle_exception(ex)
@@ -924,6 +927,7 @@ def _analyze_repositories_parallel(
     repo_entries: list[tuple[Path | str, str, list[Path] | None]],
     worker_count: int,
     progress: tqdm,
+    progress_queue: object | None = None,
     results: dict[int, pd.DataFrame],
     warnings: list[str],
 ) -> None:
@@ -952,6 +956,7 @@ def _analyze_repositories_parallel(
                     languages=args.lang,
                     clear_cache=args.clear_cache,
                     show_progress=False,
+                    progress_queue=progress_queue,
                 )
             )
         for future in as_completed(futures):
@@ -996,23 +1001,58 @@ def analyze_git_repositories(args: argparse.Namespace) -> list[pd.DataFrame]:
     warnings: list[str] = []
 
     with tqdm(total=repo_count, desc="Analyzing repositories") as progress:
-        if worker_count <= 1:
-            _analyze_repositories_sequential(
-                args=args,
-                repo_entries=repo_entries,
-                progress=progress,
-                results=results,
-                warnings=warnings,
-            )
-        else:
-            _analyze_repositories_parallel(
-                args=args,
-                repo_entries=repo_entries,
-                worker_count=worker_count,
-                progress=progress,
-                results=results,
-                warnings=warnings,
-            )
+        manager: SyncManager | None = None
+        progress_queue: object | None = None
+        repo_bars: dict[int, tqdm] = {}
+        stop_event: Event | None = None
+        listener_thread: Thread | None = None
+        try:
+            if repo_count:
+                manager = Manager()
+                progress_queue = manager.Queue()
+                repo_bars, repo_labels = _build_repo_progress_bars(
+                    repo_entries,
+                    progress=progress,
+                    label_width=_REPO_PROGRESS_LABEL_WIDTH,
+                )
+                stop_event, listener_thread = _start_repo_progress_listener(
+                    progress_queue=progress_queue,
+                    repo_bars=repo_bars,
+                    repo_labels=repo_labels,
+                )
+            if worker_count <= 1:
+                _analyze_repositories_sequential(
+                    args=args,
+                    repo_entries=repo_entries,
+                    progress=progress,
+                    progress_queue=progress_queue,
+                    results=results,
+                    warnings=warnings,
+                )
+            else:
+                _analyze_repositories_parallel(
+                    args=args,
+                    repo_entries=repo_entries,
+                    worker_count=worker_count,
+                    progress=progress,
+                    progress_queue=progress_queue,
+                    results=results,
+                    warnings=warnings,
+                )
+        finally:
+            if (
+                manager is not None
+                and progress_queue is not None
+                and stop_event is not None
+                and listener_thread is not None
+            ):
+                _cleanup_repo_progress_listener(
+                    stop_event=stop_event,
+                    listener_thread=listener_thread,
+                    repo_bars=repo_bars,
+                    manager=manager,
+                    progress_queue=progress_queue,
+                )
 
     _print_repository_warnings(warnings)
 
