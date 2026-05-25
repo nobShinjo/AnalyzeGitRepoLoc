@@ -269,6 +269,44 @@ class GitRepoLOCAnalyzer:
             num_workers=os.cpu_count(),
         )
 
+    def _count_commits_for_scan(self) -> int | None:
+        """
+        Count commits before PyDriller traversal when Git metadata is available.
+
+        Returns:
+            int | None: Commit count for the initial scan progress, or None if
+            the count cannot be resolved safely.
+        """
+        try:
+            repo = Repo(str(self._repo_path), search_parent_directories=True)
+            pathspec = None
+            worktree = repo.working_tree_dir
+            if worktree is not None:
+                try:
+                    candidate = Path(self._repo_path).resolve()
+                    root = Path(worktree).resolve()
+                    if candidate != root and root in candidate.parents:
+                        pathspec = str(candidate.relative_to(root))
+                except (OSError, ValueError):
+                    pathspec = None
+
+            kwargs: dict[str, object] = {
+                "rev": self._branch_name,
+                "no_merges": True,
+            }
+            if self._since is not None:
+                kwargs["since"] = self._since.isoformat()
+            if self._to is not None:
+                kwargs["until"] = self._to.isoformat()
+            if self._authors and len(self._authors) == 1:
+                kwargs["author"] = self._authors[0]
+            if pathspec:
+                kwargs["paths"] = pathspec
+
+            return sum(1 for _ in repo.iter_commits(**kwargs))
+        except (GitCommandError, OSError, TypeError, ValueError):
+            return None
+
     def _get_commits(
         self,
         repository: Repository,
@@ -286,9 +324,16 @@ class GitRepoLOCAnalyzer:
             list: List of commit objects.
         """
         commits = []
+        scan_total = self._count_commits_for_scan()
+        if progress_callback is not None and scan_total is not None:
+            try:
+                progress_callback("scan_total", scan_total)
+            except (AttributeError, EOFError, OSError, TypeError, ValueError):
+                pass
         for commit in tqdm(
             repository.traverse_commits(),
             desc="Getting commits",
+            total=scan_total,
             unit="commit",
             disable=not self._show_progress,
         ):

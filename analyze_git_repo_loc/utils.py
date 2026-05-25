@@ -41,6 +41,7 @@ from analyze_git_repo_loc.yaml_config import merge_yaml_config
 _REMOTE_REPO_MANAGER = RemoteRepoManager()
 
 _REPO_EVENT_START = "start"
+_REPO_EVENT_SCAN_TOTAL = "scan_total"
 _REPO_EVENT_SCAN_ADVANCE = "scan_advance"
 _REPO_EVENT_TOTAL = "total"
 _REPO_EVENT_ADVANCE = "advance"
@@ -230,6 +231,12 @@ def _apply_repo_progress_event(
         return True
     if kind == _REPO_EVENT_START:
         bar.set_description_str(f"Repo: {label} (getting commits)")
+        bar.refresh()
+    elif kind == _REPO_EVENT_SCAN_TOTAL:
+        total = max(0, int(value))
+        bar.set_description_str(f"Repo: {label} (getting commits)")
+        bar.total = total
+        bar.n = 0
         bar.refresh()
     elif kind == _REPO_EVENT_SCAN_ADVANCE:
         step = max(0, int(value))
@@ -702,6 +709,8 @@ def _analyze_single_repository(
             event_kind = _REPO_EVENT_ADVANCE
             if kind == "total":
                 event_kind = _REPO_EVENT_TOTAL
+            elif kind == "scan_total":
+                event_kind = _REPO_EVENT_SCAN_TOTAL
             elif kind == "scan_advance":
                 event_kind = _REPO_EVENT_SCAN_ADVANCE
             _emit_repo_progress(

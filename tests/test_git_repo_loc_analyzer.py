@@ -35,6 +35,31 @@ class RepositoryDisplayNameTests(unittest.TestCase):
 class CommitProgressTests(unittest.TestCase):
     """Commit progress callback tests."""
 
+    def test_get_commits_emits_scan_total_when_available(self) -> None:
+        commits = [object(), object()]
+        repository = Mock()
+        repository.traverse_commits.return_value = iter(commits)
+        callback = Mock()
+        analyzer = GitRepoLOCAnalyzer(
+            repo_path=Path("alpha"),
+            branch_name="main",
+            cache_dir=Path("cache"),
+            output_dir=Path("out"),
+            show_progress=False,
+        )
+
+        with patch.object(analyzer, "_count_commits_for_scan", return_value=2):
+            with patch(
+                "analyze_git_repo_loc.git_repo_loc_analyzer.tqdm",
+                side_effect=lambda iterable, **_kwargs: iterable,
+            ) as tqdm_mock:
+                result = analyzer._get_commits(repository, progress_callback=callback)
+
+        self.assertEqual(result, commits)
+        callback.assert_any_call("scan_total", 2)
+        tqdm_mock.assert_called_once()
+        self.assertEqual(tqdm_mock.call_args.kwargs["total"], 2)
+
     def test_get_commits_emits_scan_progress(self) -> None:
         commits = [object(), object(), object()]
         repository = Mock()
