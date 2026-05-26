@@ -129,6 +129,9 @@ settings:
   exclude_dirs:
     - docs
     - tests
+  exclude_template_mode: auto
+  exclude_template_names:
+    - python
   workers: 4
 
 repositories:
@@ -137,6 +140,7 @@ repositories:
     exclude_dirs:
       - tools
       - samples
+    exclude_template_mode: auto
   - path: https://github.com/user/repo2.git
     branch: develop
 
@@ -157,14 +161,24 @@ interactive:
     exclude_dirs:
       - node_modules
       - .venv
+    exclude_template_mode: auto
 ```
 
 Notes:
 
 - `repositories` entries may be a string (path/URL) or a mapping with `path`,
-  `branch`, and `exclude_dirs`. Branch defaults to `main`.
-- `lang`, `author_name`, and `exclude_dirs` accept a YAML list or a
+  `branch`, `exclude_dirs`, `include_subpath`, and exclude template settings.
+  Branch defaults to `main`.
+- `lang`, `author_name`, `exclude_dirs`, `exclude_template_names`, and
+  `exclude_template_files` accept a YAML list or a
   comma-separated string.
+- `exclude_template_mode` can be `auto`, `manual`, or `off`. `auto` detects
+  common project layouts and merges template excludes with manual
+  `exclude_dirs`; `manual` uses only `exclude_dirs`; `off` disables excludes.
+- Built-in exclude templates cover Python, .NET, Unity, Node.js, Java, Rust,
+  and Go projects. Add `settings.exclude_template_files` to load custom
+  template YAML files with `name`, `display_name`, `detect`, `exclude_dirs`,
+  and optional `priority`.
 - `init` can create a minimal starter config for interactive usage.
 - `run -i` uses `config.yml` by default and may use a YAML file without
   `repositories`.
@@ -176,9 +190,10 @@ Notes:
   selected automatically. The self-hosted GitLab URL can be entered at runtime.
 - `interactive.quick_defaults` stores non-secret defaults used by the Quick Review
   screen. It never stores tokens, client IDs, or authentication choices.
-- In the interactive flow, global excludes and per-repository excludes are combined
-  into the repository entries passed to the existing analysis pipeline. Quick
-  Review excludes are applied only when the path exists in the cached repo.
+- In the interactive flow, global excludes, per-repository excludes, and
+  detected exclude templates are combined before analysis. Template-derived
+  paths are kept even when they do not currently exist, and missing-path
+  warnings are reserved for manual excludes.
 - Quick Review starts with a compact summary and uses terminal colors when
   supported to distinguish headings, summary values, actions, and cache states.
   Press `d` to show repository-level details and full execution conditions.

@@ -115,12 +115,14 @@ settings:
   until: '2026-05-31'
   interval: monthly
   no_plot_show: false
+  exclude_template_mode: auto
 
 repositories:
   - path: https://github.com/example/project.git
     branch: main
     exclude_dirs:
       - node_modules
+    exclude_template_mode: auto
 
 interactive:
   providers:
@@ -134,9 +136,22 @@ interactive:
     output: output
     interval: monthly
     cache_policy: use
+    exclude_template_mode: auto
     lang:
       - Python
 ```
+
+### 除外パステンプレート
+
+`exclude_template_mode` は `auto`, `manual`, `off` を指定できます。
+`auto` ではリポジトリ構成から Python / .NET / Unity / Node.js / Java /
+Rust / Go の一般的な生成物・依存物ディレクトリを推定し、手動の
+`exclude_dirs` と統合します。`manual` は `exclude_dirs` のみ、`off` は
+除外なしで解析します。
+
+独自テンプレートを使う場合は `settings.exclude_template_files` に YAML
+ファイルを指定します。テンプレートには `name`, `display_name`, `detect`,
+`exclude_dirs`, 任意の `priority` を定義できます。
 
 `interactive.quick_defaults` は Quick Review で使う非シークレットの既定値です。
 トークン、client ID、認証方式は保存しません。
