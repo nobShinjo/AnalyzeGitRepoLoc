@@ -145,7 +145,7 @@ class RemoteRepoManager:
             try:
                 if origin.url != candidate:
                     origin.set_url(candidate)
-                repo.git.fetch("--all", "--prune")
+                repo.git.fetch("--all", "--prune", env=self._auth.git_env())
                 self._auth.log_auth_success(candidate)
                 return
             except GitCommandError as ex:
@@ -172,7 +172,7 @@ class RemoteRepoManager:
         last_error: GitCommandError | None = None
         for candidate in self._auth.build_auth_candidates(repo_url):
             try:
-                repo = Repo.clone_from(candidate, repo_path)
+                repo = Repo.clone_from(candidate, repo_path, env=self._auth.git_env())
                 sanitized_candidate = self._auth.strip_credentials(candidate)
                 if repo.remotes and repo.remotes.origin.url != sanitized_candidate:
                     repo.remotes.origin.set_url(sanitized_candidate)

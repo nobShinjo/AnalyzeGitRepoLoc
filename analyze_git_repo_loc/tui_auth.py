@@ -27,14 +27,13 @@ from __future__ import annotations
 
 import os
 import shutil
-import subprocess
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlparse
 
 from analyze_git_repo_loc.i18n import tr
-from analyze_git_repo_loc.remote_auth import build_host_token_env_var
+from analyze_git_repo_loc.remote_auth import build_host_token_env_var, get_cli_token
 from analyze_git_repo_loc.remote_oauth import (
     DEFAULT_GITHUB_SCOPES,
     DEFAULT_GITLAB_SCOPES,
@@ -98,52 +97,6 @@ def _hostname_from_base_url(provider: str, base_url: str) -> str:
         return "github.com"
     parsed = urlparse(base_url)
     return parsed.hostname or base_url.replace("https://", "").replace("http://", "").split("/")[0]
-
-
-def _parse_glab_token(output: str) -> str | None:
-    for line in output.splitlines():
-        stripped = line.strip()
-        if stripped.lower().startswith("token:"):
-            token = stripped.split(":", 1)[1].strip()
-            return token or None
-    return None
-
-
-def get_cli_token(
-    provider: str,
-    base_url: str,
-    *,
-    runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
-) -> str | None:
-    """
-    Return a token from `gh` or `glab` when a CLI login is available.
-
-    Args:
-        provider (str): `github` or `gitlab`.
-        base_url (str): Provider API or instance base URL.
-        runner (Callable): Command runner, injected by tests.
-
-    Returns:
-        str | None: CLI token, or None if unavailable.
-    """
-    hostname = _hostname_from_base_url(provider, base_url)
-    if provider == "github":
-        command = ["gh", "auth", "token", "--hostname", hostname]
-    elif provider == "gitlab":
-        command = ["glab", "auth", "status", "--hostname", hostname, "--show-token"]
-    else:
-        raise DeviceCodeLoginError(f"Unsupported provider '{provider}'.")
-
-    try:
-        result = runner(command, capture_output=True, text=True, timeout=15)
-    except (OSError, subprocess.SubprocessError):
-        return None
-    if result.returncode != 0:
-        return None
-    output = result.stdout.strip()
-    if provider == "github":
-        return output or None
-    return _parse_glab_token(output)
 
 
 def get_device_client_id(provider: str, base_url: str) -> str | None:

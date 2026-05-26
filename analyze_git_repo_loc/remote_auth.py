@@ -24,7 +24,10 @@ from __future__ import annotations
 
 import os
 import re
-from urllib.parse import urlparse
+import shutil
+import subprocess
+from collections.abc import Callable
+from urllib.parse import ParseResult, urlparse
 
 from git import GitCommandError
 from tqdm import tqdm
@@ -48,10 +51,102 @@ def build_host_token_env_var(host: str) -> str:
     return f"ANALYZE_GIT_REPO_LOC_TOKEN_{normalized}"
 
 
+def get_cli_token(
+    provider: str,
+    base_url: str,
+    *,
+    runner: Callable[..., subprocess.CompletedProcess[str]] | None = None,
+) -> str | None:
+    """
+    Return a token from `gh` or `glab` when a CLI login is available.
+
+    Args:
+        provider (str): `github` or `gitlab`.
+        base_url (str): Provider API or instance base URL.
+        runner (Callable | None): Command runner, injected by tests.
+
+    Returns:
+        str | None: CLI token, or None if unavailable.
+    """
+    hostname = _hostname_from_base_url(provider, base_url)
+    if provider == "github":
+        command = ["gh", "auth", "token", "--hostname", hostname]
+    elif provider == "gitlab":
+        command = [
+            "glab",
+            "auth",
+            "status",
+            "--hostname",
+            hostname,
+            "--show-token",
+        ]
+    else:
+        return None
+    if shutil.which(command[0]) is None:
+        return None
+
+    command_runner = runner or subprocess.run
+    try:
+        result = command_runner(command, capture_output=True, text=True, timeout=15)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if result.returncode != 0:
+        return None
+    output = result.stdout.strip()
+    if provider == "github":
+        return output or None
+    return _parse_glab_token(output)
+
+
+def _hostname_from_base_url(provider: str, base_url: str) -> str:
+    if provider == "github" and base_url.rstrip("/") == "https://api.github.com":
+        return "github.com"
+    parsed = urlparse(base_url)
+    return (
+        parsed.hostname
+        or base_url.replace("https://", "").replace("http://", "").split("/")[0]
+    )
+
+
+def _parse_glab_token(output: str) -> str | None:
+    for line in output.splitlines():
+        stripped = line.strip()
+        if stripped.lower().startswith("token:"):
+            token = stripped.split(":", 1)[1].strip()
+            return token or None
+    return None
+
+
+def _provider_from_hostname(hostname: str) -> str | None:
+    normalized = hostname.lower()
+    if "github" in normalized:
+        return "github"
+    if "gitlab" in normalized:
+        return "gitlab"
+    return None
+
+
+def _base_url_for_hostname(parsed_url: ParseResult) -> str:
+    netloc = parsed_url.hostname or ""
+    if parsed_url.port:
+        netloc = f"{netloc}:{parsed_url.port}"
+    return parsed_url._replace(
+        netloc=netloc,
+        path="",
+        params="",
+        query="",
+        fragment="",
+    ).geturl()
+
+
 class RemoteAuthService:
     """Encapsulates remote authentication helpers."""
 
     _AUTH_LOG_ENV = "ANALYZE_GIT_REPO_LOC_LOG_AUTH"
+    _NONINTERACTIVE_GIT_ENV = {
+        "GIT_TERMINAL_PROMPT": "0",
+        "GCM_INTERACTIVE": "never",
+    }
 
     def build_auth_candidates(self, repo_url: str) -> list[str]:
         """
@@ -71,6 +166,9 @@ class RemoteAuthService:
             token_url = self._build_https_token_url(repo_url)
             if token_url:
                 candidates.append(token_url)
+            cli_token_url = self._build_https_cli_token_url(repo_url)
+            if cli_token_url:
+                candidates.append(cli_token_url)
             candidates.append(repo_url)
         else:
             candidates.append(repo_url)
@@ -82,6 +180,15 @@ class RemoteAuthService:
                 unique.append(candidate)
                 seen.add(candidate)
         return unique
+
+    def git_env(self) -> dict[str, str]:
+        """
+        Return Git environment overrides for non-interactive command execution.
+
+        Returns:
+            dict[str, str]: Environment variables that disable credential prompts.
+        """
+        return dict(self._NONINTERACTIVE_GIT_ENV)
 
     def strip_credentials(self, repo_url: str) -> str:
         """
@@ -208,6 +315,50 @@ class RemoteAuthService:
         if token_info is None:
             return None
         token, username = token_info
+        return self._build_https_url_with_token(repo_url, token, username)
+
+    def _build_https_cli_token_url(self, repo_url: str) -> str | None:
+        """
+        Build an HTTPS URL using a token from GitHub/GitLab CLI login.
+
+        Args:
+            repo_url (str): Repository URL.
+
+        Returns:
+            str | None: Token-authenticated URL when CLI auth is available.
+        """
+        parsed = urlparse(repo_url)
+        if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+            return None
+        provider = _provider_from_hostname(parsed.hostname)
+        if provider is None:
+            return None
+        token = get_cli_token(provider, _base_url_for_hostname(parsed))
+        if not token:
+            return None
+        username = "x-access-token" if provider == "github" else "oauth2"
+        return self._build_https_url_with_token(repo_url, token, username)
+
+    def _build_https_url_with_token(
+        self,
+        repo_url: str,
+        token: str,
+        username: str,
+    ) -> str | None:
+        """
+        Build an HTTPS URL embedding a username/token pair.
+
+        Args:
+            repo_url (str): Repository URL.
+            token (str): Access token.
+            username (str): Token username for the Git hosting provider.
+
+        Returns:
+            str | None: Token-authenticated URL.
+        """
+        parsed = urlparse(repo_url)
+        if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+            return None
         netloc = f"{username}:{token}@{parsed.hostname}"
         if parsed.port:
             netloc = f"{netloc}:{parsed.port}"
