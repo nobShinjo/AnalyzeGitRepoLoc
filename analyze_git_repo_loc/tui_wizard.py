@@ -37,6 +37,11 @@ from typing import Any
 import yaml
 from colorama import Fore, Style, just_fix_windows_console
 
+from analyze_git_repo_loc.exclude_templates import (
+    build_exclude_recommendation,
+    load_exclude_templates,
+    normalize_exclude_template_mode,
+)
 from analyze_git_repo_loc.i18n import tr
 from analyze_git_repo_loc.language_extensions import LanguageExtensions
 from analyze_git_repo_loc.remote_catalog import (
@@ -75,6 +80,8 @@ class SelectedRepositoryConfig:
     cache_status: str = "missing"
     include_subpath: str | None = None
     exclude_dirs: list[str] = field(default_factory=list)
+    exclude_template_mode: str | None = None
+    exclude_template_names: list[str] | None = None
 
     def git_url(self, clone_protocol: str) -> str:
         """Return the repository URL for the selected clone protocol."""
@@ -91,6 +98,9 @@ class TuiQuickDefaults:
     author_name: list[str] | None = None
     lang: list[str] | None = None
     exclude_dirs: list[str] | None = None
+    exclude_template_mode: str | None = None
+    exclude_template_names: list[str] | None = None
+    exclude_template_files: list[str] | None = None
     workers: int | None = None
     output: Path | None = None
     cache_policy: str | None = None
@@ -103,8 +113,9 @@ class LightweightRecommendations:
 
     languages: list[str] = field(default_factory=list)
     exclude_dirs: list[str] = field(default_factory=list)
+    detected_templates: list[str] = field(default_factory=list)
     language_source: str = "not detected"
-    exclude_source: str = "built-in defaults"
+    exclude_source: str = "exclude templates"
 
 
 @dataclass
@@ -124,6 +135,9 @@ class TuiWizardState:
     lang: list[str] | None = None
     workers: int | None = None
     global_exclude_dirs: list[str] | None = None
+    exclude_template_mode: str = "auto"
+    exclude_template_names: list[str] | None = None
+    exclude_template_files: list[str] | None = None
     output: Path = Path("./out")
     clear_cache: bool = False
     refresh_remote_cache_only: bool = False
@@ -345,6 +359,9 @@ def load_quick_defaults(config_data: dict[str, Any]) -> TuiQuickDefaults:
             raise ValueError(
                 "interactive.quick_defaults.cache_policy must be use, update, or clear."
             )
+    exclude_template_mode = quick_defaults.get("exclude_template_mode")
+    if exclude_template_mode is not None:
+        exclude_template_mode = normalize_exclude_template_mode(exclude_template_mode)
 
     return TuiQuickDefaults(
         since=_parse_date(str(quick_defaults.get("since") or "")),
@@ -353,6 +370,13 @@ def load_quick_defaults(config_data: dict[str, Any]) -> TuiQuickDefaults:
         author_name=_normalize_list_value(quick_defaults.get("author_name")),
         lang=_normalize_list_value(quick_defaults.get("lang")),
         exclude_dirs=_normalize_list_value(quick_defaults.get("exclude_dirs")),
+        exclude_template_mode=exclude_template_mode,
+        exclude_template_names=_normalize_list_value(
+            quick_defaults.get("exclude_template_names")
+        ),
+        exclude_template_files=_normalize_list_value(
+            quick_defaults.get("exclude_template_files")
+        ),
         workers=_parse_optional_int(quick_defaults.get("workers"), "workers"),
         output=Path(quick_defaults["output"]) if quick_defaults.get("output") else None,
         cache_policy=cache_policy,
@@ -561,6 +585,9 @@ def build_lightweight_recommendations(
         LightweightRecommendations: Language and path recommendations.
     """
     language_counts: Counter[str] = Counter()
+    exclude_paths: list[str] = []
+    detected_templates: list[str] = []
+    templates = load_exclude_templates(state.exclude_template_files)
     for repository in state.selected_repositories:
         if repository.cache_status != "cached":
             continue
@@ -569,7 +596,24 @@ def build_lightweight_recommendations(
             clone_protocol=state.clone_protocol,
             output=state.output,
         )
+        if repository.include_subpath:
+            cache_path = cache_path / repository.include_subpath
         language_counts.update(_scan_language_counts(cache_path))
+        recommendation = build_exclude_recommendation(
+            cache_path,
+            manual_excludes=_combined_manual_excludes(state, repository),
+            selected_template_names=(
+                repository.exclude_template_names
+                if repository.exclude_template_names is not None
+                else state.exclude_template_names
+            ),
+            mode=repository.exclude_template_mode or state.exclude_template_mode,
+            templates=templates,
+        )
+        exclude_paths.extend(recommendation.paths)
+        detected_templates.extend(
+            item.template.display_name for item in recommendation.detected_templates
+        )
 
     languages = [
         language
@@ -581,7 +625,8 @@ def build_lightweight_recommendations(
     language_source = "existing cache" if languages else "not detected"
     return LightweightRecommendations(
         languages=languages,
-        exclude_dirs=list(DEFAULT_RECOMMENDED_EXCLUDES),
+        exclude_dirs=_deduplicate_text(exclude_paths),
+        detected_templates=_deduplicate_text(detected_templates),
         language_source=language_source,
     )
 
@@ -740,6 +785,12 @@ def apply_quick_defaults(
         state.lang = defaults.lang
     if defaults.exclude_dirs is not None:
         state.global_exclude_dirs = defaults.exclude_dirs
+    if defaults.exclude_template_mode is not None:
+        state.exclude_template_mode = defaults.exclude_template_mode
+    if defaults.exclude_template_names is not None:
+        state.exclude_template_names = defaults.exclude_template_names
+    if defaults.exclude_template_files is not None:
+        state.exclude_template_files = defaults.exclude_template_files
     if defaults.workers is not None:
         state.workers = defaults.workers
     if defaults.output is not None:
@@ -797,6 +848,16 @@ def apply_repository_overrides(
                     for item in exclude_dirs
                     if str(item).strip()
                 ]
+        exclude_template_mode = override.get("exclude_template_mode")
+        if exclude_template_mode is not None:
+            repository.exclude_template_mode = normalize_exclude_template_mode(
+                exclude_template_mode
+            )
+        exclude_template_names = override.get("exclude_template_names")
+        if exclude_template_names is not None:
+            repository.exclude_template_names = _normalize_list_value(
+                exclude_template_names
+            )
 
 
 def _prompt_branch_selection(state: TuiWizardState) -> None:
@@ -846,9 +907,27 @@ def _prompt_analysis_scope(state: TuiWizardState) -> None:
 def _prompt_path_rules(state: TuiWizardState) -> None:
     print()
     print(tr("tui.path_rules"))
+    state.exclude_template_mode = normalize_exclude_template_mode(
+        _prompt("Exclude template mode (auto/manual/off)", state.exclude_template_mode)
+    )
+    templates = load_exclude_templates(state.exclude_template_files)
+    template_names = ", ".join(template.name for template in templates)
+    selected_default = ", ".join(state.exclude_template_names or [])
+    selected_templates = _prompt(
+        f"Exclude templates to force [blank=auto-detect; available: {template_names}]",
+        selected_default,
+    )
+    state.exclude_template_names = split_csv(selected_templates) or None
     state.global_exclude_dirs = split_csv(
         _prompt(tr("tui.global_excludes_prompt"), _prompt_list_default(state.global_exclude_dirs))
     )
+    state.recommendations = build_lightweight_recommendations(state)
+    if state.recommendations.detected_templates:
+        print("Detected exclude templates:")
+        for template_name in state.recommendations.detected_templates:
+            print(f"- [x] {template_name}")
+    if state.recommendations.exclude_dirs:
+        print("Recommended excludes: " + format_compact_list(state.recommendations.exclude_dirs))
     if not _prompt_bool(tr("tui.edit_per_repo_paths"), False):
         return
     for repository in state.selected_repositories:
@@ -857,11 +936,22 @@ def _prompt_path_rules(state: TuiWizardState) -> None:
             repository.include_subpath or "",
         )
         repository.include_subpath = include_subpath or None
+        repo_mode = _prompt(
+            f"Exclude template mode for {repository.ref.full_name} [blank=global]",
+            repository.exclude_template_mode or "",
+        )
+        repository.exclude_template_mode = repo_mode or None
+        repo_template_names = _prompt(
+            f"Exclude templates for {repository.ref.full_name} [blank=global/auto]",
+            ", ".join(repository.exclude_template_names or []),
+        )
+        repository.exclude_template_names = split_csv(repo_template_names) or None
         exclude_dirs = _prompt(
             tr("tui.repo_extra_excludes_prompt", repo=repository.ref.full_name),
             ", ".join(repository.exclude_dirs),
         )
         repository.exclude_dirs = split_csv(exclude_dirs) or []
+    state.recommendations = build_lightweight_recommendations(state)
 
 
 def _prompt_output_cache_display(state: TuiWizardState) -> None:
@@ -939,6 +1029,11 @@ def render_final_review(
         if state.recommendations.languages
         else tr("tui.none")
     )
+    detected_templates = (
+        format_compact_list(state.recommendations.detected_templates, limit=5)
+        if state.recommendations.detected_templates
+        else tr("tui.none")
+    )
     summary = _review_summary(state)
     if not detailed:
         return "\n".join(
@@ -978,6 +1073,8 @@ def render_final_review(
             source=state.recommendations.language_source,
         ),
         tr("tui.global_excludes", value=format_optional_list(state.global_exclude_dirs)),
+        f"Exclude template mode: {state.exclude_template_mode}",
+        f"Detected exclude templates: {detected_templates}",
         tr(
             "tui.recommended_excludes",
             value=format_compact_list(state.recommendations.exclude_dirs, limit=5),
@@ -1004,13 +1101,53 @@ def render_final_review(
     return "\n".join(lines)
 
 
+def _deduplicate_text(values: list[str]) -> list[str]:
+    """Return non-empty strings with stable de-duplication."""
+    result: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        normalized = str(value).strip()
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        result.append(normalized)
+    return result
+
+
+def _combined_manual_excludes(
+    state: TuiWizardState,
+    repository: SelectedRepositoryConfig,
+) -> list[str] | None:
+    """Return manually configured global and per-repository excludes."""
+    excludes = list(state.global_exclude_dirs or [])
+    excludes.extend(repository.exclude_dirs)
+    return _deduplicate_text(excludes) or None
+
+
 def _combined_excludes(
     state: TuiWizardState,
     repository: SelectedRepositoryConfig,
 ) -> list[str] | None:
-    excludes = list(state.global_exclude_dirs or [])
-    excludes.extend(repository.exclude_dirs)
-    return excludes or None
+    manual_excludes = _combined_manual_excludes(state, repository)
+    cache_path = determine_cache_path(
+        repository.ref,
+        clone_protocol=state.clone_protocol,
+        output=state.output,
+    )
+    if repository.include_subpath:
+        cache_path = cache_path / repository.include_subpath
+    recommendation = build_exclude_recommendation(
+        cache_path,
+        manual_excludes=manual_excludes,
+        selected_template_names=(
+            repository.exclude_template_names
+            if repository.exclude_template_names is not None
+            else state.exclude_template_names
+        ),
+        mode=repository.exclude_template_mode or state.exclude_template_mode,
+        templates=load_exclude_templates(state.exclude_template_files),
+    )
+    return recommendation.paths or None
 
 
 def _filter_present_excludes(
@@ -1018,14 +1155,8 @@ def _filter_present_excludes(
     repository: SelectedRepositoryConfig,
     excludes: list[str] | None,
 ) -> list[str]:
-    if not excludes or repository.cache_status != "cached":
-        return excludes or []
-    cache_path = determine_cache_path(
-        repository.ref,
-        clone_protocol=state.clone_protocol,
-        output=state.output,
-    )
-    return [exclude for exclude in excludes if (cache_path / exclude).exists()]
+    """Return selected excludes without dropping template paths that are absent now."""
+    return excludes or []
 
 
 def apply_wizard_state(args: argparse.Namespace, state: TuiWizardState) -> argparse.Namespace:
@@ -1046,9 +1177,11 @@ def apply_wizard_state(args: argparse.Namespace, state: TuiWizardState) -> argpa
             _filter_present_excludes(
                 state,
                 repository,
-                _combined_excludes(state, repository),
+                _combined_manual_excludes(state, repository),
             ),
             repository.include_subpath,
+            repository.exclude_template_mode,
+            repository.exclude_template_names,
         )
         for repository in state.selected_repositories
     ]
@@ -1058,6 +1191,9 @@ def apply_wizard_state(args: argparse.Namespace, state: TuiWizardState) -> argpa
     args.author_name = state.author_name
     args.lang = state.lang
     args.exclude_dirs = None
+    args.exclude_template_mode = state.exclude_template_mode
+    args.exclude_template_names = state.exclude_template_names
+    args.exclude_template_files = state.exclude_template_files
     args.workers = state.workers
     args.output = state.output
     args.clear_cache = state.clear_cache
@@ -1087,9 +1223,12 @@ def wizard_state_to_config(state: TuiWizardState) -> dict[str, Any]:
             "path": repository.git_url(state.clone_protocol),
             "branch": repository.branch or repository.ref.default_branch or "main",
         }
-        excludes = _combined_excludes(state, repository)
-        if excludes:
-            entry["exclude_dirs"] = excludes
+        if repository.exclude_dirs:
+            entry["exclude_dirs"] = repository.exclude_dirs
+        if repository.exclude_template_mode:
+            entry["exclude_template_mode"] = repository.exclude_template_mode
+        if repository.exclude_template_names:
+            entry["exclude_template_names"] = repository.exclude_template_names
         if repository.include_subpath:
             entry["include_subpath"] = repository.include_subpath
         repositories.append(entry)
@@ -1098,7 +1237,12 @@ def wizard_state_to_config(state: TuiWizardState) -> dict[str, Any]:
         "interval": state.interval,
         "clear_cache": state.clear_cache,
         "no_plot_show": state.no_plot_show,
+        "exclude_template_mode": state.exclude_template_mode,
     }
+    if state.exclude_template_names:
+        settings["exclude_template_names"] = state.exclude_template_names
+    if state.exclude_template_files:
+        settings["exclude_template_files"] = state.exclude_template_files
     if state.since is not None:
         settings["since"] = _format_date(state.since)
     if state.until is not None:
@@ -1119,7 +1263,12 @@ def wizard_state_to_config(state: TuiWizardState) -> dict[str, Any]:
         "interval": state.interval,
         "cache_policy": cache_policy,
         "no_plot_show": state.no_plot_show,
+        "exclude_template_mode": state.exclude_template_mode,
     }
+    if state.exclude_template_names:
+        quick_defaults["exclude_template_names"] = state.exclude_template_names
+    if state.exclude_template_files:
+        quick_defaults["exclude_template_files"] = state.exclude_template_files
     if state.since is not None:
         quick_defaults["since"] = _format_date(state.since)
     if state.until is not None:

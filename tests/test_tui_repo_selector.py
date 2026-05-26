@@ -1047,7 +1047,16 @@ class TuiWizardStateTests(unittest.TestCase):
 
         self.assertEqual(
             args.repo_paths,
-            [("git@github.com:org/alpha.git", "develop", ["vendor", "generated"], "src")],
+            [
+                (
+                    "git@github.com:org/alpha.git",
+                    "develop",
+                    ["vendor", "generated"],
+                    "src",
+                    None,
+                    None,
+                )
+            ],
         )
         self.assertEqual(args.interval, "weekly")
         self.assertEqual(args.lang, ["Python"])
@@ -1057,7 +1066,7 @@ class TuiWizardStateTests(unittest.TestCase):
         self.assertTrue(args.clear_cache)
         self.assertTrue(args.no_plot_show)
 
-    def test_apply_wizard_state_filters_missing_excludes_per_cached_repo(self) -> None:
+    def test_apply_wizard_state_keeps_missing_template_ready_excludes(self) -> None:
         ref = RemoteRepositoryRef(
             "github",
             "alpha",
@@ -1086,7 +1095,7 @@ class TuiWizardStateTests(unittest.TestCase):
             ):
                 args = apply_wizard_state(argparse.Namespace(), state)
 
-        self.assertEqual(args.repo_paths[0][2], ["node_modules"])
+        self.assertEqual(args.repo_paths[0][2], ["node_modules", ".venv"])
 
     def test_include_subpath_rejects_absolute_paths(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
