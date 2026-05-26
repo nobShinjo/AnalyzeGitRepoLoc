@@ -66,6 +66,7 @@ class GitRepoLOCAnalyzer:
         authors: list[str] = None,
         languages: list[str] = None,
         exclude_dirs: list[str] = None,
+        exclude_warning_dirs: list[str] | None = None,
         repo_ref: Union[Path, str, None] = None,
         show_progress: bool = True,
     ):
@@ -84,6 +85,7 @@ class GitRepoLOCAnalyzer:
             authors (list[str]): A list of author names to filter commits.
             languages (list[str]): A list of languages to filter commits.
             exclude_dirs (list[str]): A list of directories to exclude from analysis.
+            exclude_warning_dirs (list[str] | None): Excluded directories that should emit missing-path warnings.
             repo_ref (Union[Path, str, None]): Original repository path or URL for cache identity.
             show_progress (bool): Whether to show progress bars during analysis.
 
@@ -124,8 +126,9 @@ class GitRepoLOCAnalyzer:
         self._exclude_dirs = [Path(repo_path).resolve() / d for d in exclude_dirs or []]
         """ List of directories to exclude from analysis """
 
-        # Check if exclude directories exist
-        for raw_exclude_dir, exclude_dir in zip(exclude_dirs or [], self._exclude_dirs):
+        warning_dirs = exclude_dirs if exclude_warning_dirs is None else exclude_warning_dirs
+        for raw_exclude_dir in warning_dirs or []:
+            exclude_dir = Path(repo_path).resolve() / raw_exclude_dir
             if not exclude_dir.exists():
                 self._warnings.append(
                     f"excluded path does not exist: {raw_exclude_dir}"

@@ -32,6 +32,12 @@ import pandas as pd
 from tqdm import tqdm
 
 from analyze_git_repo_loc.colored_console_printer import ColoredConsolePrinter
+from analyze_git_repo_loc.exclude_templates import (
+    ExcludeTemplateMode,
+    build_exclude_recommendation,
+    load_exclude_templates,
+    normalize_exclude_template_mode,
+)
 from analyze_git_repo_loc.git_repo_loc_analyzer import GitRepoLOCAnalyzer
 from analyze_git_repo_loc.i18n import tr
 from analyze_git_repo_loc.remote_auth import RemoteAuthError
@@ -385,6 +391,9 @@ def parse_arguments(parser: argparse.ArgumentParser) -> argparse.Namespace:
         lang=None,
         author_name=None,
         exclude_dirs=None,
+        exclude_template_mode="auto",
+        exclude_template_names=None,
+        exclude_template_files=None,
         workers=None,
         clear_cache=None,
         no_plot_show=None,
@@ -437,6 +446,9 @@ def parse_arguments(parser: argparse.ArgumentParser) -> argparse.Namespace:
         lang=None,
         author_name=None,
         exclude_dirs=None,
+        exclude_template_mode="auto",
+        exclude_template_names=None,
+        exclude_template_files=None,
         workers=None,
         clear_cache=None,
     )
@@ -455,6 +467,15 @@ def parse_arguments(parser: argparse.ArgumentParser) -> argparse.Namespace:
         args.lang = _normalize_optional_list(args.lang)
         args.author_name = _normalize_optional_list(args.author_name)
         args.exclude_dirs = _normalize_optional_list(args.exclude_dirs)
+        args.exclude_template_mode = normalize_exclude_template_mode(
+            getattr(args, "exclude_template_mode", "auto")
+        )
+        args.exclude_template_names = _normalize_optional_list(
+            getattr(args, "exclude_template_names", None)
+        )
+        args.exclude_template_files = _normalize_optional_list(
+            getattr(args, "exclude_template_files", None)
+        )
         args.workers = _normalize_optional_int(args.workers, "--workers")
         if args.clear_cache is None:
             args.clear_cache = False
@@ -571,7 +592,8 @@ def _create_analyzer(
     until: datetime | None,
     authors: list[str] | None,
     languages: list[str] | None,
-    exclude_dirs: list[Path] | None,
+    exclude_dirs: list[str] | None,
+    exclude_warning_dirs: list[str] | None,
     show_progress: bool,
 ) -> GitRepoLOCAnalyzer:
     """
@@ -590,6 +612,7 @@ def _create_analyzer(
         authors=authors,
         languages=languages,
         exclude_dirs=exclude_dirs,
+        exclude_warning_dirs=exclude_warning_dirs,
         repo_ref=repo_ref,
         show_progress=show_progress,
     )
@@ -640,8 +663,11 @@ def _analyze_single_repository(
     index: int,
     repo_path: Path | str,
     branch_name: str,
-    exclude_dirs: list[Path] | None,
+    exclude_dirs: list[str] | None,
     include_subpath: str | Path | None,
+    exclude_template_mode: ExcludeTemplateMode,
+    exclude_template_names: list[str] | None,
+    exclude_template_files: list[str] | None,
     output_dir: Path,
     since: datetime | None,
     until: datetime | None,
@@ -671,8 +697,6 @@ def _analyze_single_repository(
         console.print_h1(
             f"# Analysis of LOC in git repository: {repository_name} ({branch_name})",
         )
-        if exclude_dirs is not None:
-            console.print_h1(f"## Excluded directories:{exclude_dirs}")
     try:
         analysis_repo_path = _resolve_analysis_repo_path(
             repo_path=repo_path,
@@ -683,6 +707,17 @@ def _analyze_single_repository(
             analysis_repo_path,
             include_subpath,
         )
+        exclude_recommendation = _build_exclude_recommendation_for_repo(
+            analysis_repo_path=analysis_repo_path,
+            manual_excludes=exclude_dirs,
+            template_mode=exclude_template_mode,
+            template_names=exclude_template_names,
+            template_files=exclude_template_files,
+        )
+        final_exclude_dirs = exclude_recommendation.paths or None
+        manual_warning_dirs = exclude_recommendation.manual_paths
+        if show_progress and console is not None and final_exclude_dirs is not None:
+            console.print_h1(f"## Excluded directories:{final_exclude_dirs}")
 
         analyzer = _create_analyzer(
             analysis_repo_path=analysis_repo_path,
@@ -694,7 +729,8 @@ def _analyze_single_repository(
             until=until,
             authors=authors,
             languages=languages,
-            exclude_dirs=exclude_dirs,
+            exclude_dirs=final_exclude_dirs,
+            exclude_warning_dirs=manual_warning_dirs,
             show_progress=show_progress,
         )
 
@@ -827,35 +863,77 @@ def analyze_trends(
 
 
 def _resolve_exclude_dirs(
-    args: argparse.Namespace, exclude_dirs: list[Path] | None
-) -> list[Path] | None:
+    args: argparse.Namespace, exclude_dirs: list[str] | None
+) -> list[str] | None:
     """
-    Resolve excluded directories, preferring CLI overrides when provided.
+    Resolve manually configured excluded directories, preferring CLI overrides.
     """
     if args.exclude_dirs is not None:
         return args.exclude_dirs
     return exclude_dirs
 
 
+def _resolve_exclude_template_mode(
+    args: argparse.Namespace,
+    repo_mode: str | None,
+) -> ExcludeTemplateMode:
+    """Resolve repository-level exclude template mode with settings fallback."""
+    if repo_mode is not None:
+        return normalize_exclude_template_mode(repo_mode)
+    return normalize_exclude_template_mode(getattr(args, "exclude_template_mode", "auto"))
+
+
+def _resolve_exclude_template_names(
+    args: argparse.Namespace,
+    repo_template_names: list[str] | None,
+) -> list[str] | None:
+    """Resolve repository-level selected exclude templates with settings fallback."""
+    if repo_template_names is not None:
+        return repo_template_names
+    return getattr(args, "exclude_template_names", None)
+
+
+def _build_exclude_recommendation_for_repo(
+    *,
+    analysis_repo_path: Path | str,
+    manual_excludes: list[str] | None,
+    template_mode: ExcludeTemplateMode,
+    template_names: list[str] | None,
+    template_files: list[str] | None,
+):
+    """Build repository exclude recommendation after clone and include-subpath resolution."""
+    templates = load_exclude_templates(template_files)
+    return build_exclude_recommendation(
+        Path(analysis_repo_path),
+        manual_excludes=manual_excludes,
+        selected_template_names=template_names,
+        mode=template_mode,
+        templates=templates,
+    )
+
+
 def _unpack_repo_entry(
     repo_entry: tuple,
-) -> tuple[Path | str, str, list[Path] | None, str | Path | None]:
+) -> tuple[Path | str, str, list[str] | None, str | Path | None, str | None, list[str] | None]:
     """
-    Normalize repository entries to include optional include subpath.
+    Normalize repository entries to include path and exclude template overrides.
     """
     if len(repo_entry) == 3:
         repo_path, branch_name, exclude_dirs = repo_entry
-        return repo_path, branch_name, exclude_dirs, None
+        return repo_path, branch_name, exclude_dirs, None, None, None
     if len(repo_entry) == 4:
         repo_path, branch_name, exclude_dirs, include_subpath = repo_entry
-        return repo_path, branch_name, exclude_dirs, include_subpath
-    raise ValueError("Repository entries must contain 3 or 4 values.")
+        return repo_path, branch_name, exclude_dirs, include_subpath, None, None
+    if len(repo_entry) == 6:
+        repo_path, branch_name, exclude_dirs, include_subpath, template_mode, template_names = repo_entry
+        return repo_path, branch_name, exclude_dirs, include_subpath, template_mode, template_names
+    raise ValueError("Repository entries must contain 3, 4, or 6 values.")
 
 
 def _analyze_repositories_sequential(
     *,
     args: argparse.Namespace,
-    repo_entries: list[tuple[Path | str, str, list[Path] | None]],
+    repo_entries: list[tuple],
     progress: tqdm,
     progress_queue: object | None = None,
     results: dict[int, pd.DataFrame],
@@ -865,10 +943,17 @@ def _analyze_repositories_sequential(
     Analyze repositories sequentially and update results in-place.
     """
     for index, repo_entry in enumerate(repo_entries):
-        repo_path, branch_name, exclude_dirs, include_subpath = _unpack_repo_entry(
-            repo_entry
-        )
+        (
+            repo_path,
+            branch_name,
+            exclude_dirs,
+            include_subpath,
+            repo_template_mode,
+            repo_template_names,
+        ) = _unpack_repo_entry(repo_entry)
         resolved_excludes = _resolve_exclude_dirs(args, exclude_dirs)
+        template_mode = _resolve_exclude_template_mode(args, repo_template_mode)
+        template_names = _resolve_exclude_template_names(args, repo_template_names)
         try:
             _, repository_name, loc_data, repo_warnings = _analyze_single_repository(
                 index=index,
@@ -876,6 +961,9 @@ def _analyze_repositories_sequential(
                 branch_name=branch_name,
                 exclude_dirs=resolved_excludes,
                 include_subpath=include_subpath,
+                exclude_template_mode=template_mode,
+                exclude_template_names=template_names,
+                exclude_template_files=getattr(args, "exclude_template_files", None),
                 output_dir=args.output,
                 since=args.since,
                 until=args.until,
@@ -906,7 +994,7 @@ def _build_repo_progress_bars(
     repo_bars: dict[int, tqdm] = {}
     repo_labels: dict[int, str] = {}
     for index, repo_entry in enumerate(repo_entries):
-        repo_path, _, _, _ = _unpack_repo_entry(repo_entry)
+        repo_path, _, _, _, _, _ = _unpack_repo_entry(repo_entry)
         repo_name = GitRepoLOCAnalyzer.get_repository_name(repo_path)
         label = _truncate_repo_label(repo_name, label_width)
         repo_labels[index] = label
@@ -945,7 +1033,7 @@ def _cleanup_repo_progress_listener(
 def _analyze_repositories_parallel(
     *,
     args: argparse.Namespace,
-    repo_entries: list[tuple[Path | str, str, list[Path] | None]],
+    repo_entries: list[tuple],
     worker_count: int,
     progress: tqdm,
     progress_queue: object | None = None,
@@ -958,10 +1046,17 @@ def _analyze_repositories_parallel(
     futures = []
     with ProcessPoolExecutor(max_workers=worker_count) as executor:
         for index, repo_entry in enumerate(repo_entries):
-            repo_path, branch_name, exclude_dirs, include_subpath = _unpack_repo_entry(
-                repo_entry
-            )
+            (
+                repo_path,
+                branch_name,
+                exclude_dirs,
+                include_subpath,
+                repo_template_mode,
+                repo_template_names,
+            ) = _unpack_repo_entry(repo_entry)
             resolved_excludes = _resolve_exclude_dirs(args, exclude_dirs)
+            template_mode = _resolve_exclude_template_mode(args, repo_template_mode)
+            template_names = _resolve_exclude_template_names(args, repo_template_names)
             futures.append(
                 executor.submit(
                     _analyze_single_repository,
@@ -970,6 +1065,9 @@ def _analyze_repositories_parallel(
                     branch_name=branch_name,
                     exclude_dirs=resolved_excludes,
                     include_subpath=include_subpath,
+                    exclude_template_mode=template_mode,
+                    exclude_template_names=template_names,
+                    exclude_template_files=getattr(args, "exclude_template_files", None),
                     output_dir=args.output,
                     since=args.since,
                     until=args.until,

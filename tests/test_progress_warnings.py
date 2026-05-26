@@ -55,8 +55,11 @@ class RepositoryWarningTests(unittest.TestCase):
                         index=0,
                         repo_path=repo_path,
                         branch_name="main",
-                        exclude_dirs=[Path(".venv")],
+                        exclude_dirs=[".venv"],
                         include_subpath=None,
+                        exclude_template_mode="manual",
+                        exclude_template_names=None,
+                        exclude_template_files=None,
                         output_dir=Path(tmp_dir) / "out",
                         since=None,
                         until=None,
@@ -68,6 +71,23 @@ class RepositoryWarningTests(unittest.TestCase):
 
         self.assertEqual(repository_name, "alpha")
         self.assertEqual(warnings, ["excluded path does not exist: .venv"])
+
+    def test_template_exclude_dir_does_not_emit_missing_path_warning(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            repo_path = Path(tmp_dir) / "alpha"
+            repo_path.mkdir()
+            (repo_path / "pyproject.toml").write_text("[project]\n", encoding="utf-8")
+            analyzer = GitRepoLOCAnalyzer(
+                repo_path=repo_path,
+                branch_name="main",
+                cache_dir=Path(tmp_dir) / "cache",
+                output_dir=Path(tmp_dir) / "out",
+                exclude_dirs=[".venv"],
+                exclude_warning_dirs=[],
+                show_progress=False,
+            )
+
+        self.assertEqual(analyzer._warnings, [])
 
     def test_repository_warnings_are_printed_as_summary(self) -> None:
         stderr = StringIO()
