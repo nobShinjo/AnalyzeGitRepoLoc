@@ -140,13 +140,17 @@ def _build_repo_entries(
     repositories: list[dict],
     repo_manager: RemoteRepoManager,
     normalize_list: Callable[[list[str] | str | None], list[str] | None],
-) -> list[tuple[Path | str, str, list[str], str | None]]:
+) -> list[tuple[Path | str, str, list[str], str | None, str | None, list[str] | None]]:
     repo_entries = []
     for repository in repositories:
         repo_path_value = repository["path"]
         branch_name = repository.get("branch") or "main"
         exclude_dirs = normalize_list(repository.get("exclude_dirs")) or []
         include_subpath = repository.get("include_subpath")
+        exclude_template_mode = repository.get("exclude_template_mode")
+        if exclude_template_mode is not None:
+            exclude_template_mode = str(exclude_template_mode).strip() or None
+        exclude_template_names = normalize_list(repository.get("exclude_template_names"))
         if include_subpath is not None:
             include_subpath = str(include_subpath).strip() or None
         repo_path = (
@@ -154,7 +158,19 @@ def _build_repo_entries(
             if repo_manager.is_git_url(repo_path_value)
             else Path(repo_path_value)
         )
-        repo_entries.append((repo_path, branch_name, exclude_dirs, include_subpath))
+        if exclude_template_mode is not None or exclude_template_names is not None:
+            repo_entries.append(
+                (
+                    repo_path,
+                    branch_name,
+                    exclude_dirs,
+                    include_subpath,
+                    exclude_template_mode,
+                    exclude_template_names,
+                )
+            )
+        else:
+            repo_entries.append((repo_path, branch_name, exclude_dirs, include_subpath))
     return repo_entries
 
 
@@ -186,6 +202,9 @@ def merge_yaml_config(
     args.lang = _pick_value(args, settings, "lang")
     args.author_name = _pick_value(args, settings, "author_name")
     args.exclude_dirs = _pick_value(args, settings, "exclude_dirs")
+    args.exclude_template_mode = settings.get("exclude_template_mode", "auto")
+    args.exclude_template_names = normalize_list(settings.get("exclude_template_names"))
+    args.exclude_template_files = normalize_list(settings.get("exclude_template_files"))
     args.workers = _resolve_workers(_pick_value(args, settings, "workers"))
     args.clear_cache = _resolve_optional_bool(
         _pick_value(args, settings, "clear_cache"),

@@ -67,6 +67,9 @@ class InitWizardState:
     no_plot_show: bool = True
     cache_policy: str = "use"
     exclude_dirs: list[str] = field(default_factory=lambda: ["node_modules", ".venv"])
+    exclude_template_mode: str = "auto"
+    exclude_template_names: list[str] = field(default_factory=list)
+    exclude_template_files: list[str] = field(default_factory=list)
     lang: list[str] = field(default_factory=list)
 
     def toggle_provider(self, key: str) -> None:
@@ -104,6 +107,9 @@ class InitWizardState:
             no_plot_show=self.no_plot_show,
             cache_policy=self.cache_policy,
             exclude_dirs=self.exclude_dirs,
+            exclude_template_mode=self.exclude_template_mode,
+            exclude_template_names=self.exclude_template_names,
+            exclude_template_files=self.exclude_template_files,
             lang=self.lang,
         )
 
@@ -151,6 +157,26 @@ def _load_existing_init_wizard_state(config_path: Path) -> InitWizardState:
     state.exclude_dirs = _normalize_string_list(
         quick_defaults.get("exclude_dirs", settings.get("exclude_dirs"))
     ) or ["node_modules", ".venv"]
+    state.exclude_template_mode = _validate_choice(
+        quick_defaults.get(
+            "exclude_template_mode",
+            settings.get("exclude_template_mode", "auto"),
+        ),
+        {"auto", "manual", "off"},
+        "exclude_template_mode",
+    )
+    state.exclude_template_names = _normalize_string_list(
+        quick_defaults.get(
+            "exclude_template_names",
+            settings.get("exclude_template_names"),
+        )
+    ) or []
+    state.exclude_template_files = _normalize_string_list(
+        quick_defaults.get(
+            "exclude_template_files",
+            settings.get("exclude_template_files"),
+        )
+    ) or []
     return state
 
 
@@ -250,6 +276,11 @@ def render_init_config_summary(state: InitWizardState, *, color: bool = False) -
         providers.append(label)
     period = f"{state.since or tr('init.value.blank')} -> {state.until or tr('init.value.blank')}"
     excludes = ", ".join(state.exclude_dirs) if state.exclude_dirs else tr("init.value.none")
+    template_names = (
+        ", ".join(state.exclude_template_names)
+        if state.exclude_template_names
+        else tr("init.value.blank")
+    )
     languages = ", ".join(state.lang) if state.lang else tr("init.value.all")
     rows = [
         (tr("init.label.config"), str(state.config_path)),
@@ -261,6 +292,8 @@ def render_init_config_summary(state: InitWizardState, *, color: bool = False) -
         (tr("init.label.auto_display"), tr("tui.off") if state.no_plot_show else tr("tui.on")),
         (tr("init.label.cache"), state.cache_policy),
         (tr("init.label.exclude_dirs"), excludes),
+        ("Exclude template mode", state.exclude_template_mode),
+        ("Exclude templates", template_names),
     ]
     if color:
         label_style = Fore.CYAN + Style.BRIGHT
@@ -329,6 +362,12 @@ class _InitWizardController:
             return ""
         if key == "exclude_dirs":
             return ",".join(self.state.exclude_dirs)
+        if key == "exclude_template_mode":
+            return self.state.exclude_template_mode
+        if key == "exclude_template_names":
+            return ",".join(self.state.exclude_template_names)
+        if key == "exclude_template_files":
+            return ",".join(self.state.exclude_template_files)
         return ""
 
     def render(self) -> str:
@@ -678,6 +717,23 @@ class _InitWizardController:
             self.state.exclude_dirs = [
                 item.strip() for item in value.split(",") if item.strip()
             ]
+            return
+        if key == "exclude_template_mode":
+            self.state.exclude_template_mode = _validate_choice(
+                value,
+                {"auto", "manual", "off"},
+                "exclude_template_mode",
+            )
+            return
+        if key == "exclude_template_names":
+            self.state.exclude_template_names = [
+                item.strip() for item in value.split(",") if item.strip()
+            ]
+            return
+        if key == "exclude_template_files":
+            self.state.exclude_template_files = [
+                item.strip() for item in value.split(",") if item.strip()
+            ]
 
     def _fields_for_current_step(self) -> list[tuple[str, str]]:
         if self.step == 0:
@@ -715,6 +771,9 @@ class _InitWizardController:
                 ),
                 ("cache_policy", tr("init.cache_policy")),
                 ("exclude_dirs", tr("init.field.common_exclude_dirs")),
+                ("exclude_template_mode", "Exclude template mode (auto/manual/off)"),
+                ("exclude_template_names", "Pinned exclude templates"),
+                ("exclude_template_files", "Custom exclude template files"),
             ]
         return []
 

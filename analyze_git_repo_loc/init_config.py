@@ -49,6 +49,9 @@ class InitConfigOptions:
     no_plot_show: bool = True
     cache_policy: str = "use"
     exclude_dirs: list[str] = field(default_factory=lambda: ["node_modules", ".venv"])
+    exclude_template_mode: str = "auto"
+    exclude_template_names: list[str] = field(default_factory=list)
+    exclude_template_files: list[str] = field(default_factory=list)
     lang: list[str] = field(default_factory=list)
 
 
@@ -66,7 +69,12 @@ def build_init_config_data(options: InitConfigOptions) -> dict[str, Any]:
         "interval": options.interval,
         "clear_cache": False,
         "no_plot_show": options.no_plot_show,
+        "exclude_template_mode": options.exclude_template_mode,
     }
+    if options.exclude_template_names:
+        settings["exclude_template_names"] = options.exclude_template_names
+    if options.exclude_template_files:
+        settings["exclude_template_files"] = options.exclude_template_files
     if options.since:
         settings["since"] = options.since
     if options.until:
@@ -79,7 +87,12 @@ def build_init_config_data(options: InitConfigOptions) -> dict[str, Any]:
         "cache_policy": options.cache_policy,
         "no_plot_show": options.no_plot_show,
         "exclude_dirs": options.exclude_dirs,
+        "exclude_template_mode": options.exclude_template_mode,
     }
+    if options.exclude_template_names:
+        quick_defaults["exclude_template_names"] = options.exclude_template_names
+    if options.exclude_template_files:
+        quick_defaults["exclude_template_files"] = options.exclude_template_files
     if options.lang:
         quick_defaults["lang"] = options.lang
 

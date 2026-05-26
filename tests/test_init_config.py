@@ -62,6 +62,11 @@ class InitConfigGenerationTests(unittest.TestCase):
             config["interactive"]["quick_defaults"]["exclude_dirs"],
             ["node_modules", ".venv"],
         )
+        self.assertEqual(config["settings"]["exclude_template_mode"], "auto")
+        self.assertEqual(
+            config["interactive"]["quick_defaults"]["exclude_template_mode"],
+            "auto",
+        )
         self.assertNotIn("lang", config["settings"])
         self.assertNotIn("lang", config["interactive"]["quick_defaults"])
         rendered = repr(config)
@@ -118,6 +123,26 @@ class InitConfigGenerationTests(unittest.TestCase):
         self.assertEqual(
             config["interactive"]["quick_defaults"]["lang"],
             ["C#", "Python"],
+        )
+
+    def test_exclude_template_defaults_are_saved_for_batch_and_interactive_runs(self) -> None:
+        config = build_init_config_data(
+            InitConfigOptions(
+                exclude_template_mode="auto",
+                exclude_template_names=["python"],
+                exclude_template_files=["exclude-templates.yml"],
+            )
+        )
+
+        self.assertEqual(config["settings"]["exclude_template_mode"], "auto")
+        self.assertEqual(config["settings"]["exclude_template_names"], ["python"])
+        self.assertEqual(
+            config["settings"]["exclude_template_files"],
+            ["exclude-templates.yml"],
+        )
+        self.assertEqual(
+            config["interactive"]["quick_defaults"]["exclude_template_names"],
+            ["python"],
         )
 
 
