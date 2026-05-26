@@ -236,6 +236,50 @@ class InitWizardStateTests(unittest.TestCase):
 
         self.assertEqual(controller.state.cache_policy, "update")
 
+    def test_exclude_template_mode_renders_as_select_options(self) -> None:
+        controller = _InitWizardController(Path("missing-test-config.yml"))
+        controller.step = 3
+        controller.field = 3
+
+        rendered = controller.render()
+
+        self.assertIn("[x] auto", rendered)
+        self.assertIn("[ ] manual", rendered)
+        self.assertIn("use only Common exclude directories", rendered)
+        self.assertIn(tr("init.select.instructions"), rendered)
+        self.assertNotIn("Edit the value below", rendered)
+
+    def test_exclude_template_mode_selection_updates_state(self) -> None:
+        controller = _InitWizardController(Path("missing-test-config.yml"))
+        controller.step = 3
+        controller.field = 3
+
+        controller.move_down()
+        controller.select_current_exclude_template_mode()
+
+        self.assertEqual(controller.state.exclude_template_mode, "manual")
+
+    def test_pinned_exclude_templates_render_as_checkboxes(self) -> None:
+        controller = _InitWizardController(Path("missing-test-config.yml"))
+        controller.step = 3
+        controller.field = 4
+
+        rendered = controller.render()
+
+        self.assertIn("Pinned exclude templates", rendered)
+        self.assertIn("[ ] unity", rendered)
+        self.assertIn("Leave all unchecked to auto-detect", rendered)
+        self.assertNotIn("Edit the value below", rendered)
+
+    def test_pinned_exclude_template_toggle_updates_state(self) -> None:
+        controller = _InitWizardController(Path("missing-test-config.yml"))
+        controller.step = 3
+        controller.field = 4
+
+        controller.toggle_current_exclude_template()
+
+        self.assertEqual(controller.state.exclude_template_names, ["unity"])
+
     def test_language_field_renders_common_language_checkboxes(self) -> None:
         controller = _InitWizardController(Path("missing-test-config.yml"))
         controller.step = 2

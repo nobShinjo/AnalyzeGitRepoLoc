@@ -22,6 +22,7 @@ from pathlib import Path
 
 from colorama import Fore, Style, just_fix_windows_console
 
+from analyze_git_repo_loc.exclude_templates import BUILTIN_EXCLUDE_TEMPLATES
 from analyze_git_repo_loc.init_config import (
     InitConfigOptions,
     build_init_config_data,
@@ -34,6 +35,10 @@ from analyze_git_repo_loc.yaml_config import load_yaml_data
 
 INTERVAL_OPTIONS = ["daily", "weekly", "monthly"]
 CACHE_POLICY_OPTIONS = ["use", "update", "clear"]
+EXCLUDE_TEMPLATE_MODE_OPTIONS = ["auto", "manual", "off"]
+EXCLUDE_TEMPLATE_CHOICES = [
+    template.name for template in sorted(BUILTIN_EXCLUDE_TEMPLATES, key=lambda item: item.priority)
+]
 YES_NO_OPTIONS = ["yes", "no"]
 COMMON_LANGUAGE_CHOICES = [
     "C#",
@@ -327,6 +332,8 @@ class _InitWizardController:
         self.provider_cursor = 0
         self.interval_cursor = 0
         self.cache_policy_cursor = 0
+        self.exclude_template_mode_cursor = 0
+        self.exclude_template_cursor = 0
         self.yes_no_cursor = 0
         self.language_cursor = 0
         self.language_suggestion_cursor = 0
@@ -360,12 +367,12 @@ class _InitWizardController:
             return ""
         if key == "cache_policy":
             return ""
+        if key == "exclude_template_mode":
+            return ""
         if key == "exclude_dirs":
             return ",".join(self.state.exclude_dirs)
-        if key == "exclude_template_mode":
-            return self.state.exclude_template_mode
         if key == "exclude_template_names":
-            return ",".join(self.state.exclude_template_names)
+            return ""
         if key == "exclude_template_files":
             return ",".join(self.state.exclude_template_files)
         return ""
@@ -409,6 +416,15 @@ class _InitWizardController:
         if key == "cache_policy":
             self.cache_policy_cursor = max(0, self.cache_policy_cursor - 1)
             return
+        if key == "exclude_template_mode":
+            self.exclude_template_mode_cursor = max(
+                0,
+                self.exclude_template_mode_cursor - 1,
+            )
+            return
+        if key == "exclude_template_names":
+            self.exclude_template_cursor = max(0, self.exclude_template_cursor - 1)
+            return
         if key in {"overwrite", "open_plots"}:
             self.yes_no_cursor = max(0, self.yes_no_cursor - 1)
             return
@@ -440,6 +456,18 @@ class _InitWizardController:
             self.cache_policy_cursor = min(
                 len(CACHE_POLICY_OPTIONS) - 1,
                 self.cache_policy_cursor + 1,
+            )
+            return
+        if key == "exclude_template_mode":
+            self.exclude_template_mode_cursor = min(
+                len(EXCLUDE_TEMPLATE_MODE_OPTIONS) - 1,
+                self.exclude_template_mode_cursor + 1,
+            )
+            return
+        if key == "exclude_template_names":
+            self.exclude_template_cursor = min(
+                len(EXCLUDE_TEMPLATE_CHOICES) - 1,
+                self.exclude_template_cursor + 1,
             )
             return
         if key in {"overwrite", "open_plots"}:
@@ -479,6 +507,33 @@ class _InitWizardController:
         """Select the highlighted cache policy option."""
         self.state.cache_policy = CACHE_POLICY_OPTIONS[self.cache_policy_cursor]
         self.message = f"Cache policy set to {self.state.cache_policy}."
+
+    def select_current_exclude_template_mode(self) -> None:
+        """Select the highlighted exclude template mode option."""
+        self.state.exclude_template_mode = EXCLUDE_TEMPLATE_MODE_OPTIONS[
+            self.exclude_template_mode_cursor
+        ]
+        self.message = (
+            f"Exclude template mode set to {self.state.exclude_template_mode}."
+        )
+
+    def toggle_current_exclude_template(self) -> None:
+        """Toggle the highlighted pinned exclude template checkbox."""
+        if self._current_field_key() != "exclude_template_names":
+            return
+        self.exclude_template_cursor = min(
+            self.exclude_template_cursor,
+            len(EXCLUDE_TEMPLATE_CHOICES) - 1,
+        )
+        template_name = EXCLUDE_TEMPLATE_CHOICES[self.exclude_template_cursor]
+        selected = list(self.state.exclude_template_names)
+        if template_name in selected:
+            selected.remove(template_name)
+            self.message = f"Unpinned exclude template: {template_name}."
+        else:
+            selected.append(template_name)
+            self.message = f"Pinned exclude template: {template_name}."
+        self.state.exclude_template_names = selected
 
     def select_current_yes_no(self) -> None:
         """Select the highlighted yes/no value for the current field."""
@@ -611,6 +666,16 @@ class _InitWizardController:
                 else:
                     self.select_current_cache_policy()
                 return self._advance_field()
+            if key == "exclude_template_mode":
+                if value:
+                    self._apply_field(key, value)
+                else:
+                    self.select_current_exclude_template_mode()
+                return self._advance_field()
+            if key == "exclude_template_names":
+                if value:
+                    self._apply_field(key, value)
+                return self._advance_field()
             if key in {"overwrite", "open_plots"}:
                 if value:
                     self._apply_field(key, value)
@@ -721,8 +786,11 @@ class _InitWizardController:
         if key == "exclude_template_mode":
             self.state.exclude_template_mode = _validate_choice(
                 value,
-                {"auto", "manual", "off"},
+                set(EXCLUDE_TEMPLATE_MODE_OPTIONS),
                 "exclude_template_mode",
+            )
+            self.exclude_template_mode_cursor = EXCLUDE_TEMPLATE_MODE_OPTIONS.index(
+                self.state.exclude_template_mode
             )
             return
         if key == "exclude_template_names":
@@ -798,6 +866,10 @@ class _InitWizardController:
             return self._render_interval_step()
         if key == "cache_policy":
             return self._render_cache_policy_step()
+        if key == "exclude_template_mode":
+            return self._render_exclude_template_mode_step()
+        if key == "exclude_template_names":
+            return self._render_exclude_template_names_step()
         if key in {"overwrite", "open_plots"}:
             return self._render_yes_no_step()
         if key == "languages":
@@ -862,6 +934,32 @@ class _InitWizardController:
             checked = "x" if option == self.state.cache_policy else " "
             rows.append(f"{cursor} [{checked}] {option}")
         rows.extend(["", tr("init.select.instructions")])
+        return "\n".join(rows)
+
+    def _render_exclude_template_mode_step(self) -> str:
+        rows = [self._color("Exclude template mode", Fore.YELLOW + Style.BRIGHT)]
+        descriptions = {
+            "auto": "detect project templates and merge them with manual excludes",
+            "manual": "use only Common exclude directories; ignore templates",
+            "off": "disable all exclude directories",
+        }
+        for index, option in enumerate(EXCLUDE_TEMPLATE_MODE_OPTIONS):
+            cursor = ">" if index == self.exclude_template_mode_cursor else " "
+            checked = "x" if option == self.state.exclude_template_mode else " "
+            rows.append(f"{cursor} [{checked}] {option} - {descriptions[option]}")
+        rows.extend(["", tr("init.select.instructions")])
+        return "\n".join(rows)
+
+    def _render_exclude_template_names_step(self) -> str:
+        rows = [
+            self._color("Pinned exclude templates", Fore.YELLOW + Style.BRIGHT),
+            "Optional. Leave all unchecked to auto-detect templates from each repository.",
+        ]
+        for index, option in enumerate(EXCLUDE_TEMPLATE_CHOICES):
+            cursor = ">" if index == self.exclude_template_cursor else " "
+            checked = "x" if option in self.state.exclude_template_names else " "
+            rows.append(f"{cursor} [{checked}] {option}")
+        rows.extend(["", "Up/Down move   Space toggle   Enter continue"])
         return "\n".join(rows)
 
     def _render_yes_no_step(self) -> str:
@@ -963,6 +1061,9 @@ class _InitWizardController:
     def _sync_cursors_to_state(self) -> None:
         self.interval_cursor = INTERVAL_OPTIONS.index(self.state.interval)
         self.cache_policy_cursor = CACHE_POLICY_OPTIONS.index(self.state.cache_policy)
+        self.exclude_template_mode_cursor = EXCLUDE_TEMPLATE_MODE_OPTIONS.index(
+            self.state.exclude_template_mode
+        )
         self.yes_no_cursor = 0 if self._current_yes_no_value(default=True) else 1
         self.language_cursor = min(
             self.language_cursor,
@@ -977,6 +1078,17 @@ class _InitWizardController:
         if key == "cache_policy":
             self.cache_policy_cursor = CACHE_POLICY_OPTIONS.index(
                 self.state.cache_policy
+            )
+            return
+        if key == "exclude_template_mode":
+            self.exclude_template_mode_cursor = EXCLUDE_TEMPLATE_MODE_OPTIONS.index(
+                self.state.exclude_template_mode
+            )
+            return
+        if key == "exclude_template_names":
+            self.exclude_template_cursor = min(
+                self.exclude_template_cursor,
+                max(0, len(EXCLUDE_TEMPLATE_CHOICES) - 1),
             )
             return
         if key in {"overwrite", "open_plots"}:
@@ -1095,6 +1207,12 @@ def run_init_config_wizard(default_path: Path = Path("config.yml")) -> Path:
     cache_policy_filter = Condition(
         lambda: controller._current_field_key() == "cache_policy"
     )
+    exclude_template_mode_filter = Condition(
+        lambda: controller._current_field_key() == "exclude_template_mode"
+    )
+    exclude_template_names_filter = Condition(
+        lambda: controller._current_field_key() == "exclude_template_names"
+    )
     yes_no_filter = Condition(
         lambda: controller._current_field_key() in {"overwrite", "open_plots"}
     )
@@ -1103,6 +1221,8 @@ def run_init_config_wizard(default_path: Path = Path("config.yml")) -> Path:
         provider_filter
         | interval_filter
         | cache_policy_filter
+        | exclude_template_mode_filter
+        | exclude_template_names_filter
         | yes_no_filter
         | language_filter
     )
@@ -1130,6 +1250,16 @@ def run_init_config_wizard(default_path: Path = Path("config.yml")) -> Path:
     @kb.add(" ", filter=cache_policy_filter)
     def _(_: object) -> None:
         controller.select_current_cache_policy()
+        refresh_input()
+
+    @kb.add(" ", filter=exclude_template_mode_filter)
+    def _(_: object) -> None:
+        controller.select_current_exclude_template_mode()
+        refresh_input()
+
+    @kb.add(" ", filter=exclude_template_names_filter)
+    def _(_: object) -> None:
+        controller.toggle_current_exclude_template()
         refresh_input()
 
     @kb.add(" ", filter=yes_no_filter)
