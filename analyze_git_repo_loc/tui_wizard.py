@@ -58,7 +58,10 @@ from analyze_git_repo_loc.remote_catalog import (
 )
 from analyze_git_repo_loc.remote_repos import RemoteRepoManager
 from analyze_git_repo_loc.tui_auth import run_tui_auth_selection
-from analyze_git_repo_loc.tui_selector import run_repository_selector
+from analyze_git_repo_loc.tui_selector import (
+    RepositorySelectionResult,
+    run_repository_selector,
+)
 
 
 @dataclass(frozen=True)
@@ -1427,7 +1430,16 @@ def run_tui_wizard(
         clone_protocol=settings.defaults.clone_protocol,
     )
     repository_catalog = _fetch_repository_catalog(provider_targets, auth_tokens)
-    selected_refs = run_repository_selector(repository_catalog)
+    selection_result = run_repository_selector(
+        repository_catalog,
+        return_result=True,
+    )
+    if isinstance(selection_result, RepositorySelectionResult):
+        selected_refs = selection_result.selected_refs
+        branch_selection_requested = selection_result.branch_selection_requested
+    else:
+        selected_refs = selection_result
+        branch_selection_requested = False
     state = build_initial_wizard_state(
         args=args,
         settings=settings,
@@ -1439,6 +1451,8 @@ def run_tui_wizard(
     )
     apply_quick_defaults(state, quick_defaults)
     state.recommendations = build_lightweight_recommendations(state)
+    if branch_selection_requested:
+        _prompt_branch_selection(state)
     action = _run_wizard_steps(state)
     if action == "cancel":
         from analyze_git_repo_loc.tui_selector import TuiSelectionCancelled

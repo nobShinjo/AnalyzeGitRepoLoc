@@ -8,6 +8,8 @@ Description:
 Classes:
     TuiSelectionCancelled:
         Raised when the user cancels repository selection.
+    RepositorySelectionResult:
+        Selected repositories plus follow-up branch selection intent.
     RepositorySelectorState:
         Search, cursor, and multi-selection state for repository refs.
 Functions:
@@ -26,6 +28,14 @@ class TuiSelectionCancelled(ValueError):
     """The repository selector was cancelled."""
 
 
+@dataclass(frozen=True)
+class RepositorySelectionResult:
+    """Selected repositories and requested follow-up editor state."""
+
+    selected_refs: list[RemoteRepositoryRef]
+    branch_selection_requested: bool = False
+
+
 @dataclass
 class RepositorySelectorState:
     """Search, cursor, and multi-selection state for repositories."""
@@ -36,6 +46,7 @@ class RepositorySelectorState:
     selected_indexes: set[int] = field(default_factory=set)
     confirmed: bool = False
     cancelled: bool = False
+    branch_selection_requested: bool = False
 
     @property
     def visible_indexes(self) -> list[int]:
@@ -121,6 +132,11 @@ class RepositorySelectorState:
         """Confirm the current selection."""
         self.confirmed = True
 
+    def request_branch_selection(self) -> None:
+        """Confirm selection and request branch editing as the next step."""
+        self.branch_selection_requested = True
+        self.confirm()
+
     def cancel(self) -> None:
         """Cancel repository selection."""
         self.cancelled = True
@@ -162,7 +178,7 @@ class RepositorySelectorState:
                 "",
                 "Keys: type to search, up/down move, space toggle,",
                 "      ctrl-a select visible, ctrl-l clear, enter confirm,",
-                "      esc or ctrl-c cancel",
+                "      tab branches, esc or ctrl-c cancel",
             ]
         )
         return "\n".join(lines)
@@ -177,7 +193,9 @@ class RepositorySelectorState:
 
 def run_repository_selector(
     repositories: list[RemoteRepositoryRef],
-) -> list[RemoteRepositoryRef]:
+    *,
+    return_result: bool = False,
+) -> list[RemoteRepositoryRef] | RepositorySelectionResult:
     """
     Run the prompt_toolkit-backed repository selector.
 
@@ -248,6 +266,12 @@ def run_repository_selector(
         if app is not None:
             app.exit()
 
+    @kb.add("tab")
+    def _(_: object) -> None:
+        state.request_branch_selection()
+        if app is not None:
+            app.exit()
+
     @kb.add("escape")
     @kb.add("c-c")
     def _(_: object) -> None:
@@ -270,4 +294,9 @@ def run_repository_selector(
     app.run()
     if state.cancelled or not state.selected_refs:
         raise TuiSelectionCancelled("Repository selection cancelled.")
+    if return_result:
+        return RepositorySelectionResult(
+            selected_refs=state.selected_refs,
+            branch_selection_requested=state.branch_selection_requested,
+        )
     return state.selected_refs

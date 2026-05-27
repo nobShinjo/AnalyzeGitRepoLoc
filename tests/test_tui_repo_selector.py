@@ -44,6 +44,7 @@ from analyze_git_repo_loc.tui_auth import (
     resolve_auth_choice,
 )
 from analyze_git_repo_loc.tui_selector import (
+    RepositorySelectionResult,
     RepositorySelectorState,
     TuiSelectionCancelled,
 )
@@ -826,6 +827,25 @@ class RepositorySelectorStateTests(unittest.TestCase):
 
         self.assertTrue(state.cancelled)
 
+    def test_tab_request_marks_branch_selection_requested(self) -> None:
+        ref = RemoteRepositoryRef(
+            "github",
+            "alpha",
+            "org/alpha",
+            "https://a.git",
+            "",
+            "",
+            "main",
+        )
+        state = RepositorySelectorState([ref])
+
+        state.toggle_current()
+        state.request_branch_selection()
+
+        self.assertTrue(state.confirmed)
+        self.assertTrue(state.branch_selection_requested)
+        self.assertEqual(state.selected_refs, [ref])
+
 
 class TuiWizardStateTests(unittest.TestCase):
     """Terminal-independent full wizard state tests."""
@@ -876,6 +896,65 @@ class TuiWizardStateTests(unittest.TestCase):
         scope.assert_not_called()
         path.assert_not_called()
         output.assert_not_called()
+
+    def test_run_tui_wizard_opens_branch_selection_when_selector_requests_it(
+        self,
+    ) -> None:
+        ref = RemoteRepositoryRef(
+            "github",
+            "alpha",
+            "org/alpha",
+            "https://github.com/org/alpha.git",
+            "",
+            "https://github.com/org/alpha",
+            "main",
+        )
+        args = argparse.Namespace(
+            output=Path("out"),
+            since=None,
+            until=None,
+            interval="monthly",
+            author_name=None,
+            lang=None,
+            exclude_dirs=None,
+            workers=1,
+            clear_cache=False,
+            no_plot_show=True,
+            config=Path("config.yml"),
+        )
+        config = {"interactive": {"providers": {"github": {"enabled": True}}}}
+
+        with patch(
+            "analyze_git_repo_loc.tui_wizard.choose_auto_provider_targets",
+            return_value=[
+                ProviderTarget("github", "github", "GitHub", "https://api.github.com")
+            ],
+        ):
+            with patch(
+                "analyze_git_repo_loc.tui_wizard._authenticate_provider_targets",
+                return_value=({"github": "token"}, {"github": "env"}),
+            ):
+                with patch(
+                    "analyze_git_repo_loc.tui_wizard._fetch_repository_catalog",
+                    return_value=[ref],
+                ):
+                    with patch(
+                        "analyze_git_repo_loc.tui_wizard.run_repository_selector",
+                        return_value=RepositorySelectionResult(
+                            selected_refs=[ref],
+                            branch_selection_requested=True,
+                        ),
+                    ):
+                        with patch(
+                            "analyze_git_repo_loc.tui_wizard._prompt_branch_selection"
+                        ) as branch:
+                            with patch(
+                                "analyze_git_repo_loc.tui_wizard._run_wizard_steps",
+                                return_value="run",
+                            ):
+                                tui_wizard.run_tui_wizard(args, config)
+
+        branch.assert_called_once()
 
     def test_lightweight_recommendations_scan_only_existing_cache(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
