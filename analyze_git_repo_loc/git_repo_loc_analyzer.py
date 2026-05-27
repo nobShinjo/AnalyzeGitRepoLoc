@@ -462,19 +462,13 @@ class GitRepoLOCAnalyzer:
                 return
 
         safe_progress("total", total_commits)
-        update_interval = max(1, total_commits // 100)
-        pending_updates = 0
 
         def record(step: int) -> None:
-            nonlocal pending_updates
-            pending_updates += step
-            if pending_updates >= update_interval:
-                safe_progress("advance", pending_updates)
-                pending_updates = 0
+            if step > 0:
+                safe_progress("advance", step)
 
         def flush() -> None:
-            if pending_updates:
-                safe_progress("advance", pending_updates)
+            return
 
         return record, flush
 
@@ -580,13 +574,13 @@ class GitRepoLOCAnalyzer:
             unit="commit",
             disable=not self._show_progress,
         ):
+            record_progress(1)
             self._append_commit_rows(
                 commit,
                 repository_name,
                 cache_lookup,
                 commit_data_list,
             )
-            record_progress(1)
         flush_progress()
         if use_cache_resume and self._cache_commit_data is not None:
             commit_data_list.extend(self._cache_commit_data.to_dict("records"))
