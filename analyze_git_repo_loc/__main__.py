@@ -310,6 +310,7 @@ def _generate_report(
     language_analysis: pd.DataFrame,
     author_analysis: pd.DataFrame,
     repository_trend_analysis: pd.DataFrame,
+    exclude_metadata: list[dict[str, object]] | None = None,
 ) -> None:
     with tqdm(desc="Generating HTML report") as progress_bar:
         report_progress = _ReportProgressTracker(progress_bar)
@@ -326,6 +327,7 @@ def _generate_report(
                     if loc_data_repositories
                     else pd.DataFrame()
                 ),
+                exclude_metadata=exclude_metadata,
                 progress_callback=report_progress,
             )
         except OSError as ex:
@@ -429,6 +431,7 @@ def main() -> None:
         language_analysis=language_analysis,
         author_analysis=author_analysis,
         repository_trend_analysis=repository_trend_analysis,
+        exclude_metadata=getattr(args, "exclude_metadata", None),
     )
 
     # Generate charts

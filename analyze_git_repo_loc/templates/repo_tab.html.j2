@@ -91,4 +91,35 @@
       </div>
     </div>
   </div>
+  <div class="row">
+    <div class="col-12">
+      <div class="card table-panel">
+        <div class="card-header">Exclude Paths</div>
+        <div class="card-body">
+          {% if repo_tab.exclude_summary %}
+          <div class="table-responsive">
+            <table class="table">
+              <tbody>
+                <tr>
+                  <th>Mode</th>
+                  <td>{{ repo_tab.exclude_summary.mode }}</td>
+                </tr>
+                <tr>
+                  <th>Templates</th>
+                  <td>{{ repo_tab.exclude_summary.templates | join(", ") if repo_tab.exclude_summary.templates else "(none)" }}</td>
+                </tr>
+                <tr>
+                  <th>Excluded paths</th>
+                  <td>{{ repo_tab.exclude_summary.excluded_paths | join(", ") if repo_tab.exclude_summary.excluded_paths else "(none)" }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          {% else %}
+          <p class="text-muted mb-0">No exclude template metadata recorded.</p>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
 </div>

@@ -5,9 +5,11 @@ from __future__ import annotations
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pandas as pd
 
+from analyze_git_repo_loc import __main__ as main_module
 from analyze_git_repo_loc.html_report import generate_html_report
 
 
@@ -85,7 +87,50 @@ class HtmlReportUxTests(unittest.TestCase):
         self.assertIn("queueChartRender(tabId);", html)
         self.assertNotIn("renderChartsForTab(tabId);\n        renderedTabs.add(tabId);", html)
 
-    def _generate_report_html(self, *, time_interval: str = "Month") -> str:
+    def test_repo_tab_lists_exclude_template_summary(self) -> None:
+        html = self._generate_report_html(
+            exclude_metadata=[
+                {
+                    "repository": "alpha-service-with-a-very-long-name",
+                    "mode": "auto",
+                    "templates": ["Python Project", "Node.js Project"],
+                    "excluded_paths": ["node_modules", ".venv"],
+                    "template_paths": ["node_modules", ".venv"],
+                }
+            ]
+        )
+
+        self.assertIn("Exclude Paths", html)
+        self.assertIn("Python Project, Node.js Project", html)
+        self.assertIn("node_modules", html)
+        self.assertIn(".venv", html)
+
+    def test_generate_report_passes_exclude_metadata_to_html_builder(self) -> None:
+        progress_context = MagicMock()
+        exclude_metadata = [{"repository": "alpha", "excluded_paths": [".venv"]}]
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with patch.object(main_module, "tqdm", return_value=progress_context):
+                with patch.object(main_module, "generate_html_report") as report:
+                    main_module._generate_report(
+                        output_dir=Path(tmp_dir),
+                        output_root=Path(tmp_dir),
+                        time_interval="Month",
+                        loc_data_repositories=[],
+                        language_analysis=pd.DataFrame(),
+                        author_analysis=pd.DataFrame(),
+                        repository_trend_analysis=pd.DataFrame(),
+                        exclude_metadata=exclude_metadata,
+                    )
+
+        self.assertEqual(report.call_args.kwargs["exclude_metadata"], exclude_metadata)
+
+    def _generate_report_html(
+        self,
+        *,
+        time_interval: str = "Month",
+        exclude_metadata: list[dict[str, object]] | None = None,
+    ) -> str:
         with tempfile.TemporaryDirectory() as tmp_dir:
             output_dir = Path(tmp_dir)
             language_analysis = self._language_analysis().rename(
@@ -108,6 +153,7 @@ class HtmlReportUxTests(unittest.TestCase):
                 author_analysis=author_analysis,
                 repository_trend_analysis=repository_trend_analysis,
                 detail_analysis=detail_analysis,
+                exclude_metadata=exclude_metadata,
             )
             return (output_dir / "report.html").read_text(encoding="utf-8")
 

@@ -85,6 +85,7 @@ class HtmlReportBuilder:
         author_analysis: pd.DataFrame,
         repository_trend_analysis: pd.DataFrame,
         detail_analysis: pd.DataFrame,
+        exclude_metadata: list[dict[str, object]] | None = None,
     ) -> None:
         """
         Initialize the report builder with analysis data.
@@ -96,6 +97,10 @@ class HtmlReportBuilder:
         self.author_analysis = author_analysis
         self.repository_trend_analysis = repository_trend_analysis
         self.detail_analysis = detail_analysis
+        self.exclude_metadata = exclude_metadata or []
+        self._exclude_metadata_by_repo = {
+            str(item.get("repository", "")): item for item in self.exclude_metadata
+        }
         self._repo_chart_dirs = self._resolve_repo_chart_dirs()
         self.repositories = list(self._repo_chart_dirs.keys())
         self._template_dir = Path(__file__).resolve().parent / "templates"
@@ -518,6 +523,7 @@ class HtmlReportBuilder:
                     "author_table": self._summarize_category_table(
                         repo_author, "Author"
                     ),
+                    "exclude_summary": self._exclude_metadata_by_repo.get(repo),
                     "language_chart": self._resolve_chart_html(
                         chart_dir=chart_dir,
                         filename=_LANGUAGE_CHART_FILENAME,
@@ -783,6 +789,7 @@ def generate_html_report(
     repository_trend_analysis: pd.DataFrame,
     detail_analysis: pd.DataFrame,
     progress_callback: ProgressCallback | None = None,
+    exclude_metadata: list[dict[str, object]] | None = None,
 ) -> None:
     """
     Generate a single HTML report in the run output directory.
@@ -797,6 +804,8 @@ def generate_html_report(
         detail_analysis (pd.DataFrame): Detailed data used for report filters.
         progress_callback (ProgressCallback | None): Optional callback
             invoked after each report generation step.
+        exclude_metadata (list[dict[str, object]] | None): Optional per-repository
+            exclude template and path decisions to render in repository tabs.
     """
     builder = HtmlReportBuilder(
         output_dir=output_dir,
@@ -806,5 +815,6 @@ def generate_html_report(
         author_analysis=author_analysis,
         repository_trend_analysis=repository_trend_analysis,
         detail_analysis=detail_analysis,
+        exclude_metadata=exclude_metadata,
     )
     builder.generate(progress_callback=progress_callback)
