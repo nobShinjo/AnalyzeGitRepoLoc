@@ -54,6 +54,11 @@ _REPO_EVENT_ADVANCE = "advance"
 _REPO_EVENT_FINISH = "finish"
 _REPO_EVENT_STOP = "stop"
 _REPO_PROGRESS_LABEL_WIDTH = 32
+_REPO_PROGRESS_STATUS_WIDTH = len("analyzing commits")
+_REPO_PROGRESS_BAR_FORMAT = (
+    "{desc}: {percentage:3.0f}%|{bar}| {n_fmt}/{total_fmt} "
+    "[{elapsed}<{remaining}, {rate_fmt}]"
+)
 
 
 def parse_repos_paths(
@@ -200,7 +205,7 @@ def _truncate_repo_label(name: str, max_width: int) -> str:
     Truncate a repository label to fit within a width constraint.
 
     Args:
-        active_repos (list[str]): Active repository names.
+        name (str): Repository name.
         max_width (int): Maximum width for the formatted text.
 
     Returns:
@@ -208,8 +213,19 @@ def _truncate_repo_label(name: str, max_width: int) -> str:
     """
     if len(name) <= max_width:
         return name
-    trimmed = name[: max(0, max_width - 1)]
-    return trimmed + "…"
+    if max_width <= 3:
+        return "." * max(0, max_width)
+    trimmed = name[: max(0, max_width - 3)]
+    return trimmed + "..."
+
+
+def _format_repo_progress_description(label: str, status: str) -> str:
+    """Format a fixed-width repository child progress description."""
+    fixed_label = _truncate_repo_label(label, _REPO_PROGRESS_LABEL_WIDTH)
+    return (
+        f"  Repo: {fixed_label:<{_REPO_PROGRESS_LABEL_WIDTH}} "
+        f"({status:<{_REPO_PROGRESS_STATUS_WIDTH}})"
+    )
 
 
 def _apply_repo_progress_event(
@@ -236,11 +252,15 @@ def _apply_repo_progress_event(
     if bar is None:
         return True
     if kind == _REPO_EVENT_START:
-        bar.set_description_str(f"Repo: {label} (getting commits)")
+        bar.set_description_str(
+            _format_repo_progress_description(label, "getting commits")
+        )
         bar.refresh()
     elif kind == _REPO_EVENT_SCAN_TOTAL:
         total = max(0, int(value))
-        bar.set_description_str(f"Repo: {label} (getting commits)")
+        bar.set_description_str(
+            _format_repo_progress_description(label, "getting commits")
+        )
         bar.total = total
         bar.n = 0
         bar.refresh()
@@ -250,7 +270,9 @@ def _apply_repo_progress_event(
             bar.update(step)
     elif kind == _REPO_EVENT_TOTAL:
         total = max(0, int(value))
-        bar.set_description_str(f"Repo: {label} (analyzing commits)")
+        bar.set_description_str(
+            _format_repo_progress_description(label, "analyzing commits")
+        )
         bar.total = total
         bar.n = 0
         bar.refresh()
@@ -261,10 +283,7 @@ def _apply_repo_progress_event(
     elif kind == _REPO_EVENT_FINISH:
         if bar.total is not None and bar.n < bar.total:
             bar.update(bar.total - bar.n)
-        suffix = "done"
-        if bar.total == 0:
-            suffix = "done, 0 target commits"
-        bar.set_description_str(f"Repo: {label} ({suffix})")
+        bar.set_description_str(_format_repo_progress_description(label, "done"))
         bar.refresh()
     return True
 
@@ -1034,10 +1053,11 @@ def _build_repo_progress_bars(
         repo_labels[index] = label
         repo_bars[index] = tqdm(
             total=None,
-            desc=f"Repo: {label} (queued)",
+            desc=_format_repo_progress_description(label, "queued"),
             position=progress.pos + 1 + index,
-            leave=False,
+            leave=True,
             unit="commit",
+            bar_format=_REPO_PROGRESS_BAR_FORMAT,
         )
     return repo_bars, repo_labels
 

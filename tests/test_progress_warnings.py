@@ -199,11 +199,30 @@ class RepositoryProgressTests(unittest.TestCase):
 
         tqdm_mock.assert_called_once_with(
             total=None,
-            desc="Repo: alpha (queued)",
+            desc="  Repo: alpha                            (queued           )",
             position=1,
-            leave=False,
+            leave=True,
             unit="commit",
+            bar_format=utils._REPO_PROGRESS_BAR_FORMAT,
         )
+
+    def test_repo_child_progress_truncates_long_labels_with_ascii_ellipsis(
+        self,
+    ) -> None:
+        long_name = "alpha-service-with-a-very-long-repository-name"
+        label = utils._truncate_repo_label(long_name, 32)
+
+        self.assertEqual(label, "alpha-service-with-a-very-lon...")
+        self.assertEqual(len(label), 32)
+
+    def test_repo_child_progress_descriptions_keep_fixed_width(self) -> None:
+        descriptions = [
+            utils._format_repo_progress_description("alpha", status)
+            for status in ("queued", "getting commits", "analyzing commits", "done")
+        ]
+
+        self.assertEqual(len(set(map(len, descriptions))), 1)
+        self.assertTrue(descriptions[0].startswith("  Repo: "))
 
     def test_repo_child_progress_tracks_commit_scan_before_analysis(self) -> None:
         bar = Mock()
@@ -239,7 +258,7 @@ class RepositoryProgressTests(unittest.TestCase):
         self.assertEqual(bar.total, 300)
         self.assertEqual(bar.n, 0)
         bar.set_description_str.assert_called_once_with(
-            "Repo: alpha (getting commits)"
+            "  Repo: alpha                            (getting commits  )"
         )
         bar.refresh.assert_called_once()
 
@@ -260,7 +279,7 @@ class RepositoryProgressTests(unittest.TestCase):
         self.assertEqual(bar.total, 12)
         self.assertEqual(bar.n, 0)
         bar.set_description_str.assert_called_once_with(
-            "Repo: alpha (analyzing commits)"
+            "  Repo: alpha                            (analyzing commits)"
         )
         bar.refresh.assert_called_once()
 
@@ -304,7 +323,26 @@ class RepositoryProgressTests(unittest.TestCase):
 
         bar.update.assert_not_called()
         bar.set_description_str.assert_called_once_with(
-            "Repo: alpha (done, 0 target commits)"
+            "  Repo: alpha                            (done             )"
+        )
+
+    def test_repo_child_progress_finishes_at_total(self) -> None:
+        bar = Mock()
+        bar.n = 7
+        bar.total = 12
+
+        self.assertTrue(
+            utils._apply_repo_progress_event(
+                kind=utils._REPO_EVENT_FINISH,
+                bar=bar,
+                label="alpha",
+                value=0,
+            )
+        )
+
+        bar.update.assert_called_once_with(5)
+        bar.set_description_str.assert_called_once_with(
+            "  Repo: alpha                            (done             )"
         )
 
     def test_sequential_analysis_emits_child_progress_events_when_queue_is_provided(
