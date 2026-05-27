@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+import argparse
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -124,6 +125,63 @@ class HtmlReportUxTests(unittest.TestCase):
                     )
 
         self.assertEqual(report.call_args.kwargs["exclude_metadata"], exclude_metadata)
+
+    def test_main_does_not_pass_exclude_metadata_to_save_outputs(self) -> None:
+        args = argparse.Namespace(
+            command="run",
+            output=Path("out"),
+            interval="monthly",
+            no_plot_show=True,
+        )
+        loc_data = pd.DataFrame({"Repository": ["alpha"], "Branch": ["main"]})
+        analysis = pd.DataFrame(
+            {
+                "Month": ["2026-01-01"],
+                "Repository": ["alpha"],
+                "NLOC_Added": [1],
+                "NLOC_Deleted": [0],
+                "NLOC": [1],
+            }
+        )
+
+        def save_stub(
+            *,
+            output_dir: Path,
+            args: argparse.Namespace,
+            time_interval: str,
+            language_analysis: pd.DataFrame,
+            author_analysis: pd.DataFrame,
+            repository_trend_analysis: pd.DataFrame,
+        ) -> None:
+            raise RuntimeError("stop after save")
+
+        with patch.object(main_module, "parse_arguments", return_value=args):
+            with patch.object(main_module, "_apply_interactive_repository_selection"):
+                with patch.object(main_module, "_print_start"):
+                    with patch.object(
+                        main_module,
+                        "analyze_git_repositories",
+                        return_value=[loc_data],
+                    ):
+                        with patch.object(
+                            main_module,
+                            "get_time_interval_and_period",
+                            return_value=("Month", "ME"),
+                        ):
+                            with patch.object(
+                                main_module,
+                                "_build_analysis_data",
+                                return_value=(analysis, analysis, analysis),
+                            ):
+                                with patch.object(
+                                    main_module,
+                                    "_save_analysis_outputs",
+                                    side_effect=save_stub,
+                                ):
+                                    with self.assertRaisesRegex(
+                                        RuntimeError, "stop after save"
+                                    ):
+                                        main_module.main()
 
     def _generate_report_html(
         self,

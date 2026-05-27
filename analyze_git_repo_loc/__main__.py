@@ -431,7 +431,6 @@ def main() -> None:
         language_analysis=language_analysis,
         author_analysis=author_analysis,
         repository_trend_analysis=repository_trend_analysis,
-        exclude_metadata=getattr(args, "exclude_metadata", None),
     )
 
     # Generate charts
