@@ -676,7 +676,7 @@ def _analyze_single_repository(
     clear_cache: bool,
     show_progress: bool,
     progress_queue: object | None = None,
-) -> tuple[int, str, pd.DataFrame, list[str]]:
+) -> tuple[int, str, pd.DataFrame, list[str], dict[str, object]]:
     """
     Analyze a single repository and return its index, name, and LOC data.
     """
@@ -713,6 +713,10 @@ def _analyze_single_repository(
             template_mode=exclude_template_mode,
             template_names=exclude_template_names,
             template_files=exclude_template_files,
+        )
+        exclude_summary = _build_exclude_summary(
+            repository_name=repository_name,
+            recommendation=exclude_recommendation,
         )
         final_exclude_dirs = exclude_recommendation.paths or None
         manual_warning_dirs = exclude_recommendation.manual_paths
@@ -765,7 +769,7 @@ def _analyze_single_repository(
         repo_output_dir = _ensure_repo_output_dir(output_dir, repository_name)
         loc_data.to_csv(repo_output_dir / "loc_data.csv")
 
-        return index, repository_name, loc_data, analyzer._warnings
+        return index, repository_name, loc_data, analyzer._warnings, exclude_summary
     finally:
         _emit_repo_progress(
             progress_queue,
@@ -912,6 +916,28 @@ def _build_exclude_recommendation_for_repo(
     )
 
 
+def _build_exclude_summary(
+    *,
+    repository_name: str,
+    recommendation: object,
+) -> dict[str, object]:
+    """Build display metadata for repository exclude template decisions."""
+    detected_templates = getattr(recommendation, "detected_templates", [])
+    templates = [
+        item.template.display_name
+        for item in detected_templates
+        if getattr(item, "template", None) is not None
+    ]
+    return {
+        "repository": repository_name,
+        "mode": getattr(recommendation, "mode", "auto"),
+        "templates": templates,
+        "excluded_paths": list(getattr(recommendation, "paths", [])),
+        "template_paths": list(getattr(recommendation, "template_paths", [])),
+        "manual_paths": list(getattr(recommendation, "manual_paths", [])),
+    }
+
+
 def _unpack_repo_entry(
     repo_entry: tuple,
 ) -> tuple[Path | str, str, list[str] | None, str | Path | None, str | None, list[str] | None]:
@@ -938,6 +964,7 @@ def _analyze_repositories_sequential(
     progress_queue: object | None = None,
     results: dict[int, pd.DataFrame],
     warnings: list[str],
+    exclude_summaries: list[dict[str, object]],
 ) -> None:
     """
     Analyze repositories sequentially and update results in-place.
@@ -955,7 +982,13 @@ def _analyze_repositories_sequential(
         template_mode = _resolve_exclude_template_mode(args, repo_template_mode)
         template_names = _resolve_exclude_template_names(args, repo_template_names)
         try:
-            _, repository_name, loc_data, repo_warnings = _analyze_single_repository(
+            (
+                _,
+                repository_name,
+                loc_data,
+                repo_warnings,
+                exclude_summary,
+            ) = _analyze_single_repository(
                 index=index,
                 repo_path=repo_path,
                 branch_name=branch_name,
@@ -978,6 +1011,7 @@ def _analyze_repositories_sequential(
         warnings.extend(
             f"{repository_name}: {warning}" for warning in repo_warnings
         )
+        exclude_summaries.append(exclude_summary)
         results[index] = loc_data
         progress.update(1)
 
@@ -1039,6 +1073,7 @@ def _analyze_repositories_parallel(
     progress_queue: object | None = None,
     results: dict[int, pd.DataFrame],
     warnings: list[str],
+    exclude_summaries: list[dict[str, object]],
 ) -> None:
     """
     Analyze repositories in parallel and update results in-place.
@@ -1080,13 +1115,20 @@ def _analyze_repositories_parallel(
             )
         for future in as_completed(futures):
             try:
-                index, repository_name, loc_data, repo_warnings = future.result()
+                (
+                    index,
+                    repository_name,
+                    loc_data,
+                    repo_warnings,
+                    exclude_summary,
+                ) = future.result()
             except (OSError, ValueError) as ex:
                 handle_exception(ex)
             results[index] = loc_data
             warnings.extend(
                 f"{repository_name}: {warning}" for warning in repo_warnings
             )
+            exclude_summaries.append(exclude_summary)
             progress.update(1)
 
 
@@ -1099,6 +1141,35 @@ def _print_repository_warnings(warnings: list[str]) -> None:
     print(tr("warnings.title"), file=sys.stderr)
     for warning in warnings:
         print(f"- {warning}", file=sys.stderr)
+
+
+def _print_repository_exclude_summaries(
+    exclude_summaries: list[dict[str, object]],
+) -> None:
+    """
+    Print collected repository exclude template decisions after progress bars.
+    """
+    visible_summaries = [
+        summary
+        for summary in exclude_summaries
+        if summary.get("templates") or summary.get("excluded_paths")
+    ]
+    if not visible_summaries:
+        return
+    print(tr("exclude.summary.title"))
+    for summary in sorted(
+        visible_summaries,
+        key=lambda item: str(item.get("repository", "")).casefold(),
+    ):
+        repository = str(summary.get("repository", ""))
+        templates = summary.get("templates") or [tr("exclude.summary.none")]
+        excluded_paths = summary.get("excluded_paths") or [tr("exclude.summary.none")]
+        print(f"- {repository}: {', '.join(str(item) for item in templates)}")
+        print(
+            "  "
+            f"{tr('exclude.summary.paths')}: "
+            f"{', '.join(str(item) for item in excluded_paths)}"
+        )
 
 
 def analyze_git_repositories(args: argparse.Namespace) -> list[pd.DataFrame]:
@@ -1118,6 +1189,7 @@ def analyze_git_repositories(args: argparse.Namespace) -> list[pd.DataFrame]:
     worker_count = _resolve_worker_count(args.workers, repo_count)
     results: dict[int, pd.DataFrame] = {}
     warnings: list[str] = []
+    exclude_summaries: list[dict[str, object]] = []
 
     with tqdm(total=repo_count, desc="Analyzing repositories") as progress:
         manager: SyncManager | None = None
@@ -1147,6 +1219,7 @@ def analyze_git_repositories(args: argparse.Namespace) -> list[pd.DataFrame]:
                     progress_queue=progress_queue,
                     results=results,
                     warnings=warnings,
+                    exclude_summaries=exclude_summaries,
                 )
             else:
                 _analyze_repositories_parallel(
@@ -1157,6 +1230,7 @@ def analyze_git_repositories(args: argparse.Namespace) -> list[pd.DataFrame]:
                     progress_queue=progress_queue,
                     results=results,
                     warnings=warnings,
+                    exclude_summaries=exclude_summaries,
                 )
         finally:
             if (
@@ -1173,6 +1247,8 @@ def analyze_git_repositories(args: argparse.Namespace) -> list[pd.DataFrame]:
                     progress_queue=progress_queue,
                 )
 
+    args.exclude_metadata = exclude_summaries
+    _print_repository_exclude_summaries(exclude_summaries)
     _print_repository_warnings(warnings)
 
     for index in sorted(results.keys()):

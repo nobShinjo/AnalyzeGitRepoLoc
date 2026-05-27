@@ -51,7 +51,13 @@ class RepositoryWarningTests(unittest.TestCase):
             repo_path.mkdir()
             with patch.object(utils, "_resolve_analysis_repo_path", return_value=repo_path):
                 with patch.object(utils, "_create_analyzer", return_value=analyzer):
-                    _, repository_name, _, warnings = utils._analyze_single_repository(
+                    (
+                        _,
+                        repository_name,
+                        _,
+                        warnings,
+                        exclude_summary,
+                    ) = utils._analyze_single_repository(
                         index=0,
                         repo_path=repo_path,
                         branch_name="main",
@@ -71,6 +77,50 @@ class RepositoryWarningTests(unittest.TestCase):
 
         self.assertEqual(repository_name, "alpha")
         self.assertEqual(warnings, ["excluded path does not exist: .venv"])
+        self.assertEqual(exclude_summary["repository"], "alpha")
+
+    def test_single_repository_returns_exclude_template_summary(self) -> None:
+        loc_data = pd.DataFrame({"repository": ["alpha"]})
+        analyzer = Mock()
+        analyzer.get_commit_analysis.return_value = loc_data
+        analyzer._warnings = []
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            repo_path = Path(tmp_dir) / "alpha"
+            repo_path.mkdir()
+            (repo_path / "pyproject.toml").write_text("[project]\n", encoding="utf-8")
+            with patch.object(utils, "_resolve_analysis_repo_path", return_value=repo_path):
+                with patch.object(utils, "_create_analyzer", return_value=analyzer):
+                    (
+                        _,
+                        repository_name,
+                        _,
+                        _,
+                        exclude_summary,
+                    ) = utils._analyze_single_repository(
+                        index=0,
+                        repo_path=repo_path,
+                        branch_name="main",
+                        exclude_dirs=["manual-cache"],
+                        include_subpath=None,
+                        exclude_template_mode="auto",
+                        exclude_template_names=None,
+                        exclude_template_files=None,
+                        output_dir=Path(tmp_dir) / "out",
+                        since=None,
+                        until=None,
+                        authors=None,
+                        languages=None,
+                        clear_cache=False,
+                        show_progress=False,
+                    )
+
+        self.assertEqual(repository_name, "alpha")
+        self.assertEqual(exclude_summary["repository"], "alpha")
+        self.assertEqual(exclude_summary["mode"], "auto")
+        self.assertIn("Python Project", exclude_summary["templates"])
+        self.assertIn(".venv", exclude_summary["template_paths"])
+        self.assertIn("manual-cache", exclude_summary["excluded_paths"])
 
     def test_template_exclude_dir_does_not_emit_missing_path_warning(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -105,6 +155,29 @@ class RepositoryWarningTests(unittest.TestCase):
             f"{tr('warnings.title')}\n"
             "- SoFiRA: excluded path does not exist: node_modules\n"
             "- AgvController: excluded path does not exist: .venv\n",
+        )
+
+    def test_repository_exclude_summary_is_printed_after_progress(self) -> None:
+        stdout = StringIO()
+
+        with patch.object(sys, "stdout", stdout):
+            utils._print_repository_exclude_summaries(
+                [
+                    {
+                        "repository": "SoFiRA",
+                        "mode": "auto",
+                        "templates": ["Python Project", "Node.js Project"],
+                        "excluded_paths": ["node_modules", ".venv"],
+                        "template_paths": ["node_modules", ".venv"],
+                    }
+                ]
+            )
+
+        self.assertIn(tr("exclude.summary.title"), stdout.getvalue())
+        self.assertIn("- SoFiRA: Python Project, Node.js Project", stdout.getvalue())
+        self.assertIn(
+            f"  {tr('exclude.summary.paths')}: node_modules, .venv",
+            stdout.getvalue(),
         )
 
 
@@ -255,7 +328,7 @@ class RepositoryProgressTests(unittest.TestCase):
         with patch.object(
             utils,
             "_analyze_single_repository",
-            return_value=(0, "alpha", loc_data, []),
+            return_value=(0, "alpha", loc_data, [], {}),
         ) as analyze:
             utils._analyze_repositories_sequential(
                 args=args,
@@ -264,6 +337,7 @@ class RepositoryProgressTests(unittest.TestCase):
                 progress_queue=progress_queue,
                 results=results,
                 warnings=warnings,
+                exclude_summaries=[],
             )
 
         self.assertFalse(analyze.call_args.kwargs["show_progress"])
