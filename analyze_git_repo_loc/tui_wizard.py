@@ -52,7 +52,9 @@ from analyze_git_repo_loc.remote_catalog import (
     TuiDefaults,
     TuiProviderSettings,
     TuiSettings,
+    fetch_github_branches,
     fetch_github_repositories,
+    fetch_gitlab_branches,
     fetch_gitlab_repositories,
     load_tui_settings,
 )
@@ -704,6 +706,49 @@ def _fetch_repository_catalog(
     return sorted(catalog, key=lambda ref: (ref.provider, ref.full_name.lower()))
 
 
+def _build_branch_loader(
+    targets: list[ProviderTarget],
+    auth_tokens: dict[str, str],
+):
+    """Build a lazy branch loader for the two-pane repository selector."""
+    targets_by_identity = {
+        (target.provider, target.base_url.rstrip("/")): target for target in targets
+    }
+    targets_by_provider = {target.provider: target for target in targets}
+
+    def load_branches(ref: RemoteRepositoryRef) -> list[str]:
+        target = targets_by_identity.get(
+            (ref.provider, ref.provider_base_url.rstrip("/"))
+        )
+        if target is None:
+            target = targets_by_provider.get(ref.provider)
+        if target is None:
+            raise RemoteCatalogError(f"No provider target is available for {ref.provider}.")
+        token = auth_tokens.get(target.key)
+        if not token:
+            raise RemoteCatalogError(f"{target.label} authentication token is missing.")
+        try:
+            if ref.provider == "github":
+                return fetch_github_branches(
+                    api_base_url=target.base_url,
+                    full_name=ref.full_name,
+                    token=token,
+                )
+            if ref.provider == "gitlab":
+                return fetch_gitlab_branches(
+                    base_url=target.base_url,
+                    full_name=ref.full_name,
+                    token=token,
+                )
+        except OSError as ex:
+            raise RemoteCatalogError(
+                f"Failed to fetch branches for {ref.full_name}: {ex}"
+            ) from ex
+        raise RemoteCatalogError(f"Unsupported provider '{ref.provider}'.")
+
+    return load_branches
+
+
 def build_initial_wizard_state(
     *,
     args: argparse.Namespace,
@@ -713,6 +758,7 @@ def build_initial_wizard_state(
     auth_labels: dict[str, str] | None = None,
     repository_catalog: list[RemoteRepositoryRef],
     selected_refs: list[RemoteRepositoryRef],
+    selected_branches: dict[str, str] | None = None,
 ) -> TuiWizardState:
     """
     Build the initial wizard state from CLI/config defaults and selected repos.
@@ -723,6 +769,7 @@ def build_initial_wizard_state(
         auth_tokens (dict[str, str]): Runtime provider tokens.
         repository_catalog (list[RemoteRepositoryRef]): Fetched repository catalog.
         selected_refs (list[RemoteRepositoryRef]): Repositories selected by the user.
+        selected_branches (dict[str, str] | None): Branch choices keyed by repo full name.
 
     Returns:
         TuiWizardState: Initial state ready for interactive refinement.
@@ -730,10 +777,11 @@ def build_initial_wizard_state(
     output = args.output if isinstance(args.output, Path) else Path(args.output)
     clone_protocol = settings.defaults.clone_protocol
     global_excludes = list(args.exclude_dirs or [])
+    selected_branches = selected_branches or {}
     selected_configs = [
         SelectedRepositoryConfig(
             ref=ref,
-            branch=ref.default_branch or "main",
+            branch=selected_branches.get(ref.full_name) or ref.default_branch or "main",
             cache_status=determine_cache_status(
                 ref,
                 clone_protocol=clone_protocol,
@@ -1432,14 +1480,15 @@ def run_tui_wizard(
     repository_catalog = _fetch_repository_catalog(provider_targets, auth_tokens)
     selection_result = run_repository_selector(
         repository_catalog,
+        branch_loader=_build_branch_loader(provider_targets, auth_tokens),
         return_result=True,
     )
     if isinstance(selection_result, RepositorySelectionResult):
         selected_refs = selection_result.selected_refs
-        branch_selection_requested = selection_result.branch_selection_requested
+        selected_branches = selection_result.selected_branches
     else:
         selected_refs = selection_result
-        branch_selection_requested = False
+        selected_branches = {}
     state = build_initial_wizard_state(
         args=args,
         settings=settings,
@@ -1448,11 +1497,10 @@ def run_tui_wizard(
         auth_labels=auth_labels,
         repository_catalog=repository_catalog,
         selected_refs=selected_refs,
+        selected_branches=selected_branches,
     )
     apply_quick_defaults(state, quick_defaults)
     state.recommendations = build_lightweight_recommendations(state)
-    if branch_selection_requested:
-        _prompt_branch_selection(state)
     action = _run_wizard_steps(state)
     if action == "cancel":
         from analyze_git_repo_loc.tui_selector import TuiSelectionCancelled

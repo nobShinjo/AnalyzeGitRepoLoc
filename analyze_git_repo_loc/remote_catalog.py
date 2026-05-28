@@ -17,6 +17,10 @@ Functions:
         Parse and validate the `interactive` YAML section.
     fetch_remote_repositories:
         Fetch repositories from enabled providers.
+    fetch_github_branches:
+        Fetch branch names from a GitHub repository.
+    fetch_gitlab_branches:
+        Fetch branch names from a GitLab repository.
     selected_refs_to_repo_paths:
         Convert selected refs into existing CLI repo tuple entries.
 """
@@ -26,7 +30,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from typing import Any
-from urllib.parse import urlencode, urljoin
+from urllib.parse import quote, urlencode, urljoin
 from urllib.request import Request, urlopen
 
 
@@ -45,6 +49,7 @@ class RemoteRepositoryRef:
     ssh_url: str
     web_url: str
     default_branch: str
+    provider_base_url: str = ""
 
     def git_url(self, clone_protocol: str) -> str:
         """
@@ -260,12 +265,42 @@ def fetch_github_repositories(
                     ssh_url=item.get("ssh_url") or "",
                     web_url=item.get("html_url") or "",
                     default_branch=item.get("default_branch") or "main",
+                    provider_base_url=api_base_url,
                 )
             )
         if len(payload) < 100:
             break
         page += 1
     return refs
+
+
+def fetch_github_branches(
+    *,
+    api_base_url: str,
+    full_name: str,
+    token: str,
+) -> list[str]:
+    """
+    Fetch branch names for a GitHub repository.
+
+    Args:
+        api_base_url (str): GitHub API base URL.
+        full_name (str): Repository full name, such as `owner/repo`.
+        token (str): GitHub token.
+
+    Returns:
+        list[str]: Branch names in provider order.
+    """
+    query = urlencode({"per_page": 100})
+    url = f"{api_base_url.rstrip('/')}/repos/{full_name}/branches?{query}"
+    payload = _request_json(url, _github_headers(token))
+    if not isinstance(payload, list):
+        raise RemoteCatalogError("GitHub branches API response must be a list.")
+    return [
+        str(item.get("name"))
+        for item in payload
+        if isinstance(item, dict) and item.get("name")
+    ]
 
 
 def _gitlab_headers(token: str) -> dict[str, str]:
@@ -325,12 +360,46 @@ def fetch_gitlab_repositories(
                     ssh_url=item.get("ssh_url_to_repo") or "",
                     web_url=item.get("web_url") or "",
                     default_branch=item.get("default_branch") or "main",
+                    provider_base_url=base_url,
                 )
             )
         if len(payload) < 100:
             break
         page += 1
     return refs
+
+
+def fetch_gitlab_branches(
+    *,
+    base_url: str,
+    full_name: str,
+    token: str,
+) -> list[str]:
+    """
+    Fetch branch names for a GitLab repository.
+
+    Args:
+        base_url (str): GitLab instance base URL.
+        full_name (str): Project path with namespace.
+        token (str): GitLab token.
+
+    Returns:
+        list[str]: Branch names in provider order.
+    """
+    project_path = quote(full_name, safe="")
+    query = urlencode({"per_page": 100})
+    url = urljoin(
+        f"{base_url.rstrip('/')}/",
+        f"api/v4/projects/{project_path}/repository/branches?{query}",
+    )
+    payload = _request_json(url, _gitlab_headers(token))
+    if not isinstance(payload, list):
+        raise RemoteCatalogError("GitLab branches API response must be a list.")
+    return [
+        str(item.get("name"))
+        for item in payload
+        if isinstance(item, dict) and item.get("name")
+    ]
 
 
 def _require_auth_token(

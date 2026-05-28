@@ -22,7 +22,9 @@ from analyze_git_repo_loc.i18n import tr
 from analyze_git_repo_loc.remote_catalog import (
     RemoteCatalogError,
     RemoteRepositoryRef,
+    fetch_github_branches,
     fetch_github_repositories,
+    fetch_gitlab_branches,
     fetch_gitlab_repositories,
     fetch_remote_repositories,
     load_tui_settings,
@@ -46,7 +48,11 @@ from analyze_git_repo_loc.tui_auth import (
 from analyze_git_repo_loc.tui_selector import (
     RepositorySelectionResult,
     RepositorySelectorState,
+    SELECTOR_PANE_GAP_WIDTH,
+    SELECTOR_VERTICAL_SEPARATOR_CHAR,
     TuiSelectionCancelled,
+    calculate_selector_pane_widths,
+    choose_selector_layout_orientation,
 )
 from analyze_git_repo_loc.tui_wizard import (
     ProviderTarget,
@@ -379,6 +385,37 @@ class RemoteCatalogTests(unittest.TestCase):
         self.assertEqual(refs[0].provider, "gitlab")
         self.assertEqual(refs[0].full_name, "team/example")
         self.assertEqual(refs[0].clone_url, "https://gitlab.com/team/example.git")
+
+    def test_github_branch_response_normalizes_names(self) -> None:
+        payload = [{"name": "main"}, {"name": "feature/tui"}]
+
+        with patch.object(remote_catalog, "_request_json", return_value=payload) as requester:
+            branches = fetch_github_branches(
+                api_base_url="https://api.github.com",
+                full_name="octo/example",
+                token="secret",
+            )
+
+        self.assertEqual(branches, ["main", "feature/tui"])
+        requester.assert_called_once()
+        self.assertIn("/repos/octo/example/branches", requester.call_args.args[0])
+
+    def test_gitlab_branch_response_normalizes_names(self) -> None:
+        payload = [{"name": "main"}, {"name": "release"}]
+
+        with patch.object(remote_catalog, "_request_json", return_value=payload) as requester:
+            branches = fetch_gitlab_branches(
+                base_url="https://gitlab.example.com",
+                full_name="team/example",
+                token="secret",
+            )
+
+        self.assertEqual(branches, ["main", "release"])
+        requester.assert_called_once()
+        self.assertIn(
+            "/api/v4/projects/team%2Fexample/repository/branches",
+            requester.call_args.args[0],
+        )
 
     def test_selected_refs_to_repo_paths_uses_clone_protocol(self) -> None:
         refs = [
@@ -827,7 +864,7 @@ class RepositorySelectorStateTests(unittest.TestCase):
 
         self.assertTrue(state.cancelled)
 
-    def test_tab_request_marks_branch_selection_requested(self) -> None:
+    def test_tab_request_activates_branch_pane(self) -> None:
         ref = RemoteRepositoryRef(
             "github",
             "alpha",
@@ -842,8 +879,192 @@ class RepositorySelectorStateTests(unittest.TestCase):
         state.toggle_current()
         state.request_branch_selection()
 
-        self.assertTrue(state.confirmed)
-        self.assertTrue(state.branch_selection_requested)
+        self.assertEqual(state.active_pane, "branches")
+        self.assertFalse(state.confirmed)
+        self.assertFalse(state.branch_selection_requested)
+        self.assertEqual(state.selected_refs, [ref])
+
+    def test_pane_switching_keeps_independent_cursors(self) -> None:
+        refs = [
+            RemoteRepositoryRef("github", "alpha", "org/alpha", "https://a.git", "", "", "main"),
+            RemoteRepositoryRef("github", "beta", "org/beta", "https://b.git", "", "", "main"),
+        ]
+        state = RepositorySelectorState(refs, branch_loader=lambda _ref: ["main", "dev"])
+
+        state.move_down()
+        state.activate_branch_pane()
+        state.move_down()
+        state.activate_repository_pane()
+
+        self.assertEqual(state.active_pane, "repositories")
+        self.assertEqual(state.cursor, 1)
+        state.activate_branch_pane()
+        self.assertEqual(state.branch_cursor, 1)
+
+    def test_repo_and_branch_search_follow_active_pane(self) -> None:
+        refs = [
+            RemoteRepositoryRef("github", "alpha", "org/alpha", "https://a.git", "", "", "main"),
+            RemoteRepositoryRef("gitlab", "beta", "team/beta", "https://b.git", "", "", "main"),
+        ]
+        state = RepositorySelectorState(refs, branch_loader=lambda _ref: ["main", "release"])
+
+        state.set_query("beta")
+        self.assertEqual(state.visible_refs, [refs[1]])
+
+        state.activate_branch_pane()
+        state.set_query("rel")
+        self.assertEqual(state.visible_branches, ["release"])
+
+    def test_space_selects_branch_without_selecting_repo(self) -> None:
+        ref = RemoteRepositoryRef(
+            "github",
+            "alpha",
+            "org/alpha",
+            "https://a.git",
+            "",
+            "",
+            "main",
+        )
+        state = RepositorySelectorState([ref], branch_loader=lambda _ref: ["main", "dev"])
+
+        state.activate_branch_pane()
+        state.move_down()
+        state.toggle_current()
+
+        self.assertEqual(state.selected_refs, [])
+        self.assertEqual(state.selected_branches, {"org/alpha": "dev"})
+        self.assertEqual(state.selected_branch_for(ref), "dev")
+
+    def test_branch_fetch_failure_falls_back_to_default_branch(self) -> None:
+        ref = RemoteRepositoryRef(
+            "github",
+            "alpha",
+            "org/alpha",
+            "https://a.git",
+            "",
+            "",
+            "develop",
+        )
+
+        def fail(_: RemoteRepositoryRef) -> list[str]:
+            raise RemoteCatalogError("boom")
+
+        state = RepositorySelectorState([ref], branch_loader=fail)
+
+        state.activate_branch_pane()
+
+        self.assertEqual(state.visible_branches, ["develop"])
+        self.assertEqual(state.branch_status_for(ref), "Failed to load branches; using default branch")
+
+    def test_repo_and_branch_panes_render_separately(self) -> None:
+        refs = [
+            RemoteRepositoryRef("github", "alpha", "org/alpha", "https://a.git", "", "", "main"),
+            RemoteRepositoryRef("github", "beta", "org/beta", "https://b.git", "", "", "develop"),
+        ]
+        state = RepositorySelectorState(refs, branch_loader=lambda _ref: ["main", "feature/tui"])
+
+        state.toggle_current()
+        state.activate_branch_pane()
+        state.move_down()
+        state.toggle_current()
+
+        repo_pane = state.render_repositories(height=8)
+        branch_pane = state.render_branches(height=8)
+
+        self.assertIn("Repositories", repo_pane)
+        self.assertIn("[x] github org/alpha (feature/tui)", repo_pane)
+        self.assertNotIn("Branches: org/alpha", repo_pane)
+        self.assertIn("Branches: org/alpha", branch_pane)
+        self.assertIn("2 branches", branch_pane)
+        self.assertIn("[x] feature/tui", branch_pane)
+        self.assertNotIn("github org/beta", branch_pane)
+
+    def test_selector_layout_orientation_uses_horizontal_when_wide(self) -> None:
+        self.assertEqual(choose_selector_layout_orientation(120), "horizontal")
+        self.assertEqual(choose_selector_layout_orientation(99), "vertical")
+
+    def test_selector_vertical_separator_uses_stable_full_height_line(self) -> None:
+        self.assertEqual(SELECTOR_VERTICAL_SEPARATOR_CHAR, "│")
+        self.assertEqual(SELECTOR_PANE_GAP_WIDTH, 1)
+
+    def test_selector_pane_widths_are_fixed_from_terminal_width(self) -> None:
+        left_width, right_width = calculate_selector_pane_widths(120)
+
+        self.assertEqual(left_width, 58)
+        self.assertEqual(right_width, 59)
+        self.assertEqual(
+            left_width + right_width + SELECTOR_PANE_GAP_WIDTH * 2 + 1,
+            120,
+        )
+
+    def test_page_navigation_moves_active_pane_by_page(self) -> None:
+        refs = [
+            RemoteRepositoryRef("github", f"repo-{index}", f"org/repo-{index}", "https://a.git", "", "", "main")
+            for index in range(20)
+        ]
+        state = RepositorySelectorState(refs, branch_loader=lambda _ref: [f"branch-{index}" for index in range(20)])
+
+        state.page_down(page_size=5)
+        self.assertEqual(state.cursor, 5)
+        state.page_up(page_size=3)
+        self.assertEqual(state.cursor, 2)
+
+        state.activate_branch_pane()
+        state.page_down(page_size=7)
+        self.assertEqual(state.branch_cursor, 7)
+        state.page_up(page_size=4)
+        self.assertEqual(state.branch_cursor, 3)
+
+    def test_footer_documents_page_navigation_keys(self) -> None:
+        ref = RemoteRepositoryRef("github", "alpha", "org/alpha", "https://a.git", "", "", "main")
+        state = RepositorySelectorState([ref], branch_loader=lambda _ref: ["main"])
+
+        self.assertEqual(
+            state.render_footer(),
+            "\n".join(
+                [
+                    "Search: type filter | ctrl-l clear",
+                    "Move: up/down line | pgup/pgdown page | tab/right branches",
+                    "Action: space select repo | ctrl-a select visible | ctrl-u unselect visible | enter confirm | esc/ctrl-c cancel",
+                ]
+            ),
+        )
+
+        state.activate_branch_pane()
+
+        self.assertEqual(
+            state.render_footer(),
+            "\n".join(
+                [
+                    "Search: type filter | ctrl-l clear",
+                    "Move: up/down line | pgup/pgdown page | shift-tab/left repos",
+                    "Action: space select branch | enter confirm | esc/ctrl-c cancel",
+                ]
+            ),
+        )
+
+    def test_unselect_visible_removes_only_visible_repo_selection(self) -> None:
+        refs = [
+            RemoteRepositoryRef("github", "alpha", "org/alpha", "https://a.git", "", "", "main"),
+            RemoteRepositoryRef("github", "beta", "org/beta", "https://b.git", "", "", "main"),
+            RemoteRepositoryRef("github", "gamma", "org/gamma", "https://c.git", "", "", "main"),
+        ]
+        state = RepositorySelectorState(refs)
+        state.select_visible()
+
+        state.set_query("beta")
+        state.unselect_visible()
+
+        self.assertEqual(state.selected_refs, [refs[0], refs[2]])
+
+    def test_unselect_visible_is_repo_pane_only(self) -> None:
+        ref = RemoteRepositoryRef("github", "alpha", "org/alpha", "https://a.git", "", "", "main")
+        state = RepositorySelectorState([ref], branch_loader=lambda _ref: ["main"])
+        state.select_visible()
+
+        state.activate_branch_pane()
+        state.unselect_visible()
+
         self.assertEqual(state.selected_refs, [ref])
 
 
@@ -897,7 +1118,7 @@ class TuiWizardStateTests(unittest.TestCase):
         path.assert_not_called()
         output.assert_not_called()
 
-    def test_run_tui_wizard_opens_branch_selection_when_selector_requests_it(
+    def test_run_tui_wizard_applies_selector_branch_selection(
         self,
     ) -> None:
         ref = RemoteRepositoryRef(
@@ -942,9 +1163,9 @@ class TuiWizardStateTests(unittest.TestCase):
                         "analyze_git_repo_loc.tui_wizard.run_repository_selector",
                         return_value=RepositorySelectionResult(
                             selected_refs=[ref],
-                            branch_selection_requested=True,
+                            selected_branches={"org/alpha": "develop"},
                         ),
-                    ):
+                    ) as selector:
                         with patch(
                             "analyze_git_repo_loc.tui_wizard._prompt_branch_selection"
                         ) as branch:
@@ -952,9 +1173,12 @@ class TuiWizardStateTests(unittest.TestCase):
                                 "analyze_git_repo_loc.tui_wizard._run_wizard_steps",
                                 return_value="run",
                             ):
-                                tui_wizard.run_tui_wizard(args, config)
+                                result = tui_wizard.run_tui_wizard(args, config)
 
-        branch.assert_called_once()
+        selector.assert_called_once()
+        self.assertIn("branch_loader", selector.call_args.kwargs)
+        branch.assert_not_called()
+        self.assertEqual(result.repo_paths[0][1], "develop")
 
     def test_lightweight_recommendations_scan_only_existing_cache(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
