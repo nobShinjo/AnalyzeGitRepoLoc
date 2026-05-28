@@ -954,6 +954,9 @@ def _build_exclude_summary(
         "excluded_paths": list(getattr(recommendation, "paths", [])),
         "template_paths": list(getattr(recommendation, "template_paths", [])),
         "manual_paths": list(getattr(recommendation, "manual_paths", [])),
+        "selected_template_names": list(
+            getattr(recommendation, "selected_template_names", [])
+        ),
     }
 
 
@@ -1156,10 +1159,15 @@ def _print_repository_warnings(warnings: list[str]) -> None:
     """
     Print collected repository warnings after progress bars have completed.
     """
-    if not warnings:
+    visible_warnings = [
+        warning
+        for warning in warnings
+        if "excluded path does not exist:" not in warning
+    ]
+    if not visible_warnings:
         return
     print(tr("warnings.title"), file=sys.stderr)
-    for warning in warnings:
+    for warning in visible_warnings:
         print(f"- {warning}", file=sys.stderr)
 
 
@@ -1170,9 +1178,7 @@ def _print_repository_exclude_summaries(
     Print collected repository exclude template decisions after progress bars.
     """
     visible_summaries = [
-        summary
-        for summary in exclude_summaries
-        if summary.get("templates") or summary.get("excluded_paths")
+        summary for summary in exclude_summaries if summary.get("repository")
     ]
     if not visible_summaries:
         return
@@ -1182,14 +1188,14 @@ def _print_repository_exclude_summaries(
         key=lambda item: str(item.get("repository", "")).casefold(),
     ):
         repository = str(summary.get("repository", ""))
-        templates = summary.get("templates") or [tr("exclude.summary.none")]
-        excluded_paths = summary.get("excluded_paths") or [tr("exclude.summary.none")]
-        print(f"- {repository}: {', '.join(str(item) for item in templates)}")
-        print(
-            "  "
-            f"{tr('exclude.summary.paths')}: "
-            f"{', '.join(str(item) for item in excluded_paths)}"
+        label = _truncate_repo_label(repository, _REPO_PROGRESS_LABEL_WIDTH)
+        templates = (
+            summary.get("templates")
+            or summary.get("selected_template_names")
+            or [tr("exclude.summary.none")]
         )
+        template_text = ", ".join(str(item) for item in templates)
+        print(f"- {label:<{_REPO_PROGRESS_LABEL_WIDTH}}: {template_text}")
 
 
 def analyze_git_repositories(args: argparse.Namespace) -> list[pd.DataFrame]:

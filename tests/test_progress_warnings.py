@@ -139,7 +139,7 @@ class RepositoryWarningTests(unittest.TestCase):
 
         self.assertEqual(analyzer._warnings, [])
 
-    def test_repository_warnings_are_printed_as_summary(self) -> None:
+    def test_missing_exclude_path_warnings_are_omitted_from_summary(self) -> None:
         stderr = StringIO()
 
         with patch.object(sys, "stderr", stderr):
@@ -150,11 +150,17 @@ class RepositoryWarningTests(unittest.TestCase):
                 ]
             )
 
+        self.assertEqual(stderr.getvalue(), "")
+
+    def test_non_exclude_path_warnings_are_printed_as_summary(self) -> None:
+        stderr = StringIO()
+
+        with patch.object(sys, "stderr", stderr):
+            utils._print_repository_warnings(["SoFiRA: unexpected warning"])
+
         self.assertEqual(
             stderr.getvalue(),
-            f"{tr('warnings.title')}\n"
-            "- SoFiRA: excluded path does not exist: node_modules\n"
-            "- AgvController: excluded path does not exist: .venv\n",
+            f"{tr('warnings.title')}\n- SoFiRA: unexpected warning\n",
         )
 
     def test_repository_exclude_summary_is_printed_after_progress(self) -> None:
@@ -169,16 +175,28 @@ class RepositoryWarningTests(unittest.TestCase):
                         "templates": ["Python Project", "Node.js Project"],
                         "excluded_paths": ["node_modules", ".venv"],
                         "template_paths": ["node_modules", ".venv"],
-                    }
+                    },
+                    {
+                        "repository": "ci-scripts",
+                        "mode": "auto",
+                        "templates": [],
+                        "excluded_paths": ["node_modules", ".venv"],
+                        "template_paths": [],
+                    },
                 ]
             )
 
         self.assertIn(tr("exclude.summary.title"), stdout.getvalue())
-        self.assertIn("- SoFiRA: Python Project, Node.js Project", stdout.getvalue())
         self.assertIn(
-            f"  {tr('exclude.summary.paths')}: node_modules, .venv",
+            f"- ci-scripts                      : {tr('exclude.summary.none')}",
             stdout.getvalue(),
         )
+        self.assertIn(
+            "- SoFiRA                          : Python Project, Node.js Project",
+            stdout.getvalue(),
+        )
+        self.assertNotIn(tr("exclude.summary.paths"), stdout.getvalue())
+        self.assertNotIn("node_modules", stdout.getvalue())
 
 
 class RepositoryProgressTests(unittest.TestCase):
