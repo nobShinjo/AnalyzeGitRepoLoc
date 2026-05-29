@@ -110,7 +110,17 @@
                 </tr>
                 <tr>
                   <th>Excluded paths</th>
-                  <td>{{ repo_tab.exclude_summary.excluded_paths | join(", ") if repo_tab.exclude_summary.excluded_paths else "(none)" }}</td>
+                  <td>
+                    {% if repo_tab.exclude_summary.excluded_paths %}
+                    <ul class="exclude-path-list list-unstyled text-start mb-0">
+                      {% for excluded_path in repo_tab.exclude_summary.excluded_paths %}
+                      <li><code>{{ excluded_path }}</code></li>
+                      {% endfor %}
+                    </ul>
+                    {% else %}
+                    (none)
+                    {% endif %}
+                  </td>
                 </tr>
               </tbody>
             </table>

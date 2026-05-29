@@ -48,6 +48,30 @@ def test_auto_recommendation_merges_manual_and_template_paths(tmp_path: Path) ->
     assert "coverage" in recommendation.paths
 
 
+def test_auto_recommendation_ignores_undetected_selected_templates(tmp_path: Path) -> None:
+    (tmp_path / "pyproject.toml").write_text("[project]\nname = 'demo'\n", encoding="utf-8")
+
+    recommendation = build_exclude_recommendation(
+        tmp_path,
+        selected_template_names=["unity", "python", "node"],
+        mode="auto",
+    )
+
+    assert recommendation.selected_template_names == ["python"]
+    assert recommendation.template_paths == [
+        ".venv",
+        "venv",
+        "__pycache__",
+        ".pytest_cache",
+        ".mypy_cache",
+        ".ruff_cache",
+        "dist",
+        "build",
+    ]
+    assert "Library" not in recommendation.paths
+    assert "node_modules" not in recommendation.paths
+
+
 def test_manual_mode_ignores_detected_template_paths(tmp_path: Path) -> None:
     (tmp_path / "Cargo.toml").write_text("[package]\nname = 'demo'\n", encoding="utf-8")
 

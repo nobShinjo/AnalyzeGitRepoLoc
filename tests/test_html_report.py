@@ -105,6 +105,11 @@ class HtmlReportUxTests(unittest.TestCase):
         self.assertIn("Python Project, Node.js Project", html)
         self.assertIn("node_modules", html)
         self.assertIn(".venv", html)
+        self.assertIn("exclude-path-list", html)
+        self.assertIn('class="exclude-path-list list-unstyled text-start mb-0"', html)
+        self.assertIn("<code>node_modules</code>", html)
+        self.assertIn("<code>.venv</code>", html)
+        self.assertNotIn("node_modules, .venv", html)
 
     def test_generate_report_passes_exclude_metadata_to_html_builder(self) -> None:
         progress_context = MagicMock()
@@ -123,6 +128,70 @@ class HtmlReportUxTests(unittest.TestCase):
                         repository_trend_analysis=pd.DataFrame(),
                         exclude_metadata=exclude_metadata,
                     )
+
+        self.assertEqual(report.call_args.kwargs["exclude_metadata"], exclude_metadata)
+
+    def test_main_passes_analyzed_exclude_metadata_to_report(self) -> None:
+        args = argparse.Namespace(
+            command="run",
+            output=Path("out"),
+            interval="monthly",
+            no_plot_show=True,
+        )
+        exclude_metadata = [
+            {
+                "repository": "alpha",
+                "mode": "auto",
+                "templates": ["Python Project"],
+                "excluded_paths": [".venv"],
+            }
+        ]
+        loc_data = pd.DataFrame({"Repository": ["alpha"], "Branch": ["main"]})
+        analysis = pd.DataFrame(
+            {
+                "Month": ["2026-01-01"],
+                "Repository": ["alpha"],
+                "NLOC_Added": [1],
+                "NLOC_Deleted": [0],
+                "NLOC": [1],
+            }
+        )
+
+        def analyze_stub(parsed_args: argparse.Namespace) -> list[pd.DataFrame]:
+            parsed_args.exclude_metadata = exclude_metadata
+            return [loc_data]
+
+        with patch.object(main_module, "parse_arguments", return_value=args):
+            with patch.object(main_module, "_apply_interactive_repository_selection"):
+                with patch.object(main_module, "_print_start"):
+                    with patch.object(
+                        main_module,
+                        "analyze_git_repositories",
+                        side_effect=analyze_stub,
+                    ):
+                        with patch.object(
+                            main_module,
+                            "get_time_interval_and_period",
+                            return_value=("Month", "ME"),
+                        ):
+                            with patch.object(
+                                main_module,
+                                "_build_analysis_data",
+                                return_value=(analysis, analysis, analysis),
+                            ):
+                                with patch.object(main_module, "_save_analysis_outputs"):
+                                    with patch.object(main_module, "_generate_charts"):
+                                        with patch.object(
+                                            main_module, "_generate_report"
+                                        ) as report:
+                                            with patch.object(
+                                                main_module, "_maybe_open_report"
+                                            ):
+                                                with patch.object(
+                                                    main_module,
+                                                    "_print_output_summary",
+                                                ):
+                                                    main_module.main()
 
         self.assertEqual(report.call_args.kwargs["exclude_metadata"], exclude_metadata)
 

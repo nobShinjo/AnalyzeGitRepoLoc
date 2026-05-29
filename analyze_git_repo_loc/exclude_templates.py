@@ -206,7 +206,9 @@ def build_exclude_recommendation(
         selected_names = [item.template.name for item in detected]
     else:
         selected_names = [
-            name for name in _deduplicate(selected_template_names) if name in templates_by_name
+            name
+            for name in _deduplicate(selected_template_names)
+            if name in detected_by_name
         ]
     template_paths: list[str] = []
     for name in selected_names:
