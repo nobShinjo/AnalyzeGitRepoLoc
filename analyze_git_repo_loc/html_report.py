@@ -41,6 +41,7 @@ from analyze_git_repo_loc.analysis_helpers import (
 )
 from analyze_git_repo_loc.chart_builder import ChartBuilder, ChartStrategy
 from analyze_git_repo_loc.chart_ticks import build_client_tick_policy
+from analyze_git_repo_loc.i18n import tr
 
 _ASSETS_DIR_NAME = "assets"
 _NO_DATA_MESSAGE = '<p class="text-muted">No data available.</p>'
@@ -122,7 +123,9 @@ class HtmlReportBuilder:
         report_html = self._build_report_html(progress_callback=progress_callback)
         (self.output_dir / "report.html").write_text(report_html, encoding="utf-8")
         if progress_callback is not None:
-            progress_callback(ProgressEvent(label="Report file written", advance=1))
+            progress_callback(
+                ProgressEvent(label=tr("progress.report_file_written"), advance=1)
+            )
 
     def _ensure_assets(self) -> None:
         """
@@ -220,10 +223,14 @@ class HtmlReportBuilder:
             filter_chunk_size=_FILTER_PROGRESS_CHUNK,
         )
         if progress_callback is not None:
-            progress_callback(ProgressEvent(label="Render template", advance=0))
+            progress_callback(
+                ProgressEvent(label=tr("progress.render_template"), advance=0)
+            )
         rendered = template.render(**context)
         if progress_callback is not None:
-            progress_callback(ProgressEvent(label="Render template", advance=1))
+            progress_callback(
+                ProgressEvent(label=tr("progress.render_template"), advance=1)
+            )
         return rendered
 
     def _build_template_context(
