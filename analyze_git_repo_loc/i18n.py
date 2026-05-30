@@ -50,14 +50,16 @@ _MESSAGES: dict[str, dict[str, str]] = {
         "cli.interactive_help": (
             "Review and adjust analysis settings interactively before running."
         ),
-        "cli.interval_help": "Interval (default: monthly)",
-        "cli.no_plot_show_help": "If set, the plots will not be shown.",
+        "cli.interval_help": "Override aggregation interval for this run.",
+        "cli.no_plot_show_help": (
+            "Generate outputs without opening charts or reports."
+        ),
         "cli.output_help": "Output path",
         "cli.run_help": (
             "Run analysis from a YAML configuration file, optionally interactively."
         ),
-        "cli.since_help": "Start Date yyyy-mm-dd",
-        "cli.until_help": "End Date yyyy-mm-dd",
+        "cli.since_help": "Override start date for this run (YYYY-MM-DD).",
+        "cli.until_help": "Override end date for this run (YYYY-MM-DD).",
         "error.message": "Error message: {message}",
         "error.stack_trace": "Stack trace:",
         "error.type": "Error type: {type}",
@@ -247,12 +249,14 @@ _MESSAGES: dict[str, dict[str, str]] = {
         "cli.interactive_help": (
             "解析前に対話形式で設定を確認・調整します。"
         ),
-        "cli.interval_help": "集計間隔 (既定: monthly)",
-        "cli.no_plot_show_help": "指定するとプロットを自動表示しません。",
+        "cli.interval_help": "この実行だけ集計間隔を上書きします。",
+        "cli.no_plot_show_help": (
+            "チャートやレポートを自動表示せず、出力だけ生成します。"
+        ),
         "cli.output_help": "出力パス",
         "cli.run_help": "YAML 設定ファイルから解析を実行します。対話実行も可能です。",
-        "cli.since_help": "開始日 yyyy-mm-dd",
-        "cli.until_help": "終了日 yyyy-mm-dd",
+        "cli.since_help": "この実行だけ開始日を上書きします (YYYY-MM-DD)。",
+        "cli.until_help": "この実行だけ終了日を上書きします (YYYY-MM-DD)。",
         "error.message": "エラーメッセージ: {message}",
         "error.stack_trace": "スタックトレース:",
         "error.type": "エラー種別: {type}",

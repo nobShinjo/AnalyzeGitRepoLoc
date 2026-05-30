@@ -126,6 +126,32 @@ class I18nTests(unittest.TestCase):
         self.assertEqual(args.display_language, "en")
         self.assertEqual(parser.description, "Analyze Git repositories and visualize code LOC.")
 
+    def test_run_override_help_describes_temporary_cli_overrides(self) -> None:
+        self.assertEqual(
+            tr("cli.since_help", language="en"),
+            "Override start date for this run (YYYY-MM-DD).",
+        )
+        self.assertEqual(
+            tr("cli.until_help", language="en"),
+            "Override end date for this run (YYYY-MM-DD).",
+        )
+        self.assertEqual(
+            tr("cli.interval_help", language="en"),
+            "Override aggregation interval for this run.",
+        )
+        self.assertEqual(
+            tr("cli.no_plot_show_help", language="en"),
+            "Generate outputs without opening charts or reports.",
+        )
+        self.assertEqual(
+            tr("cli.since_help", language="jp"),
+            "この実行だけ開始日を上書きします (YYYY-MM-DD)。",
+        )
+        self.assertEqual(
+            tr("cli.no_plot_show_help", language="jp"),
+            "チャートやレポートを自動表示せず、出力だけ生成します。",
+        )
+
     def test_global_display_language_option_overrides_japanese_os_locale(self) -> None:
         parser = ArgumentParser(prog="analyze_git_repo_loc")
 
