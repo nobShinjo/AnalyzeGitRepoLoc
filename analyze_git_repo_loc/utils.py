@@ -392,7 +392,7 @@ def _apply_display_language_from_argv(argv: list[str]) -> None:
     """Apply a display language override before parser text is created."""
     for index, item in enumerate(argv):
         value: str | None = None
-        if item == "--display-language" and index + 1 < len(argv):
+        if item in {"-L", "--display-language"} and index + 1 < len(argv):
             value = argv[index + 1]
         elif item.startswith("--display-language="):
             value = item.split("=", 1)[1]
@@ -412,6 +412,7 @@ def _add_display_language_argument(
 ) -> None:
     """Add the display language option to a parser."""
     parser.add_argument(
+        "-L",
         "--display-language",
         choices=["auto", "en", "jp"],
         default=default,
@@ -430,13 +431,14 @@ def parse_arguments(parser: argparse.ArgumentParser) -> argparse.Namespace:
         argparse.Namespace: Parsed command line arguments.
     """
     _apply_display_language_from_argv(sys.argv[1:])
-    parser.description = parser.description or tr("cli.description")
+    parser.description = tr("cli.description")
     _add_display_language_argument(parser, default="auto")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     init_parser = subparsers.add_parser(
         "init",
         help=tr("cli.init_help"),
+        description=tr("cli.description"),
     )
     _add_display_language_argument(init_parser)
     init_parser.add_argument(
@@ -466,6 +468,7 @@ def parse_arguments(parser: argparse.ArgumentParser) -> argparse.Namespace:
     run_parser = subparsers.add_parser(
         "run",
         help=tr("cli.run_help"),
+        description=tr("cli.description"),
     )
     _add_display_language_argument(run_parser)
     run_parser.add_argument(

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import unittest
+import tempfile
 from argparse import ArgumentParser
 from pathlib import Path
 from unittest.mock import patch
@@ -72,46 +73,80 @@ class I18nTests(unittest.TestCase):
         self.assertEqual(parser.description, "Git リポジトリを解析し、コード LOC を可視化します。")
 
     def test_display_language_option_overrides_japanese_os_locale(self) -> None:
-        parser = ArgumentParser(prog="analyze_git_repo_loc")
+        parser = ArgumentParser(
+            prog="analyze_git_repo_loc",
+            description="Git リポジトリを解析し、コード LOC を可視化します。",
+        )
 
-        with (
-            patch("locale.getlocale", return_value=("ja_JP", "UTF-8")),
-            patch(
-                "sys.argv",
-                [
-                    "analyze_git_repo_loc",
-                    "run",
-                    "--display-language",
-                    "en",
-                    "--config",
-                    "config.yml",
-                ],
-            ),
-        ):
-            args = parse_arguments(parser)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config_path = Path(tmp_dir) / "config.yml"
+            config_path.write_text("repositories:\n- path: .\n", encoding="utf-8")
+            with (
+                patch("locale.getlocale", return_value=("ja_JP", "UTF-8")),
+                patch(
+                    "sys.argv",
+                    [
+                        "analyze_git_repo_loc",
+                        "run",
+                        "--display-language",
+                        "en",
+                        "--config",
+                        str(config_path),
+                    ],
+                ),
+            ):
+                args = parse_arguments(parser)
 
         self.assertEqual(args.display_language, "en")
         self.assertEqual(parser.description, "Analyze Git repositories and visualize code LOC.")
         self.assertEqual(tr("run.section.generate_html_report"), "Generate HTML report.")
 
+    def test_short_display_language_option_overrides_japanese_os_locale(self) -> None:
+        parser = ArgumentParser(prog="analyze_git_repo_loc")
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config_path = Path(tmp_dir) / "config.yml"
+            config_path.write_text("repositories:\n- path: .\n", encoding="utf-8")
+            with (
+                patch("locale.getlocale", return_value=("ja_JP", "UTF-8")),
+                patch(
+                    "sys.argv",
+                    [
+                        "analyze_git_repo_loc",
+                        "run",
+                        "-L",
+                        "en",
+                        "--config",
+                        str(config_path),
+                    ],
+                ),
+            ):
+                args = parse_arguments(parser)
+
+        self.assertEqual(args.display_language, "en")
+        self.assertEqual(parser.description, "Analyze Git repositories and visualize code LOC.")
+
     def test_global_display_language_option_overrides_japanese_os_locale(self) -> None:
         parser = ArgumentParser(prog="analyze_git_repo_loc")
 
-        with (
-            patch("locale.getlocale", return_value=("ja_JP", "UTF-8")),
-            patch(
-                "sys.argv",
-                [
-                    "analyze_git_repo_loc",
-                    "--display-language",
-                    "en",
-                    "run",
-                    "--config",
-                    "config.yml",
-                ],
-            ),
-        ):
-            args = parse_arguments(parser)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config_path = Path(tmp_dir) / "config.yml"
+            config_path.write_text("repositories:\n- path: .\n", encoding="utf-8")
+            with (
+                patch("locale.getlocale", return_value=("ja_JP", "UTF-8")),
+                patch(
+                    "sys.argv",
+                    [
+                        "analyze_git_repo_loc",
+                        "--display-language",
+                        "en",
+                        "run",
+                        "--config",
+                        str(config_path),
+                    ],
+                ),
+            ):
+                args = parse_arguments(parser)
 
         self.assertEqual(args.display_language, "en")
         self.assertEqual(parser.description, "Analyze Git repositories and visualize code LOC.")
