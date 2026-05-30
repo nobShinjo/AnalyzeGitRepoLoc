@@ -44,6 +44,7 @@ from git import GitCommandError, PathLike, Repo
 from pydriller import Repository
 from tqdm import tqdm
 
+from analyze_git_repo_loc.i18n import tr
 from analyze_git_repo_loc.language_comment import LanguageComment
 from analyze_git_repo_loc.language_extensions import LanguageExtensions
 
@@ -335,7 +336,7 @@ class GitRepoLOCAnalyzer:
                 pass
         for commit in tqdm(
             repository.traverse_commits(),
-            desc="Getting commits",
+            desc=tr("progress.repo.status.getting_commits"),
             total=scan_total,
             unit="commit",
             disable=not self._show_progress,
@@ -569,7 +570,7 @@ class GitRepoLOCAnalyzer:
         # Traverse commits
         for commit in tqdm(
             commits_to_analyze,
-            desc="Analyzing commits",
+            desc=tr("progress.repo.status.analyzing_commits"),
             total=len(commits_to_analyze),
             unit="commit",
             disable=not self._show_progress,

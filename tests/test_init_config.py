@@ -660,9 +660,9 @@ class OutputSummaryTests(unittest.TestCase):
 
         lines = _format_output_summary(output_dir=output_dir, output_root=output_root)
 
-        self.assertEqual(lines[0], tr("output.finished"))
-        self.assertIn(f"Report: {output_dir / 'report.html'}", lines)
-        self.assertIn(f"Summary: {output_dir / 'summary.md'}", lines)
-        self.assertIn(f"Run data: {output_dir}", lines)
-        self.assertIn(f"Repository charts: {output_root}", lines)
-        self.assertIn(f"Cache: {output_root / '.cache'}", lines)
+        self.assertNotIn(tr("output.finished"), lines)
+        self.assertIn(tr("output.report", path=output_dir / "report.html"), lines)
+        self.assertIn(tr("output.summary", path=output_dir / "summary.md"), lines)
+        self.assertIn(tr("output.run_data", path=output_dir), lines)
+        self.assertIn(tr("output.repository_charts", path=output_root), lines)
+        self.assertIn(tr("output.cache", path=output_root / ".cache"), lines)

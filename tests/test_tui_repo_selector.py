@@ -1601,10 +1601,19 @@ class CliOutputSummaryTests(unittest.TestCase):
     def test_format_output_summary_lists_artifacts(self) -> None:
         lines = _format_output_summary(Path("out/20260520123456"))
 
-        self.assertIn(tr("output.finished"), lines)
-        self.assertIn("Report: out\\20260520123456\\report.html", lines)
-        self.assertIn("Summary: out\\20260520123456\\summary.md", lines)
-        self.assertIn("Data: out\\20260520123456\\*.csv", lines)
+        self.assertNotIn(tr("output.finished"), lines)
+        self.assertIn(
+            tr("output.report", path=Path("out/20260520123456/report.html")),
+            lines,
+        )
+        self.assertIn(
+            tr("output.summary", path=Path("out/20260520123456/summary.md")),
+            lines,
+        )
+        self.assertIn(
+            tr("output.data", path=Path("out/20260520123456/*.csv")),
+            lines,
+        )
 
 
 if __name__ == "__main__":

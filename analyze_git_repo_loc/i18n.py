@@ -7,6 +7,10 @@ Description:
 Functions:
     resolve_language:
         Resolve a locale string to a supported language code.
+    resolve_display_language:
+        Resolve a CLI display language value to a supported language code.
+    set_language_override:
+        Set or clear the process-local display language override.
     current_language:
         Return the language inferred from the current OS locale.
     tr:
@@ -20,6 +24,7 @@ from typing import Any
 
 
 SUPPORTED_LANGUAGES = {"en", "jp"}
+_LANGUAGE_OVERRIDE: str | None = None
 
 _MESSAGES: dict[str, dict[str, str]] = {
     "en": {
@@ -35,6 +40,9 @@ _MESSAGES: dict[str, dict[str, str]] = {
         "auth.provider_title": "{provider} authentication",
         "cli.config_help": "YAML configuration file path (default: config.yml).",
         "cli.description": "Analyze Git repositories and visualize code LOC.",
+        "cli.display_language_help": (
+            "Display language for this run (auto, en, or jp; default: auto)."
+        ),
         "cli.init_config_help": (
             "YAML configuration file path to create (default: config.yml)."
         ),
@@ -120,7 +128,39 @@ _MESSAGES: dict[str, dict[str, str]] = {
         "init.yes_no.instructions": (
             "Use Up/Down, Space to select. Y/N shortcut available."
         ),
+        "output.cache": "Cache: {path}",
+        "output.data": "Data: {path}",
         "output.finished": "Finished",
+        "output.report": "Report: {path}",
+        "output.repository_charts": "Repository charts: {path}",
+        "output.run_data": "Run data: {path}",
+        "output.summary": "Summary: {path}",
+        "progress.charts.author_aggregate": "Charts: Author aggregate",
+        "progress.charts.author_contribution": "Charts: Author contribution",
+        "progress.charts.author_trend": "Charts: Author trend",
+        "progress.charts.language_trend": "Charts: Language trend",
+        "progress.charts.repository_trend": "Charts: Repository trend",
+        "progress.forming_data": "Processing loc data",
+        "progress.html_report": "Generating HTML report",
+        "progress.remove_cache": "Remove cache files.",
+        "progress.report_file_written": "Report file written",
+        "progress.render_template": "Render template",
+        "progress.repo.analyzing": "Analyzing repositories",
+        "progress.repo.status.analyzing_commits": "analyzing commits",
+        "progress.repo.status.done": "done",
+        "progress.repo.status.getting_commits": "getting commits",
+        "progress.repo.status.queued": "queued",
+        "progress.saving_data": "Saving analyzed data",
+        "progress.trend_chart": "Generating trend chart",
+        "run.finish": "FINISH",
+        "run.section.excluded_directories": "Excluded directories: {paths}",
+        "run.section.forming_dataframe": "Forming dataframe type data.",
+        "run.section.generate_charts": "Generate charts.",
+        "run.section.generate_html_report": "Generate HTML report.",
+        "run.section.repository_analysis": (
+            "Analysis of LOC in git repository: {repository} ({branch})"
+        ),
+        "run.section.save_data": "Save the analyzed data.",
         "tui.action": "Action",
         "tui.analysis_scope": "Analysis scope",
         "tui.auto_display": "Auto display: {value}",
@@ -197,6 +237,9 @@ _MESSAGES: dict[str, dict[str, str]] = {
         "auth.provider_title": "{provider} 認証",
         "cli.config_help": "YAML 設定ファイルのパス (既定: config.yml)。",
         "cli.description": "Git リポジトリを解析し、コード LOC を可視化します。",
+        "cli.display_language_help": (
+            "この実行の表示言語 (auto, en, jp / 既定: auto)。"
+        ),
         "cli.init_config_help": (
             "作成する YAML 設定ファイルのパス (既定: config.yml)。"
         ),
@@ -274,7 +317,39 @@ _MESSAGES: dict[str, dict[str, str]] = {
         "init.suggestions": "候補:",
         "init.title": "AnalyzeGitRepoLoc 初期設定ウィザード",
         "init.yes_no.instructions": "上下と Space で選択します。Y/N も使えます。",
+        "output.cache": "キャッシュ: {path}",
+        "output.data": "データ: {path}",
         "output.finished": "完了",
+        "output.report": "レポート: {path}",
+        "output.repository_charts": "リポジトリ別チャート: {path}",
+        "output.run_data": "実行データ: {path}",
+        "output.summary": "サマリー: {path}",
+        "progress.charts.author_aggregate": "チャート: Author 集計",
+        "progress.charts.author_contribution": "チャート: Author contribution",
+        "progress.charts.author_trend": "チャート: Author トレンド",
+        "progress.charts.language_trend": "チャート: Language トレンド",
+        "progress.charts.repository_trend": "チャート: Repository トレンド",
+        "progress.forming_data": "LOC データ処理中",
+        "progress.html_report": "HTML レポート生成中",
+        "progress.remove_cache": "キャッシュファイルを削除します。",
+        "progress.report_file_written": "レポートファイル書き込み完了",
+        "progress.render_template": "テンプレート描画",
+        "progress.repo.analyzing": "リポジトリ解析中",
+        "progress.repo.status.analyzing_commits": "commit 解析中",
+        "progress.repo.status.done": "完了",
+        "progress.repo.status.getting_commits": "commit 取得中",
+        "progress.repo.status.queued": "待機中",
+        "progress.saving_data": "解析データ保存中",
+        "progress.trend_chart": "トレンドチャート生成中",
+        "run.finish": "完了",
+        "run.section.excluded_directories": "除外ディレクトリ: {paths}",
+        "run.section.forming_dataframe": "DataFrame 形式のデータを整形します。",
+        "run.section.generate_charts": "チャートを生成します。",
+        "run.section.generate_html_report": "HTML レポートを生成します。",
+        "run.section.repository_analysis": (
+            "Git リポジトリの LOC を解析します: {repository} ({branch})"
+        ),
+        "run.section.save_data": "解析データを保存します。",
         "tui.action": "操作",
         "tui.analysis_scope": "解析範囲",
         "tui.auto_display": "自動表示: {value}",
@@ -351,8 +426,30 @@ def resolve_language(locale_name: str | None) -> str:
     return "en"
 
 
+def resolve_display_language(value: str | None) -> str | None:
+    """Resolve a display language option to a supported override code."""
+    if value is None:
+        return None
+    normalized = value.strip().casefold()
+    if not normalized or normalized == "auto":
+        return None
+    if normalized in {"en", "english"}:
+        return "en"
+    if normalized in {"jp", "ja", "japanese"}:
+        return "jp"
+    raise ValueError("display language must be auto, en, or jp.")
+
+
+def set_language_override(language: str | None) -> None:
+    """Set or clear the process-local display language override."""
+    global _LANGUAGE_OVERRIDE  # pylint: disable=global-statement
+    _LANGUAGE_OVERRIDE = language if language in SUPPORTED_LANGUAGES else None
+
+
 def current_language() -> str:
     """Return the language inferred from the current OS locale."""
+    if _LANGUAGE_OVERRIDE is not None:
+        return _LANGUAGE_OVERRIDE
     try:
         locale_name = locale.getlocale()[0]
     except (TypeError, ValueError):

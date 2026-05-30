@@ -39,7 +39,7 @@ from analyze_git_repo_loc.exclude_templates import (
     normalize_exclude_template_mode,
 )
 from analyze_git_repo_loc.git_repo_loc_analyzer import GitRepoLOCAnalyzer
-from analyze_git_repo_loc.i18n import tr
+from analyze_git_repo_loc.i18n import resolve_display_language, set_language_override, tr
 from analyze_git_repo_loc.remote_auth import RemoteAuthError
 from analyze_git_repo_loc.remote_repos import RemoteRepoManager
 from analyze_git_repo_loc.yaml_config import merge_yaml_config
@@ -55,8 +55,11 @@ _REPO_EVENT_FINISH = "finish"
 _REPO_EVENT_STOP = "stop"
 _REPO_PROGRESS_LABEL_WIDTH = 32
 _REPO_PROGRESS_STATUS_WIDTH = len("analyzing commits")
+_REPO_PROGRESS_COUNT_WIDTH = 5
 _REPO_PROGRESS_BAR_FORMAT = (
-    "{desc}: {percentage:3.0f}%|{bar}| {n_fmt}/{total_fmt} "
+    f"{{desc}}: {{percentage:3.0f}}%|{{bar}}| "
+    f"{{n_fmt:>{_REPO_PROGRESS_COUNT_WIDTH}}}/"
+    f"{{total_fmt:>{_REPO_PROGRESS_COUNT_WIDTH}}} "
     "[{elapsed}<{remaining}, {rate_fmt}]"
 )
 
@@ -253,13 +256,17 @@ def _apply_repo_progress_event(
         return True
     if kind == _REPO_EVENT_START:
         bar.set_description_str(
-            _format_repo_progress_description(label, "getting commits")
+            _format_repo_progress_description(
+                label, tr("progress.repo.status.getting_commits")
+            )
         )
         bar.refresh()
     elif kind == _REPO_EVENT_SCAN_TOTAL:
         total = max(0, int(value))
         bar.set_description_str(
-            _format_repo_progress_description(label, "getting commits")
+            _format_repo_progress_description(
+                label, tr("progress.repo.status.getting_commits")
+            )
         )
         bar.total = total
         bar.n = 0
@@ -271,7 +278,9 @@ def _apply_repo_progress_event(
     elif kind == _REPO_EVENT_TOTAL:
         total = max(0, int(value))
         bar.set_description_str(
-            _format_repo_progress_description(label, "analyzing commits")
+            _format_repo_progress_description(
+                label, tr("progress.repo.status.analyzing_commits")
+            )
         )
         bar.total = total
         bar.n = 0
@@ -283,7 +292,9 @@ def _apply_repo_progress_event(
     elif kind == _REPO_EVENT_FINISH:
         if bar.total is not None and bar.n < bar.total:
             bar.update(bar.total - bar.n)
-        bar.set_description_str(_format_repo_progress_description(label, "done"))
+        bar.set_description_str(
+            _format_repo_progress_description(label, tr("progress.repo.status.done"))
+        )
         bar.refresh()
     return True
 
@@ -377,6 +388,37 @@ def _validate_date_range(since: datetime | None, until: datetime | None) -> None
         raise ValueError("Invalid date range: --since must be on or before --until.")
 
 
+def _apply_display_language_from_argv(argv: list[str]) -> None:
+    """Apply a display language override before parser text is created."""
+    for index, item in enumerate(argv):
+        value: str | None = None
+        if item == "--display-language" and index + 1 < len(argv):
+            value = argv[index + 1]
+        elif item.startswith("--display-language="):
+            value = item.split("=", 1)[1]
+        if value is None:
+            continue
+        try:
+            set_language_override(resolve_display_language(value))
+        except ValueError:
+            return
+        return
+
+
+def _add_display_language_argument(
+    parser: argparse.ArgumentParser,
+    *,
+    default: str | None | object = argparse.SUPPRESS,
+) -> None:
+    """Add the display language option to a parser."""
+    parser.add_argument(
+        "--display-language",
+        choices=["auto", "en", "jp"],
+        default=default,
+        help=tr("cli.display_language_help"),
+    )
+
+
 def parse_arguments(parser: argparse.ArgumentParser) -> argparse.Namespace:
     """
     parse_arguments Parse command line arguments.
@@ -387,13 +429,16 @@ def parse_arguments(parser: argparse.ArgumentParser) -> argparse.Namespace:
     Returns:
         argparse.Namespace: Parsed command line arguments.
     """
+    _apply_display_language_from_argv(sys.argv[1:])
     parser.description = parser.description or tr("cli.description")
+    _add_display_language_argument(parser, default="auto")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     init_parser = subparsers.add_parser(
         "init",
         help=tr("cli.init_help"),
     )
+    _add_display_language_argument(init_parser)
     init_parser.add_argument(
         "--config",
         type=Path,
@@ -422,6 +467,7 @@ def parse_arguments(parser: argparse.ArgumentParser) -> argparse.Namespace:
         "run",
         help=tr("cli.run_help"),
     )
+    _add_display_language_argument(run_parser)
     run_parser.add_argument(
         "--config",
         type=Path,
@@ -473,6 +519,7 @@ def parse_arguments(parser: argparse.ArgumentParser) -> argparse.Namespace:
     )
 
     args = parser.parse_args()
+    set_language_override(resolve_display_language(getattr(args, "display_language", None)))
     try:
         if args.command == "init":
             return args
@@ -650,7 +697,7 @@ def _maybe_clear_cache(
     if not clear_cache:
         return
     if show_progress and console is not None:
-        console.print_h1("# Remove cache files.")
+        console.print_h1(f"# {tr('progress.remove_cache')}")
     analyzer.clear_cache_files()
     if show_progress and console is not None:
         console.print_ok(up=2, forward=50)
@@ -714,7 +761,12 @@ def _analyze_single_repository(
     if show_progress and console is not None:
         console.print_h1("\n")
         console.print_h1(
-            f"# Analysis of LOC in git repository: {repository_name} ({branch_name})",
+            "# "
+            + tr(
+                "run.section.repository_analysis",
+                repository=repository_name,
+                branch=branch_name,
+            ),
         )
     try:
         analysis_repo_path = _resolve_analysis_repo_path(
@@ -740,7 +792,10 @@ def _analyze_single_repository(
         final_exclude_dirs = exclude_recommendation.paths or None
         manual_warning_dirs = exclude_recommendation.manual_paths
         if show_progress and console is not None and final_exclude_dirs is not None:
-            console.print_h1(f"## Excluded directories:{final_exclude_dirs}")
+            console.print_h1(
+                "## "
+                + tr("run.section.excluded_directories", paths=final_exclude_dirs)
+            )
 
         analyzer = _create_analyzer(
             analysis_repo_path=analysis_repo_path,
@@ -1056,7 +1111,9 @@ def _build_repo_progress_bars(
         repo_labels[index] = label
         repo_bars[index] = tqdm(
             total=None,
-            desc=_format_repo_progress_description(label, "queued"),
+            desc=_format_repo_progress_description(
+                label, tr("progress.repo.status.queued")
+            ),
             position=progress.pos + 1 + index,
             leave=True,
             unit="commit",
@@ -1217,7 +1274,7 @@ def analyze_git_repositories(args: argparse.Namespace) -> list[pd.DataFrame]:
     warnings: list[str] = []
     exclude_summaries: list[dict[str, object]] = []
 
-    with tqdm(total=repo_count, desc="Analyzing repositories") as progress:
+    with tqdm(total=repo_count, desc=tr("progress.repo.analyzing")) as progress:
         manager: SyncManager | None = None
         progress_queue: object | None = None
         repo_bars: dict[int, tqdm] = {}

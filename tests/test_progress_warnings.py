@@ -217,7 +217,9 @@ class RepositoryProgressTests(unittest.TestCase):
 
         tqdm_mock.assert_called_once_with(
             total=None,
-            desc="  Repo: alpha                            (queued           )",
+            desc=utils._format_repo_progress_description(
+                "alpha", tr("progress.repo.status.queued")
+            ),
             position=1,
             leave=True,
             unit="commit",
@@ -236,11 +238,22 @@ class RepositoryProgressTests(unittest.TestCase):
     def test_repo_child_progress_descriptions_keep_fixed_width(self) -> None:
         descriptions = [
             utils._format_repo_progress_description("alpha", status)
-            for status in ("queued", "getting commits", "analyzing commits", "done")
+            for status in (
+                tr("progress.repo.status.queued"),
+                tr("progress.repo.status.getting_commits"),
+                tr("progress.repo.status.analyzing_commits"),
+                tr("progress.repo.status.done"),
+            )
         ]
 
         self.assertEqual(len(set(map(len, descriptions))), 1)
         self.assertTrue(descriptions[0].startswith("  Repo: "))
+
+    def test_repo_child_progress_count_format_uses_fixed_width(self) -> None:
+        self.assertIn(
+            "{n_fmt:>5}/{total_fmt:>5}",
+            utils._REPO_PROGRESS_BAR_FORMAT,
+        )
 
     def test_repo_child_progress_tracks_commit_scan_before_analysis(self) -> None:
         bar = Mock()
@@ -276,7 +289,9 @@ class RepositoryProgressTests(unittest.TestCase):
         self.assertEqual(bar.total, 300)
         self.assertEqual(bar.n, 0)
         bar.set_description_str.assert_called_once_with(
-            "  Repo: alpha                            (getting commits  )"
+            utils._format_repo_progress_description(
+                "alpha", tr("progress.repo.status.getting_commits")
+            )
         )
         bar.refresh.assert_called_once()
 
@@ -297,7 +312,9 @@ class RepositoryProgressTests(unittest.TestCase):
         self.assertEqual(bar.total, 12)
         self.assertEqual(bar.n, 0)
         bar.set_description_str.assert_called_once_with(
-            "  Repo: alpha                            (analyzing commits)"
+            utils._format_repo_progress_description(
+                "alpha", tr("progress.repo.status.analyzing_commits")
+            )
         )
         bar.refresh.assert_called_once()
 
@@ -341,7 +358,9 @@ class RepositoryProgressTests(unittest.TestCase):
 
         bar.update.assert_not_called()
         bar.set_description_str.assert_called_once_with(
-            "  Repo: alpha                            (done             )"
+            utils._format_repo_progress_description(
+                "alpha", tr("progress.repo.status.done")
+            )
         )
 
     def test_repo_child_progress_finishes_at_total(self) -> None:
@@ -360,7 +379,9 @@ class RepositoryProgressTests(unittest.TestCase):
 
         bar.update.assert_called_once_with(5)
         bar.set_description_str.assert_called_once_with(
-            "  Repo: alpha                            (done             )"
+            utils._format_repo_progress_description(
+                "alpha", tr("progress.repo.status.done")
+            )
         )
 
     def test_sequential_analysis_emits_child_progress_events_when_queue_is_provided(

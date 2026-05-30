@@ -182,8 +182,8 @@ def _build_analysis_data(
     author_analysis = pd.DataFrame()
     repository_trend_analysis = pd.DataFrame()
 
-    console.print_h1("\n# Forming dataframe type data.")
-    for loc_data in tqdm(loc_data_repositories, desc="Processing loc data"):
+    console.print_h1(f"\n# {tr('run.section.forming_dataframe')}")
+    for loc_data in tqdm(loc_data_repositories, desc=tr("progress.forming_data")):
         repository_name = _prepare_loc_data(
             loc_data,
             time_interval=time_interval,
@@ -252,7 +252,7 @@ def _generate_charts(
     author_analysis: pd.DataFrame,
     repository_trend_analysis: pd.DataFrame,
 ) -> None:
-    with tqdm(total=5, desc="Charts: Language trend") as progress_bar:
+    with tqdm(total=5, desc=tr("progress.charts.language_trend")) as progress_bar:
         generate_trend_chart(
             data=language_analysis,
             category_column="Language",
@@ -262,7 +262,7 @@ def _generate_charts(
         )
         progress_bar.update(1)
 
-        progress_bar.set_description_str("Charts: Author trend")
+        progress_bar.set_description_str(tr("progress.charts.author_trend"))
         generate_trend_chart(
             data=author_analysis,
             category_column="Author",
@@ -272,7 +272,7 @@ def _generate_charts(
         )
         progress_bar.update(1)
 
-        progress_bar.set_description_str("Charts: Repository trend")
+        progress_bar.set_description_str(tr("progress.charts.repository_trend"))
         generate_all_repositories_trend_chart(
             data=repository_trend_analysis,
             time_interval=time_interval,
@@ -282,7 +282,7 @@ def _generate_charts(
         )
         progress_bar.update(1)
 
-        progress_bar.set_description_str("Charts: Author contribution")
+        progress_bar.set_description_str(tr("progress.charts.author_contribution"))
         generate_author_contribution_chart(
             data=author_analysis,
             output_path=output_dir,
@@ -290,7 +290,7 @@ def _generate_charts(
         )
         progress_bar.update(1)
 
-        progress_bar.set_description_str("Charts: Author aggregate")
+        progress_bar.set_description_str(tr("progress.charts.author_aggregate"))
         generate_all_repositories_trend_chart(
             data=repository_trend_analysis,
             time_interval=time_interval,
@@ -312,7 +312,7 @@ def _generate_report(
     repository_trend_analysis: pd.DataFrame,
     exclude_metadata: list[dict[str, object]] | None = None,
 ) -> None:
-    with tqdm(desc="Generating HTML report") as progress_bar:
+    with tqdm(desc=tr("progress.html_report")) as progress_bar:
         report_progress = _ReportProgressTracker(progress_bar)
         try:
             generate_html_report(
@@ -356,13 +356,12 @@ def _format_output_summary(
     """
     resolved_output_root = output_root or output_dir.parent
     return [
-        tr("output.finished"),
-        f"Report: {output_dir / 'report.html'}",
-        f"Summary: {output_dir / 'summary.md'}",
-        f"Data: {output_dir / '*.csv'}",
-        f"Run data: {output_dir}",
-        f"Repository charts: {resolved_output_root}",
-        f"Cache: {resolved_output_root / '.cache'}",
+        tr("output.report", path=output_dir / "report.html"),
+        tr("output.summary", path=output_dir / "summary.md"),
+        tr("output.data", path=output_dir / "*.csv"),
+        tr("output.run_data", path=output_dir),
+        tr("output.repository_charts", path=resolved_output_root),
+        tr("output.cache", path=resolved_output_root / ".cache"),
     ]
 
 
@@ -378,8 +377,7 @@ def _print_output_summary(
         output_root (Path): Root output directory for charts and cache.
     """
     lines = _format_output_summary(output_dir, output_root)
-    console.print_colored(lines[0], color=Fore.GREEN, bright=True)
-    for line in lines[1:]:
+    for line in lines:
         label, _, value = line.partition(": ")
         console.print_colored(f"{label}: ", color=Fore.CYAN, bright=True, end="")
         print(value)
@@ -422,7 +420,7 @@ def main() -> None:
     )
 
     # Save the analyzed data
-    console.print_h1("\n# Save the analyzed data.")
+    console.print_h1(f"\n# {tr('run.section.save_data')}")
     output_dir = output_root / datetime.now().strftime("%Y%m%d%H%M%S")
     _save_analysis_outputs(
         output_dir=output_dir,
@@ -434,7 +432,7 @@ def main() -> None:
     )
 
     # Generate charts
-    console.print_h1("\n# Generate charts.")
+    console.print_h1(f"\n# {tr('run.section.generate_charts')}")
     _generate_charts(
         output_root=output_root,
         output_dir=output_dir,
@@ -445,7 +443,7 @@ def main() -> None:
         repository_trend_analysis=repository_trend_analysis,
     )
 
-    console.print_h1("\n# Generate HTML report.")
+    console.print_h1(f"\n# {tr('run.section.generate_html_report')}")
     _generate_report(
         output_dir=output_dir,
         output_root=output_root,
@@ -461,7 +459,7 @@ def main() -> None:
     _print_output_summary(console, output_dir, output_root)
 
     console.print_h1("\n# LOC Analyze")
-    print(Cursor.UP() + Cursor.FORWARD(50) + Fore.GREEN + "FINISH")
+    print(Cursor.UP() + Cursor.FORWARD(50) + Fore.GREEN + tr("run.finish"))
 
 
 def save_analysis_data(
@@ -481,7 +479,7 @@ def save_analysis_data(
         handle_exception(ex)
 
     # dictからname key, data valueを取り出して、name.csvとして保存
-    for name, data in tqdm(data_list.items(), desc="Saving analyzed data"):
+    for name, data in tqdm(data_list.items(), desc=tr("progress.saving_data")):
         data.to_csv(output_dir / f"{name}.csv", index=False)
 
 
@@ -513,7 +511,7 @@ def generate_trend_chart(
     # Generate trend chart for each repository
     unique_repositories = data["Repository"].unique()
     for repository in tqdm(
-        unique_repositories, desc="Generating trend chart", leave=False
+        unique_repositories, desc=tr("progress.trend_chart"), leave=False
     ):
         loc_data = data[data["Repository"] == repository]
         branch_name = next(iter(loc_data["Branch"].unique()), "Unknown")
