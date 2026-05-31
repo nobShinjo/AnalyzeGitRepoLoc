@@ -102,11 +102,11 @@
               <tbody>
                 <tr>
                   <th>Mode</th>
-                  <td>{{ repo_tab.exclude_summary.mode }}</td>
+                  <td class="text-start">{{ repo_tab.exclude_summary.mode }}</td>
                 </tr>
                 <tr>
                   <th>Templates</th>
-                  <td>{{ repo_tab.exclude_summary.templates | join(", ") if repo_tab.exclude_summary.templates else "(none)" }}</td>
+                  <td class="text-start">{{ repo_tab.exclude_summary.templates | join(", ") if repo_tab.exclude_summary.templates else "(none)" }}</td>
                 </tr>
                 <tr>
                   <th>Excluded paths</th>

@@ -103,6 +103,11 @@ class HtmlReportUxTests(unittest.TestCase):
 
         self.assertIn("Exclude Paths", html)
         self.assertIn("Python Project, Node.js Project", html)
+        self.assertIn('<td class="text-start">auto</td>', html)
+        self.assertIn(
+            '<td class="text-start">Python Project, Node.js Project</td>',
+            html,
+        )
         self.assertIn("node_modules", html)
         self.assertIn(".venv", html)
         self.assertIn("exclude-path-list", html)
