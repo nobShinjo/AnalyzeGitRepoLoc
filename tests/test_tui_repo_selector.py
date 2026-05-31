@@ -96,12 +96,20 @@ class TuiConfigTests(unittest.TestCase):
         self.assertEqual(settings.defaults.clone_protocol, "https")
 
     def test_rejects_config_without_enabled_provider(self) -> None:
-        with self.assertRaisesRegex(RemoteCatalogError, "At least one"):
-            load_tui_settings({"interactive": {"providers": {}}})
+        with patch("locale.getlocale", return_value=("en_US", "UTF-8")):
+            with self.assertRaisesRegex(
+                RemoteCatalogError,
+                tr("doctor.error.provider_enabled_required", language="en"),
+            ):
+                load_tui_settings({"interactive": {"providers": {}}})
 
     def test_rejects_legacy_tui_settings_section(self) -> None:
-        with self.assertRaisesRegex(RemoteCatalogError, "interactive.providers"):
-            load_tui_settings({"tui": {"providers": {"github": {"enabled": True}}}})
+        with patch("locale.getlocale", return_value=("en_US", "UTF-8")):
+            with self.assertRaisesRegex(
+                RemoteCatalogError,
+                tr("doctor.error.interactive_providers_required", language="en"),
+            ):
+                load_tui_settings({"tui": {"providers": {"github": {"enabled": True}}}})
 
     def test_ignores_legacy_provider_auth_settings(self) -> None:
         settings = load_tui_settings(
