@@ -4,12 +4,39 @@
 
 ### Added
 
-- Added `doctor` command for lightweight YAML/config diagnostics before
-  analysis, with optional remote provider checks and strict warning handling.
-
 ### Changed
 
 ### Fixed
+
+### Removed
+
+### Security
+
+## [3.0.0] - 2026-05-31
+
+### Added
+
+- Add `init` setup mode to create a TUI-ready YAML configuration interactively.
+- Add `doctor` command for lightweight YAML/config diagnostics before analysis,
+  with optional remote provider and branch checks plus strict warning handling.
+- Add guided interactive runtime authentication for GitHub and GitLab providers.
+- Add a generalized `config.doctor-sample.yml` sample for doctor validation.
+
+### Changed
+
+- Restructure the CLI around `init`, `doctor`, and `run` subcommands.
+- Expand `run -i` into a full pre-analysis wizard covering provider selection,
+  repository discovery, branch selection, filters, path rules, cache policy,
+  output settings, and final review.
+- Localize doctor output and related interactive provider validation messages.
+- Refresh the HTML report layout and dashboard behavior for better usability.
+
+### Fixed
+
+- Left-align exclude summary values in the HTML report.
+- Detect missing remote repositories and branches even when other doctor
+  validation errors are also present.
+- Keep localized provider-setting validation compatible with existing TUI tests.
 
 ### Removed
 
@@ -225,6 +252,7 @@
 - Provided functionality to generate LOC trend charts by language and author.
 -
 
+[3.0.0](https://github.com/nobShinjo/AnalyzeGitRepoLoc/releases/tag/v3.0.0)
 [2.3.0](https://github.com/nobShinjo/AnalyzeGitRepoLoc/releases/tag/v2.3.0)
 [2.2.4](https://github.com/nobShinjo/AnalyzeGitRepoLoc/releases/tag/v2.2.4)
 [2.2.3](https://github.com/nobShinjo/AnalyzeGitRepoLoc/releases/tag/v2.2.3)
