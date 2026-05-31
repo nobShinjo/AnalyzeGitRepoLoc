@@ -30,6 +30,7 @@ from analyze_git_repo_loc.remote_catalog import (
     load_tui_settings,
     selected_refs_to_repo_paths,
 )
+from analyze_git_repo_loc.remote_auth import build_host_provider_env_var
 from analyze_git_repo_loc.remote_auth import build_host_token_env_var
 from analyze_git_repo_loc.tui_auth import run_tui_auth_selection
 from analyze_git_repo_loc.remote_oauth import (
@@ -76,6 +77,22 @@ from analyze_git_repo_loc.utils import parse_arguments
 
 class TuiConfigTests(unittest.TestCase):
     """Interactive config loading tests."""
+
+    def test_loads_minimal_interactive_settings_without_optional_sections(self) -> None:
+        config = {
+            "interactive": {
+                "providers": {
+                    "github": {"enabled": True},
+                }
+            }
+        }
+
+        settings = load_tui_settings(config)
+
+        self.assertTrue(settings.providers.github.enabled)
+        self.assertFalse(settings.providers.gitlab.enabled)
+        self.assertEqual(settings.providers.gitlab.base_url, "https://gitlab.com")
+        self.assertEqual(settings.defaults.clone_protocol, "https")
 
     def test_loads_interactive_settings_with_defaults(self) -> None:
         config = {
@@ -266,6 +283,37 @@ class CliTuiArgumentTests(unittest.TestCase):
             args.repo_paths,
             [("https://github.com/org/alpha.git", "main", ["vendor"], "src/app")],
         )
+
+    def test_parse_arguments_restores_provider_hint_for_self_hosted_github(self) -> None:
+        parser = argparse.ArgumentParser(prog="analyze_git_repo_loc")
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config_path = Path(tmp_dir) / "config.yml"
+            config_path.write_text(
+                "settings:\n"
+                "  output: ./out\n"
+                "repositories:\n"
+                "  - path: https://git.example.com/org/alpha.git\n"
+                "    branch: main\n"
+                "interactive:\n"
+                "  providers:\n"
+                "    github:\n"
+                "      enabled: true\n"
+                "      api_base_url: https://git.example.com/api/v3\n",
+                encoding="utf-8",
+            )
+
+            with patch.dict("os.environ", {}, clear=True):
+                with patch.object(
+                    sys,
+                    "argv",
+                    ["analyze_git_repo_loc", "run", "--config", str(config_path)],
+                ):
+                    parse_arguments(parser)
+
+                self.assertEqual(
+                    os.environ[build_host_provider_env_var("git.example.com")],
+                    "github",
+                )
 
     def test_run_uses_default_config_yml(self) -> None:
         parser = argparse.ArgumentParser(prog="analyze_git_repo_loc")
@@ -703,6 +751,10 @@ class TuiAuthTests(unittest.TestCase):
             self.assertEqual(
                 os.environ[build_host_token_env_var("gitlab.example.com")],
                 "host-token",
+            )
+            self.assertEqual(
+                os.environ[build_host_provider_env_var("gitlab.example.com")],
+                "gitlab",
             )
 
 
@@ -1187,6 +1239,84 @@ class TuiWizardStateTests(unittest.TestCase):
         self.assertIn("branch_loader", selector.call_args.kwargs)
         branch.assert_not_called()
         self.assertEqual(result.repo_paths[0][1], "develop")
+
+    def test_run_tui_wizard_preserves_repository_overrides_from_config(self) -> None:
+        ref = RemoteRepositoryRef(
+            "github",
+            "alpha",
+            "org/alpha",
+            "https://github.com/org/alpha.git",
+            "",
+            "https://github.com/org/alpha",
+            "main",
+        )
+        args = argparse.Namespace(
+            output=Path("out"),
+            since=None,
+            until=None,
+            interval="monthly",
+            author_name=None,
+            lang=None,
+            exclude_dirs=None,
+            workers=1,
+            clear_cache=False,
+            no_plot_show=True,
+            config=Path("config.yml"),
+        )
+        config = {
+            "interactive": {"providers": {"github": {"enabled": True}}},
+            "repositories": [
+                {
+                    "path": "https://github.com/org/alpha.git",
+                    "branch": "release",
+                    "include_subpath": "src/app",
+                    "exclude_dirs": ["generated"],
+                    "exclude_template_mode": "manual",
+                    "exclude_template_names": ["python"],
+                }
+            ],
+        }
+
+        with patch(
+            "analyze_git_repo_loc.tui_wizard.choose_auto_provider_targets",
+            return_value=[
+                ProviderTarget("github", "github", "GitHub", "https://api.github.com")
+            ],
+        ):
+            with patch(
+                "analyze_git_repo_loc.tui_wizard._authenticate_provider_targets",
+                return_value=({"github": "token"}, {"github": "env"}),
+            ):
+                with patch(
+                    "analyze_git_repo_loc.tui_wizard._fetch_repository_catalog",
+                    return_value=[ref],
+                ):
+                    with patch(
+                        "analyze_git_repo_loc.tui_wizard.run_repository_selector",
+                        return_value=RepositorySelectionResult(
+                            selected_refs=[ref],
+                            selected_branches={},
+                        ),
+                    ):
+                        with patch(
+                            "analyze_git_repo_loc.tui_wizard._run_wizard_steps",
+                            return_value="run",
+                        ):
+                            result = tui_wizard.run_tui_wizard(args, config)
+
+        self.assertEqual(
+            result.repo_paths,
+            [
+                (
+                    "https://github.com/org/alpha.git",
+                    "release",
+                    ["generated"],
+                    "src/app",
+                    "manual",
+                    ["python"],
+                )
+            ],
+        )
 
     def test_lightweight_recommendations_scan_only_existing_cache(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:

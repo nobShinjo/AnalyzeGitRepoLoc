@@ -33,6 +33,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 import yaml
 from colorama import Fore, Style, just_fix_windows_console
@@ -912,6 +913,53 @@ def apply_repository_overrides(
             )
 
 
+def _repository_override_key(path_value: Any) -> str | None:
+    """Normalize a repository config path to the remote full-name key."""
+    path_text = str(path_value or "").strip()
+    if not path_text:
+        return None
+    if path_text.startswith("git@"):
+        host_path = path_text.split("@", 1)[-1]
+        if ":" not in host_path:
+            return None
+        _, repo_path = host_path.split(":", 1)
+    else:
+        parsed = urlparse(path_text)
+        if not parsed.scheme or not parsed.path:
+            return None
+        repo_path = parsed.path
+    normalized = repo_path.lstrip("/").rstrip("/")
+    if normalized.endswith(".git"):
+        normalized = normalized[:-4]
+    return normalized or None
+
+
+def load_repository_overrides(config_data: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """Extract per-repository overrides from parsed YAML config data."""
+    repositories = config_data.get("repositories")
+    if not isinstance(repositories, list):
+        return {}
+    overrides: dict[str, dict[str, Any]] = {}
+    for repository in repositories:
+        if not isinstance(repository, dict):
+            continue
+        key = _repository_override_key(repository.get("path"))
+        if not key:
+            continue
+        overrides[key] = {
+            field: repository[field]
+            for field in (
+                "branch",
+                "include_subpath",
+                "exclude_dirs",
+                "exclude_template_mode",
+                "exclude_template_names",
+            )
+            if field in repository
+        }
+    return overrides
+
+
 def _prompt_branch_selection(state: TuiWizardState) -> None:
     print()
     print(tr("tui.branch_selection"))
@@ -1487,6 +1535,7 @@ def run_tui_wizard(
     just_fix_windows_console()
     settings = load_tui_settings(config_data)
     quick_defaults = load_quick_defaults(config_data)
+    repository_overrides = load_repository_overrides(config_data)
     provider_targets = choose_auto_provider_targets(settings)
     if provider_targets is None:
         provider_targets = _prompt_provider_selection(settings)
@@ -1517,6 +1566,11 @@ def run_tui_wizard(
         selected_branches=selected_branches,
     )
     apply_quick_defaults(state, quick_defaults)
+    apply_repository_overrides(state, repository_overrides)
+    for repository in state.selected_repositories:
+        selected_branch = selected_branches.get(repository.ref.full_name)
+        if selected_branch:
+            repository.branch = selected_branch
     state.recommendations = build_lightweight_recommendations(state)
     action = _run_wizard_steps(state)
     if action == "cancel":

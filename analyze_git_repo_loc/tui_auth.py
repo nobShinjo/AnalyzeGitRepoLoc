@@ -33,6 +33,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 from analyze_git_repo_loc.i18n import tr
+from analyze_git_repo_loc.remote_auth import build_host_provider_env_var
 from analyze_git_repo_loc.remote_auth import build_host_token_env_var, get_cli_token
 from analyze_git_repo_loc.remote_oauth import (
     DEFAULT_GITHUB_SCOPES,
@@ -317,10 +318,11 @@ def _auth_label(provider: str, status: AuthMethodStatus) -> str:
     return "one-time token"
 
 
-def _set_host_token(base_url: str, token: str) -> None:
+def _set_host_token(base_url: str, provider: str, token: str) -> None:
     parsed = urlparse(base_url)
     if parsed.hostname:
         os.environ[build_host_token_env_var(parsed.hostname)] = token
+        os.environ[build_host_provider_env_var(parsed.hostname)] = provider
 
 
 def run_tui_auth_selection(
@@ -357,7 +359,7 @@ def run_tui_auth_selection(
             choice=_choice_from_status(provider, status),
         )
         tokens[provider] = token
-        _set_host_token(base_url, token)
+        _set_host_token(base_url, provider, token)
         labels[provider] = _auth_label(provider, status)
     return tokens, labels
 

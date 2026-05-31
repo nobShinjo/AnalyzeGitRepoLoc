@@ -14,11 +14,14 @@ Overview:
 from __future__ import annotations
 
 import argparse
+import os
 from pathlib import Path
 from typing import Callable
+from urllib.parse import urlparse
 
 import yaml
 
+from analyze_git_repo_loc.remote_auth import build_host_provider_env_var
 from analyze_git_repo_loc.remote_repos import RemoteRepoManager
 
 
@@ -174,6 +177,28 @@ def _build_repo_entries(
     return repo_entries
 
 
+def _apply_config_provider_hints(config_data: dict) -> None:
+    """Restore provider hints for configured self-hosted interactive providers."""
+    interactive = config_data.get("interactive")
+    if not isinstance(interactive, dict):
+        return
+    providers = interactive.get("providers")
+    if not isinstance(providers, dict):
+        return
+
+    github = providers.get("github")
+    if isinstance(github, dict) and github.get("enabled"):
+        parsed = urlparse(str(github.get("api_base_url") or "https://api.github.com"))
+        if parsed.hostname and parsed.hostname != "api.github.com":
+            os.environ[build_host_provider_env_var(parsed.hostname)] = "github"
+
+    gitlab = providers.get("gitlab")
+    if isinstance(gitlab, dict) and gitlab.get("enabled"):
+        parsed = urlparse(str(gitlab.get("base_url") or "https://gitlab.com"))
+        if parsed.hostname and parsed.hostname != "gitlab.com":
+            os.environ[build_host_provider_env_var(parsed.hostname)] = "gitlab"
+
+
 def merge_yaml_config(
     args: argparse.Namespace,
     repo_manager: RemoteRepoManager,
@@ -190,6 +215,8 @@ def merge_yaml_config(
     Returns:
         argparse.Namespace: Updated arguments with YAML config applied.
     """
+    config_data = load_yaml_data(args.config)
+    _apply_config_provider_hints(config_data)
     settings, repositories = load_yaml_config(
         args.config,
         require_repositories=not getattr(args, "interactive", False),
