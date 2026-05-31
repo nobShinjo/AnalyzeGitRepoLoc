@@ -885,7 +885,11 @@ def apply_repository_overrides(
         overrides (dict[str, dict[str, Any]]): Overrides keyed by full repo name.
     """
     for repository in state.selected_repositories:
-        override = overrides.get(repository.ref.full_name, {})
+        override = {}
+        for key in _selected_repository_override_keys(repository):
+            override = overrides.get(key, {})
+            if override:
+                break
         branch = str(override.get("branch") or "").strip()
         if branch:
             repository.branch = branch
@@ -914,7 +918,7 @@ def apply_repository_overrides(
 
 
 def _repository_override_key(path_value: Any) -> str | None:
-    """Normalize a repository config path to the remote full-name key."""
+    """Normalize a repository config path to a provider-safe host/path key."""
     path_text = str(path_value or "").strip()
     if not path_text:
         return None
@@ -922,16 +926,36 @@ def _repository_override_key(path_value: Any) -> str | None:
         host_path = path_text.split("@", 1)[-1]
         if ":" not in host_path:
             return None
-        _, repo_path = host_path.split(":", 1)
+        host, repo_path = host_path.split(":", 1)
     else:
         parsed = urlparse(path_text)
-        if not parsed.scheme or not parsed.path:
+        if not parsed.scheme or not parsed.hostname or not parsed.path:
             return None
+        host = parsed.hostname
         repo_path = parsed.path
     normalized = repo_path.lstrip("/").rstrip("/")
     if normalized.endswith(".git"):
         normalized = normalized[:-4]
-    return normalized or None
+    if not normalized:
+        return None
+    return f"{host.lower()}/{normalized}"
+
+
+def _selected_repository_override_keys(
+    repository: SelectedRepositoryConfig,
+) -> list[str]:
+    """Return supported override keys for a selected repository."""
+    keys: list[str] = []
+    for path_value in (repository.ref.clone_url, repository.ref.ssh_url):
+        key = _repository_override_key(path_value)
+        if key and key not in keys:
+            keys.append(key)
+    provider_key = f"{repository.ref.provider}:{repository.ref.full_name}"
+    if provider_key not in keys:
+        keys.append(provider_key)
+    if repository.ref.full_name not in keys:
+        keys.append(repository.ref.full_name)
+    return keys
 
 
 def load_repository_overrides(config_data: dict[str, Any]) -> dict[str, dict[str, Any]]:

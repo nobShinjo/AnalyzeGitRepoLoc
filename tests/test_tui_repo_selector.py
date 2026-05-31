@@ -1318,6 +1318,109 @@ class TuiWizardStateTests(unittest.TestCase):
             ],
         )
 
+    def test_run_tui_wizard_preserves_repository_overrides_for_mixed_providers(self) -> None:
+        github_ref = RemoteRepositoryRef(
+            "github",
+            "core",
+            "acme/core",
+            "https://github.com/acme/core.git",
+            "",
+            "https://github.com/acme/core",
+            "main",
+        )
+        gitlab_ref = RemoteRepositoryRef(
+            "gitlab",
+            "core",
+            "acme/core",
+            "https://gitlab.example.com/acme/core.git",
+            "",
+            "https://gitlab.example.com/acme/core",
+            "main",
+        )
+        args = argparse.Namespace(
+            output=Path("out"),
+            since=None,
+            until=None,
+            interval="monthly",
+            author_name=None,
+            lang=None,
+            exclude_dirs=None,
+            workers=1,
+            clear_cache=False,
+            no_plot_show=True,
+            config=Path("config.yml"),
+        )
+        config = {
+            "interactive": {
+                "providers": {
+                    "github": {"enabled": True},
+                    "gitlab": {
+                        "enabled": True,
+                        "base_url": "https://gitlab.example.com",
+                    },
+                }
+            },
+            "repositories": [
+                {
+                    "path": "https://github.com/acme/core.git",
+                    "branch": "release",
+                    "include_subpath": "src/github",
+                },
+                {
+                    "path": "https://gitlab.example.com/acme/core.git",
+                    "branch": "develop",
+                    "include_subpath": "src/gitlab",
+                },
+            ],
+        }
+
+        with patch(
+            "analyze_git_repo_loc.tui_wizard.choose_auto_provider_targets",
+            return_value=[
+                ProviderTarget("github", "github", "GitHub", "https://api.github.com"),
+                ProviderTarget(
+                    "gitlab:https://gitlab.example.com",
+                    "gitlab",
+                    "GitLab",
+                    "https://gitlab.example.com",
+                ),
+            ],
+        ):
+            with patch(
+                "analyze_git_repo_loc.tui_wizard._authenticate_provider_targets",
+                return_value=(
+                    {
+                        "github": "gh-token",
+                        "gitlab:https://gitlab.example.com": "gl-token",
+                    },
+                    {
+                        "github": "env",
+                        "gitlab:https://gitlab.example.com": "env",
+                    },
+                ),
+            ):
+                with patch(
+                    "analyze_git_repo_loc.tui_wizard._fetch_repository_catalog",
+                    return_value=[github_ref, gitlab_ref],
+                ):
+                    with patch(
+                        "analyze_git_repo_loc.tui_wizard.run_repository_selector",
+                        return_value=RepositorySelectionResult(
+                            selected_refs=[github_ref, gitlab_ref],
+                            selected_branches={},
+                        ),
+                    ):
+                        with patch(
+                            "analyze_git_repo_loc.tui_wizard._run_wizard_steps",
+                            return_value="run",
+                        ):
+                            result = tui_wizard.run_tui_wizard(args, config)
+
+        self.assertEqual(result.repo_paths[0][1], "release")
+        self.assertEqual(result.repo_paths[0][3], "src/github")
+        self.assertEqual(result.repo_paths[1][1], "develop")
+        self.assertEqual(result.repo_paths[1][3], "src/gitlab")
+
     def test_lightweight_recommendations_scan_only_existing_cache(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             output = Path(tmp_dir) / "out"
@@ -1595,6 +1698,54 @@ class TuiWizardStateTests(unittest.TestCase):
         self.assertEqual(repository.branch, "release")
         self.assertEqual(repository.include_subpath, "packages/api")
         self.assertEqual(repository.exclude_dirs, ["dist", ".cache"])
+
+    def test_repository_overrides_distinguish_same_full_name_across_providers(self) -> None:
+        github_ref = RemoteRepositoryRef(
+            "github",
+            "core",
+            "acme/core",
+            "https://github.com/acme/core.git",
+            "git@github.com:acme/core.git",
+            "https://github.com/acme/core",
+            "main",
+        )
+        gitlab_ref = RemoteRepositoryRef(
+            "gitlab",
+            "core",
+            "acme/core",
+            "https://gitlab.example.com/acme/core.git",
+            "git@gitlab.example.com:acme/core.git",
+            "https://gitlab.example.com/acme/core",
+            "main",
+        )
+        state = TuiWizardState(
+            provider_targets=[],
+            auth_tokens={},
+            repository_catalog=[github_ref, gitlab_ref],
+            selected_repositories=[
+                SelectedRepositoryConfig(ref=github_ref, branch="main"),
+                SelectedRepositoryConfig(ref=gitlab_ref, branch="main"),
+            ],
+        )
+
+        apply_repository_overrides(
+            state,
+            {
+                "github.com/acme/core": {
+                    "branch": "release",
+                    "include_subpath": "src/github",
+                },
+                "gitlab.example.com/acme/core": {
+                    "branch": "develop",
+                    "include_subpath": "src/gitlab",
+                },
+            },
+        )
+
+        self.assertEqual(state.selected_repositories[0].branch, "release")
+        self.assertEqual(state.selected_repositories[0].include_subpath, "src/github")
+        self.assertEqual(state.selected_repositories[1].branch, "develop")
+        self.assertEqual(state.selected_repositories[1].include_subpath, "src/gitlab")
 
     def test_config_export_omits_auth_tokens(self) -> None:
         ref = RemoteRepositoryRef(
