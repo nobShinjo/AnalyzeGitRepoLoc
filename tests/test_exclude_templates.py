@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from analyze_git_repo_loc.exclude_templates import (
+from analyze_git_repo_loc.analysis.exclude_templates import (
     ExcludeTemplate,
     build_exclude_recommendation,
     detect_exclude_templates,

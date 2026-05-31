@@ -6,7 +6,7 @@ import warnings
 
 import pandas as pd
 
-from analyze_git_repo_loc.chart_builder import ChartBuilder, ChartStrategy
+from analyze_git_repo_loc.reporting.chart_builder import ChartBuilder, ChartStrategy
 
 
 def _trend_data(interval: str, dates: pd.DatetimeIndex) -> pd.DataFrame:

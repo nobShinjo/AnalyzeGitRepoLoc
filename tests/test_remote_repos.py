@@ -7,10 +7,10 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-from analyze_git_repo_loc.remote_auth import build_host_provider_env_var
-from analyze_git_repo_loc.remote_auth import RemoteAuthService
-from analyze_git_repo_loc.remote_auth import build_host_token_env_var
-from analyze_git_repo_loc.remote_repos import RemoteRepoManager
+from analyze_git_repo_loc.remote.remote_auth import build_host_provider_env_var
+from analyze_git_repo_loc.remote.remote_auth import RemoteAuthService
+from analyze_git_repo_loc.remote.remote_auth import build_host_token_env_var
+from analyze_git_repo_loc.remote.remote_repos import RemoteRepoManager
 
 
 class RemoteRepoManagerCacheTests(unittest.TestCase):
@@ -78,7 +78,10 @@ class RemoteRepoManagerCacheTests(unittest.TestCase):
         manager = RemoteRepoManager(auth)
         repo = Mock()
 
-        with patch("analyze_git_repo_loc.remote_repos.Repo.clone_from", return_value=repo) as clone:
+        with patch(
+            "analyze_git_repo_loc.remote.remote_repos.Repo.clone_from",
+            return_value=repo,
+        ) as clone:
             result = manager._clone_with_auth(
                 "https://github.com/acme/private.git",
                 Path("cache/private"),
@@ -178,8 +181,14 @@ class RemoteAuthServiceTests(unittest.TestCase):
         runner = Mock(return_value=Mock(returncode=0, stdout="gh-token\n"))
 
         with patch.dict("os.environ", {provider_env: "github"}, clear=True):
-            with patch("analyze_git_repo_loc.remote_auth.shutil.which", return_value="gh"):
-                with patch("analyze_git_repo_loc.remote_auth.subprocess.run", runner):
+            with patch(
+                "analyze_git_repo_loc.remote.remote_auth.shutil.which",
+                return_value="gh",
+            ):
+                with patch(
+                    "analyze_git_repo_loc.remote.remote_auth.subprocess.run",
+                    runner,
+                ):
                     candidates = auth.build_auth_candidates(
                         "https://git.example.com/acme/private.git"
                     )
@@ -200,8 +209,14 @@ class RemoteAuthServiceTests(unittest.TestCase):
         runner = Mock(return_value=Mock(returncode=0, stdout="gh-token\n"))
 
         with patch.dict("os.environ", {}, clear=True):
-            with patch("analyze_git_repo_loc.remote_auth.shutil.which", return_value="gh"):
-                with patch("analyze_git_repo_loc.remote_auth.subprocess.run", runner):
+            with patch(
+                "analyze_git_repo_loc.remote.remote_auth.shutil.which",
+                return_value="gh",
+            ):
+                with patch(
+                    "analyze_git_repo_loc.remote.remote_auth.subprocess.run",
+                    runner,
+                ):
                     candidates = auth.build_auth_candidates(
                         "https://github.com/acme/private.git"
                     )
@@ -227,8 +242,14 @@ class RemoteAuthServiceTests(unittest.TestCase):
         )
 
         with patch.dict("os.environ", {}, clear=True):
-            with patch("analyze_git_repo_loc.remote_auth.shutil.which", return_value="glab"):
-                with patch("analyze_git_repo_loc.remote_auth.subprocess.run", runner):
+            with patch(
+                "analyze_git_repo_loc.remote.remote_auth.shutil.which",
+                return_value="glab",
+            ):
+                with patch(
+                    "analyze_git_repo_loc.remote.remote_auth.subprocess.run",
+                    runner,
+                ):
                     candidates = auth.build_auth_candidates(
                         "https://gitlab.com/acme/private.git"
                     )

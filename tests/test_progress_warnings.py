@@ -11,7 +11,7 @@ from unittest.mock import ANY, MagicMock, Mock, patch
 import pandas as pd
 
 from analyze_git_repo_loc import utils
-from analyze_git_repo_loc.git_repo_loc_analyzer import GitRepoLOCAnalyzer
+from analyze_git_repo_loc.analysis.git_repo_loc_analyzer import GitRepoLOCAnalyzer
 from analyze_git_repo_loc.i18n import tr
 
 
@@ -421,6 +421,47 @@ class RepositoryProgressTests(unittest.TestCase):
         self.assertIs(analyze.call_args.kwargs["progress_queue"], progress_queue)
         self.assertEqual(results[0].to_dict("list"), loc_data.to_dict("list"))
         progress.update.assert_called_once_with(1)
+
+    def test_sequential_analysis_adapter_accepts_error_handler(self) -> None:
+        args = argparse.Namespace()
+        progress = Mock()
+        error_handler = Mock()
+
+        with patch(
+            "analyze_git_repo_loc.analysis.analysis_runner._analyze_repositories_sequential"
+        ) as impl:
+            utils._analyze_repositories_sequential(
+                args=args,
+                repo_entries=[],
+                progress=progress,
+                results={},
+                warnings=[],
+                exclude_summaries=[],
+                error_handler=error_handler,
+            )
+
+        self.assertIs(impl.call_args.kwargs["error_handler"], error_handler)
+
+    def test_parallel_analysis_adapter_accepts_error_handler(self) -> None:
+        args = argparse.Namespace()
+        progress = Mock()
+        error_handler = Mock()
+
+        with patch(
+            "analyze_git_repo_loc.analysis.analysis_runner._analyze_repositories_parallel"
+        ) as impl:
+            utils._analyze_repositories_parallel(
+                args=args,
+                repo_entries=[],
+                worker_count=2,
+                progress=progress,
+                results={},
+                warnings=[],
+                exclude_summaries=[],
+                error_handler=error_handler,
+            )
+
+        self.assertIs(impl.call_args.kwargs["error_handler"], error_handler)
 
     def test_analyze_git_repositories_starts_repo_child_progress_bars(self) -> None:
         loc_data = pd.DataFrame({"repository": ["alpha"]})

@@ -12,41 +12,21 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 from urllib.error import HTTPError
 
-from analyze_git_repo_loc import remote_catalog
-from analyze_git_repo_loc import remote_oauth
-from analyze_git_repo_loc import tui_wizard
 from analyze_git_repo_loc import utils
 from analyze_git_repo_loc.__main__ import _apply_interactive_repository_selection
 from analyze_git_repo_loc.__main__ import _format_output_summary
 from analyze_git_repo_loc.i18n import tr
-from analyze_git_repo_loc.remote_catalog import (
-    RemoteCatalogError,
-    RemoteRepositoryRef,
-    fetch_github_branches,
-    fetch_github_repositories,
-    fetch_gitlab_branches,
-    fetch_gitlab_repositories,
-    fetch_remote_repositories,
-    load_tui_settings,
-    selected_refs_to_repo_paths,
-)
-from analyze_git_repo_loc.remote_auth import build_host_provider_env_var
-from analyze_git_repo_loc.remote_auth import build_host_token_env_var
-from analyze_git_repo_loc.tui_auth import run_tui_auth_selection
-from analyze_git_repo_loc.remote_oauth import (
-    DeviceCodeLoginError,
-    fetch_github_device_code_token,
-    fetch_gitlab_device_code_token,
-)
-from analyze_git_repo_loc.tui_auth import (
+from analyze_git_repo_loc.interactive import tui_wizard
+from analyze_git_repo_loc.interactive.tui_auth import (
     AuthChoice,
     AuthMethodStatus,
     build_auth_method_statuses,
     choose_auto_auth_status,
     get_cli_token,
     resolve_auth_choice,
+    run_tui_auth_selection,
 )
-from analyze_git_repo_loc.tui_selector import (
+from analyze_git_repo_loc.interactive.tui_selector import (
     RepositorySelectionResult,
     RepositorySelectorState,
     SELECTOR_PANE_GAP_WIDTH,
@@ -55,7 +35,7 @@ from analyze_git_repo_loc.tui_selector import (
     calculate_selector_pane_widths,
     choose_selector_layout_orientation,
 )
-from analyze_git_repo_loc.tui_wizard import (
+from analyze_git_repo_loc.interactive.tui_wizard import (
     ProviderTarget,
     SelectedRepositoryConfig,
     TuiWizardState,
@@ -71,6 +51,28 @@ from analyze_git_repo_loc.tui_wizard import (
     render_final_review,
     selected_targets_to_settings,
     wizard_state_to_config,
+)
+from analyze_git_repo_loc.remote import remote_catalog
+from analyze_git_repo_loc.remote import remote_oauth
+from analyze_git_repo_loc.remote.remote_auth import (
+    build_host_provider_env_var,
+    build_host_token_env_var,
+)
+from analyze_git_repo_loc.remote.remote_catalog import (
+    RemoteCatalogError,
+    RemoteRepositoryRef,
+    fetch_github_branches,
+    fetch_github_repositories,
+    fetch_gitlab_branches,
+    fetch_gitlab_repositories,
+    fetch_remote_repositories,
+    load_tui_settings,
+    selected_refs_to_repo_paths,
+)
+from analyze_git_repo_loc.remote.remote_oauth import (
+    DeviceCodeLoginError,
+    fetch_github_device_code_token,
+    fetch_gitlab_device_code_token,
 )
 from analyze_git_repo_loc.utils import parse_arguments
 
@@ -664,7 +666,7 @@ class TuiAuthTests(unittest.TestCase):
     def test_resolve_auth_choice_uses_device_code_and_sets_process_env(self) -> None:
         with patch.dict("os.environ", {"GITHUB_TOKEN": "env-token"}, clear=True):
             with patch(
-                "analyze_git_repo_loc.tui_auth.fetch_github_device_code_token",
+                "analyze_git_repo_loc.interactive.tui_auth.fetch_github_device_code_token",
                 return_value="web-token",
             ) as fetcher:
                 token = resolve_auth_choice(
@@ -733,7 +735,7 @@ class TuiAuthTests(unittest.TestCase):
 
         with patch.dict("os.environ", {}, clear=True):
             with patch(
-                "analyze_git_repo_loc.tui_auth.build_auth_method_statuses",
+                "analyze_git_repo_loc.interactive.tui_auth.build_auth_method_statuses",
                 return_value=[
                     AuthMethodStatus(
                         "cli",
@@ -775,7 +777,7 @@ class DeviceCodeAuthTests(unittest.TestCase):
         ]
 
         with patch(
-            "analyze_git_repo_loc.remote_oauth._post_form_json",
+            "analyze_git_repo_loc.remote.remote_oauth._post_form_json",
             side_effect=responses,
         ) as post:
             token = fetch_github_device_code_token(
@@ -810,7 +812,7 @@ class DeviceCodeAuthTests(unittest.TestCase):
         sleeps: list[float] = []
 
         with patch(
-            "analyze_git_repo_loc.remote_oauth._post_form_json",
+            "analyze_git_repo_loc.remote.remote_oauth._post_form_json",
             side_effect=responses,
         ):
             token = fetch_github_device_code_token(
@@ -837,7 +839,7 @@ class DeviceCodeAuthTests(unittest.TestCase):
                     {"error": error},
                 ]
                 with patch(
-                    "analyze_git_repo_loc.remote_oauth._post_form_json",
+                    "analyze_git_repo_loc.remote.remote_oauth._post_form_json",
                     side_effect=responses,
                 ):
                     with self.assertRaisesRegex(DeviceCodeLoginError, error):
@@ -861,7 +863,7 @@ class DeviceCodeAuthTests(unittest.TestCase):
         ]
 
         with patch(
-            "analyze_git_repo_loc.remote_oauth._post_form_json",
+            "analyze_git_repo_loc.remote.remote_oauth._post_form_json",
             side_effect=responses,
         ) as post:
             token = fetch_gitlab_device_code_token(
@@ -1161,14 +1163,20 @@ class TuiWizardStateTests(unittest.TestCase):
         )
 
         with patch(
-            "analyze_git_repo_loc.tui_wizard._prompt_final_action",
+            "analyze_git_repo_loc.interactive.tui_wizard._prompt_final_action",
             return_value="run",
         ):
-            with patch("analyze_git_repo_loc.tui_wizard._prompt_branch_selection") as branch:
-                with patch("analyze_git_repo_loc.tui_wizard._prompt_analysis_scope") as scope:
-                    with patch("analyze_git_repo_loc.tui_wizard._prompt_path_rules") as path:
+            with patch(
+                "analyze_git_repo_loc.interactive.tui_wizard._prompt_branch_selection"
+            ) as branch:
+                with patch(
+                    "analyze_git_repo_loc.interactive.tui_wizard._prompt_analysis_scope"
+                ) as scope:
+                    with patch(
+                        "analyze_git_repo_loc.interactive.tui_wizard._prompt_path_rules"
+                    ) as path:
                         with patch(
-                            "analyze_git_repo_loc.tui_wizard._prompt_output_cache_display"
+                            "analyze_git_repo_loc.interactive.tui_wizard._prompt_output_cache_display"
                         ) as output:
                             action = tui_wizard._run_wizard_steps(state)
 
@@ -1206,31 +1214,31 @@ class TuiWizardStateTests(unittest.TestCase):
         config = {"interactive": {"providers": {"github": {"enabled": True}}}}
 
         with patch(
-            "analyze_git_repo_loc.tui_wizard.choose_auto_provider_targets",
+            "analyze_git_repo_loc.interactive.tui_wizard.choose_auto_provider_targets",
             return_value=[
                 ProviderTarget("github", "github", "GitHub", "https://api.github.com")
             ],
         ):
             with patch(
-                "analyze_git_repo_loc.tui_wizard._authenticate_provider_targets",
+                "analyze_git_repo_loc.interactive.tui_wizard._authenticate_provider_targets",
                 return_value=({"github": "token"}, {"github": "env"}),
             ):
                 with patch(
-                    "analyze_git_repo_loc.tui_wizard._fetch_repository_catalog",
+                    "analyze_git_repo_loc.interactive.tui_wizard._fetch_repository_catalog",
                     return_value=[ref],
                 ):
                     with patch(
-                        "analyze_git_repo_loc.tui_wizard.run_repository_selector",
+                        "analyze_git_repo_loc.interactive.tui_wizard.run_repository_selector",
                         return_value=RepositorySelectionResult(
                             selected_refs=[ref],
                             selected_branches={"org/alpha": "develop"},
                         ),
                     ) as selector:
                         with patch(
-                            "analyze_git_repo_loc.tui_wizard._prompt_branch_selection"
+                            "analyze_git_repo_loc.interactive.tui_wizard._prompt_branch_selection"
                         ) as branch:
                             with patch(
-                                "analyze_git_repo_loc.tui_wizard._run_wizard_steps",
+                                "analyze_git_repo_loc.interactive.tui_wizard._run_wizard_steps",
                                 return_value="run",
                             ):
                                 result = tui_wizard.run_tui_wizard(args, config)
@@ -1278,28 +1286,28 @@ class TuiWizardStateTests(unittest.TestCase):
         }
 
         with patch(
-            "analyze_git_repo_loc.tui_wizard.choose_auto_provider_targets",
+            "analyze_git_repo_loc.interactive.tui_wizard.choose_auto_provider_targets",
             return_value=[
                 ProviderTarget("github", "github", "GitHub", "https://api.github.com")
             ],
         ):
             with patch(
-                "analyze_git_repo_loc.tui_wizard._authenticate_provider_targets",
+                "analyze_git_repo_loc.interactive.tui_wizard._authenticate_provider_targets",
                 return_value=({"github": "token"}, {"github": "env"}),
             ):
                 with patch(
-                    "analyze_git_repo_loc.tui_wizard._fetch_repository_catalog",
+                    "analyze_git_repo_loc.interactive.tui_wizard._fetch_repository_catalog",
                     return_value=[ref],
                 ):
                     with patch(
-                        "analyze_git_repo_loc.tui_wizard.run_repository_selector",
+                        "analyze_git_repo_loc.interactive.tui_wizard.run_repository_selector",
                         return_value=RepositorySelectionResult(
                             selected_refs=[ref],
                             selected_branches={},
                         ),
                     ):
                         with patch(
-                            "analyze_git_repo_loc.tui_wizard._run_wizard_steps",
+                            "analyze_git_repo_loc.interactive.tui_wizard._run_wizard_steps",
                             return_value="run",
                         ):
                             result = tui_wizard.run_tui_wizard(args, config)
@@ -1375,7 +1383,7 @@ class TuiWizardStateTests(unittest.TestCase):
         }
 
         with patch(
-            "analyze_git_repo_loc.tui_wizard.choose_auto_provider_targets",
+            "analyze_git_repo_loc.interactive.tui_wizard.choose_auto_provider_targets",
             return_value=[
                 ProviderTarget("github", "github", "GitHub", "https://api.github.com"),
                 ProviderTarget(
@@ -1387,7 +1395,7 @@ class TuiWizardStateTests(unittest.TestCase):
             ],
         ):
             with patch(
-                "analyze_git_repo_loc.tui_wizard._authenticate_provider_targets",
+                "analyze_git_repo_loc.interactive.tui_wizard._authenticate_provider_targets",
                 return_value=(
                     {
                         "github": "gh-token",
@@ -1400,18 +1408,18 @@ class TuiWizardStateTests(unittest.TestCase):
                 ),
             ):
                 with patch(
-                    "analyze_git_repo_loc.tui_wizard._fetch_repository_catalog",
+                    "analyze_git_repo_loc.interactive.tui_wizard._fetch_repository_catalog",
                     return_value=[github_ref, gitlab_ref],
                 ):
                     with patch(
-                        "analyze_git_repo_loc.tui_wizard.run_repository_selector",
+                        "analyze_git_repo_loc.interactive.tui_wizard.run_repository_selector",
                         return_value=RepositorySelectionResult(
                             selected_refs=[github_ref, gitlab_ref],
                             selected_branches={},
                         ),
                     ):
                         with patch(
-                            "analyze_git_repo_loc.tui_wizard._run_wizard_steps",
+                            "analyze_git_repo_loc.interactive.tui_wizard._run_wizard_steps",
                             return_value="run",
                         ):
                             result = tui_wizard.run_tui_wizard(args, config)
@@ -1453,7 +1461,7 @@ class TuiWizardStateTests(unittest.TestCase):
             )
 
             with patch(
-                "analyze_git_repo_loc.tui_wizard.determine_cache_path",
+                "analyze_git_repo_loc.interactive.tui_wizard.determine_cache_path",
                 return_value=cached_repo,
             ):
                 recommendations = build_lightweight_recommendations(state)
@@ -1634,7 +1642,7 @@ class TuiWizardStateTests(unittest.TestCase):
             cached_repo = Path(tmp_dir) / "cache" / "alpha"
             (cached_repo / "node_modules").mkdir(parents=True)
             with patch(
-                "analyze_git_repo_loc.tui_wizard.determine_cache_path",
+                "analyze_git_repo_loc.interactive.tui_wizard.determine_cache_path",
                 return_value=cached_repo,
             ):
                 args = apply_wizard_state(argparse.Namespace(), state)
@@ -1787,7 +1795,7 @@ class TuiWizardStateTests(unittest.TestCase):
         )
 
         with patch(
-            "analyze_git_repo_loc.tui_wizard.fetch_github_repositories",
+            "analyze_git_repo_loc.interactive.tui_wizard.fetch_github_repositories",
             side_effect=OSError("dns failed"),
         ):
             with self.assertRaisesRegex(RemoteCatalogError, "Failed to fetch GitHub"):

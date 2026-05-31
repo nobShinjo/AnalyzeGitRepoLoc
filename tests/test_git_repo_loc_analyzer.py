@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-from analyze_git_repo_loc.git_repo_loc_analyzer import GitRepoLOCAnalyzer
+from analyze_git_repo_loc.analysis.git_repo_loc_analyzer import GitRepoLOCAnalyzer
 
 
 class RepositoryDisplayNameTests(unittest.TestCase):
@@ -50,7 +50,7 @@ class CommitProgressTests(unittest.TestCase):
 
         with patch.object(analyzer, "_count_commits_for_scan", return_value=2):
             with patch(
-                "analyze_git_repo_loc.git_repo_loc_analyzer.tqdm",
+                "analyze_git_repo_loc.analysis.git_repo_loc_analyzer.tqdm",
                 side_effect=lambda iterable, **_kwargs: iterable,
             ) as tqdm_mock:
                 result = analyzer._get_commits(repository, progress_callback=callback)
@@ -74,7 +74,7 @@ class CommitProgressTests(unittest.TestCase):
         )
 
         with patch(
-            "analyze_git_repo_loc.git_repo_loc_analyzer.tqdm",
+            "analyze_git_repo_loc.analysis.git_repo_loc_analyzer.tqdm",
             side_effect=lambda iterable, **_kwargs: iterable,
         ):
             result = analyzer._get_commits(repository, progress_callback=callback)
@@ -131,7 +131,7 @@ class CommitProgressTests(unittest.TestCase):
                         side_effect=append_rows,
                     ):
                         with patch(
-                            "analyze_git_repo_loc.git_repo_loc_analyzer.tqdm",
+                            "analyze_git_repo_loc.analysis.git_repo_loc_analyzer.tqdm",
                             side_effect=lambda iterable, **_kwargs: iterable,
                         ):
                             analyzer.get_commit_analysis(progress_callback)

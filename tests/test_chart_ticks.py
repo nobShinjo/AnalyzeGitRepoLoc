@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from analyze_git_repo_loc.chart_ticks import (
+from analyze_git_repo_loc.reporting.chart_ticks import (
     build_client_tick_policy,
     normalize_interval_label,
     resolve_xaxis_tick_config,

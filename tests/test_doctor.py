@@ -16,8 +16,8 @@ from analyze_git_repo_loc.doctor import (
     run_data_diagnostics,
 )
 from analyze_git_repo_loc.i18n import set_language_override, tr
-from analyze_git_repo_loc.remote_catalog import RemoteRepositoryRef
-from analyze_git_repo_loc.tui_auth import AuthMethodStatus
+from analyze_git_repo_loc.interactive.tui_auth import AuthMethodStatus
+from analyze_git_repo_loc.remote.remote_catalog import RemoteRepositoryRef
 
 
 class DoctorDiagnosticsTests(unittest.TestCase):

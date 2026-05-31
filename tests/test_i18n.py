@@ -9,7 +9,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from analyze_git_repo_loc.i18n import resolve_language, set_language_override, tr
-from analyze_git_repo_loc.init_wizard import _InitWizardController
+from analyze_git_repo_loc.config.init_wizard import _InitWizardController
 from analyze_git_repo_loc.utils import parse_arguments
 
 

@@ -11,7 +11,7 @@ from unittest.mock import MagicMock, patch
 import pandas as pd
 
 from analyze_git_repo_loc import __main__ as main_module
-from analyze_git_repo_loc.html_report import generate_html_report
+from analyze_git_repo_loc.reporting.html_report import generate_html_report
 
 
 class HtmlReportUxTests(unittest.TestCase):

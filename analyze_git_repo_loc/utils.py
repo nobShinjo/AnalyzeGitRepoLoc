@@ -48,10 +48,10 @@ from analyze_git_repo_loc.analysis.exclude_templates import (
     normalize_exclude_template_mode,
 )
 from analyze_git_repo_loc.analysis.git_repo_loc_analyzer import GitRepoLOCAnalyzer
-from analyze_git_repo_loc.i18n import resolve_display_language, set_language_override, tr
-from analyze_git_repo_loc.remote_auth import RemoteAuthError
-from analyze_git_repo_loc.remote_repos import RemoteRepoManager
 from analyze_git_repo_loc.config.yaml_config import merge_yaml_config
+from analyze_git_repo_loc.i18n import resolve_display_language, set_language_override, tr
+from analyze_git_repo_loc.remote.remote_auth import RemoteAuthError
+from analyze_git_repo_loc.remote.remote_repos import RemoteRepoManager
 
 _REMOTE_REPO_MANAGER = RemoteRepoManager()
 
@@ -676,6 +676,7 @@ def _analyze_repositories_sequential(
     results: dict[int, pd.DataFrame],
     warnings: list[str],
     exclude_summaries: list[dict[str, object]],
+    error_handler: object | None = None,
 ) -> None:
     """Analyze repositories sequentially and update results in-place."""
     from analyze_git_repo_loc.analysis.analysis_runner import _analyze_repositories_sequential as impl
@@ -689,7 +690,7 @@ def _analyze_repositories_sequential(
         warnings=warnings,
         exclude_summaries=exclude_summaries,
         analyze_single_repository=_analyze_single_repository,
-        error_handler=handle_exception,
+        error_handler=handle_exception if error_handler is None else error_handler,
     )
 
 
@@ -741,6 +742,7 @@ def _analyze_repositories_parallel(
     results: dict[int, pd.DataFrame],
     warnings: list[str],
     exclude_summaries: list[dict[str, object]],
+    error_handler: object | None = None,
 ) -> None:
     """Analyze repositories in parallel and update results in-place."""
     from analyze_git_repo_loc.analysis.analysis_runner import _analyze_repositories_parallel as impl
@@ -755,7 +757,7 @@ def _analyze_repositories_parallel(
         warnings=warnings,
         exclude_summaries=exclude_summaries,
         analyze_single_repository=_analyze_single_repository,
-        error_handler=handle_exception,
+        error_handler=handle_exception if error_handler is None else error_handler,
     )
 
 

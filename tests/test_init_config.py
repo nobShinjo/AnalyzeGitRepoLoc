@@ -13,18 +13,18 @@ import yaml
 from colorama import Fore, Style
 
 from analyze_git_repo_loc.__main__ import _format_output_summary
-from analyze_git_repo_loc.i18n import tr
-from analyze_git_repo_loc.init_config import (
+from analyze_git_repo_loc.config.init_config import (
     InitConfigOptions,
     build_init_config_data,
     render_init_config_yaml,
     resolve_init_config_path,
 )
-from analyze_git_repo_loc.init_wizard import (
+from analyze_git_repo_loc.config.init_wizard import (
     InitWizardState,
     _InitWizardController,
     render_init_config_summary,
 )
+from analyze_git_repo_loc.i18n import tr
 from analyze_git_repo_loc.utils import parse_arguments
 
 
