@@ -26,6 +26,7 @@ from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 from analyze_git_repo_loc.i18n import tr
 from analyze_git_repo_loc.remote_catalog import (
@@ -471,10 +472,10 @@ def _resolve_path(base_path: Path, path: Path) -> Path:
 
 
 def _is_git_url(value: str) -> bool:
-    return (
-        value.startswith(("http://", "https://", "ssh://", "git@"))
-        or value.endswith(".git")
-    )
+    parsed = urlparse(value)
+    if parsed.scheme in {"http", "https", "ssh", "git"}:
+        return True
+    return value.startswith("git@") and ":" in value
 
 
 def _normalize_remote_url(value: str) -> str:

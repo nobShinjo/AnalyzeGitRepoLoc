@@ -69,6 +69,22 @@ class DoctorDiagnosticsTests(unittest.TestCase):
         self.assertEqual(result.exit_code(), 0)
         self.assertEqual(result.exit_code(strict=True), 1)
 
+    def test_missing_local_bare_repository_path_is_warning(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config = root / "config.yml"
+            config.write_text(
+                yaml.safe_dump({"repositories": [{"path": "/srv/mirror.git"}]}),
+                encoding="utf-8",
+            )
+
+            result = run_config_diagnostics(config)
+
+        self.assertEqual(len(result.errors), 0)
+        self.assertEqual(len(result.warnings), 1)
+        self.assertEqual(result.exit_code(), 0)
+        self.assertEqual(result.exit_code(strict=True), 1)
+
     def test_secret_like_yaml_key_is_error(self) -> None:
         set_language_override("en")
         result = run_data_diagnostics(
@@ -250,6 +266,43 @@ class DoctorDiagnosticsTests(unittest.TestCase):
                 for issue in result.errors
             )
         )
+
+    def test_remote_ignores_local_bare_repository_path(self) -> None:
+        config = {
+            "settings": {},
+            "repositories": [
+                {
+                    "path": "/srv/mirror.git",
+                    "branch": "main",
+                }
+            ],
+            "interactive": {
+                "providers": {
+                    "github": {"enabled": True, "api_base_url": "https://api.github.com"},
+                    "gitlab": {"enabled": False},
+                },
+                "defaults": {"clone_protocol": "https"},
+            },
+        }
+        with patch(
+            "analyze_git_repo_loc.doctor.build_auth_method_statuses",
+            return_value=[
+                AuthMethodStatus(
+                    method="cli",
+                    label="gh CLI login",
+                    available=True,
+                    detail="logged in",
+                    token="cli-token",
+                )
+            ],
+        ):
+            with patch(
+                "analyze_git_repo_loc.doctor.fetch_remote_repositories",
+                return_value=[],
+            ):
+                result = run_data_diagnostics(config, remote=True)
+
+        self.assertEqual(result.errors, [])
 
     def test_remote_reports_missing_branch(self) -> None:
         set_language_override("en")
