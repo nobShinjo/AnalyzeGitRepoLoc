@@ -23,7 +23,7 @@ from urllib.parse import urlparse
 
 from git import GitCommandError, InvalidGitRepositoryError, NoSuchPathError, Repo
 
-from analyze_git_repo_loc.git_repo_loc_analyzer import GitRepoLOCAnalyzer
+from analyze_git_repo_loc.analysis.git_repo_loc_analyzer import GitRepoLOCAnalyzer
 from analyze_git_repo_loc.remote.remote_auth import RemoteAuthService
 
 

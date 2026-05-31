@@ -34,7 +34,7 @@ import plotly.io as pio
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from plotly.offline import get_plotlyjs
 
-from analyze_git_repo_loc.analysis_helpers import (
+from analyze_git_repo_loc.analysis.analysis_helpers import (
     prepare_author_contribution_data,
     prepare_summary_data,
     prepare_trend_data,

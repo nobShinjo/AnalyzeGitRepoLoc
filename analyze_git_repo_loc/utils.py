@@ -41,17 +41,17 @@ import pandas as pd
 from tqdm import tqdm
 
 from analyze_git_repo_loc.colored_console_printer import ColoredConsolePrinter
-from analyze_git_repo_loc.exclude_templates import (
+from analyze_git_repo_loc.analysis.exclude_templates import (
     ExcludeTemplateMode,
     build_exclude_recommendation,
     load_exclude_templates,
     normalize_exclude_template_mode,
 )
-from analyze_git_repo_loc.git_repo_loc_analyzer import GitRepoLOCAnalyzer
+from analyze_git_repo_loc.analysis.git_repo_loc_analyzer import GitRepoLOCAnalyzer
 from analyze_git_repo_loc.i18n import resolve_display_language, set_language_override, tr
 from analyze_git_repo_loc.remote_auth import RemoteAuthError
 from analyze_git_repo_loc.remote_repos import RemoteRepoManager
-from analyze_git_repo_loc.yaml_config import merge_yaml_config
+from analyze_git_repo_loc.config.yaml_config import merge_yaml_config
 
 _REMOTE_REPO_MANAGER = RemoteRepoManager()
 
@@ -411,7 +411,7 @@ def _apply_include_subpath(
     include_subpath: str | Path | None,
 ) -> Path | str:
     """Apply a repository-root-relative include subpath when configured."""
-    from analyze_git_repo_loc.analysis_runner import _apply_include_subpath as impl
+    from analyze_git_repo_loc.analysis.analysis_runner import _apply_include_subpath as impl
 
     return impl(analysis_repo_path, include_subpath)
 
@@ -513,7 +513,7 @@ def _analyze_single_repository(
     progress_queue: object | None = None,
 ) -> tuple[int, str, pd.DataFrame, list[str], dict[str, object]]:
     """Analyze a single repository and return its index, name, and LOC data."""
-    from analyze_git_repo_loc.analysis_runner import _analyze_single_repository as impl
+    from analyze_git_repo_loc.analysis.analysis_runner import _analyze_single_repository as impl
 
     return impl(
         index=index,
@@ -556,7 +556,7 @@ def _ensure_repo_output_dir(output_dir: Path, repository_name: str) -> Path:
 
 def save_repository_branch_info(repo_paths, output_file: Path) -> None:
     """Save repository and branch information to a file."""
-    from analyze_git_repo_loc.analysis_runner import save_repository_branch_info as impl
+    from analyze_git_repo_loc.analysis.analysis_runner import save_repository_branch_info as impl
 
     impl(repo_paths, output_file)
 
@@ -569,7 +569,7 @@ def analyze_trends(
     output_path: Path = None,
 ) -> pd.DataFrame:
     """Analyze the trends in the LOC data and save the results to a CSV file."""
-    from analyze_git_repo_loc.analysis_runner import analyze_trends as impl
+    from analyze_git_repo_loc.analysis.analysis_runner import analyze_trends as impl
 
     return impl(category_column, interval, loc_data, analysis_data, output_path)
 
@@ -678,7 +678,7 @@ def _analyze_repositories_sequential(
     exclude_summaries: list[dict[str, object]],
 ) -> None:
     """Analyze repositories sequentially and update results in-place."""
-    from analyze_git_repo_loc.analysis_runner import _analyze_repositories_sequential as impl
+    from analyze_git_repo_loc.analysis.analysis_runner import _analyze_repositories_sequential as impl
 
     impl(
         args=args,
@@ -700,7 +700,7 @@ def _build_repo_progress_bars(
     label_width: int,
 ) -> tuple[dict[int, tqdm], dict[int, str]]:
     """Build child progress bars and labels for repository analysis."""
-    from analyze_git_repo_loc.analysis_runner import _build_repo_progress_bars as impl
+    from analyze_git_repo_loc.analysis.analysis_runner import _build_repo_progress_bars as impl
 
     return impl(
         repo_entries,
@@ -720,7 +720,7 @@ def _cleanup_repo_progress_listener(
     progress_queue: object,
 ) -> None:
     """Stop the progress listener and clean up related resources."""
-    from analyze_git_repo_loc.analysis_runner import _cleanup_repo_progress_listener as impl
+    from analyze_git_repo_loc.analysis.analysis_runner import _cleanup_repo_progress_listener as impl
 
     impl(
         stop_event=stop_event,
@@ -743,7 +743,7 @@ def _analyze_repositories_parallel(
     exclude_summaries: list[dict[str, object]],
 ) -> None:
     """Analyze repositories in parallel and update results in-place."""
-    from analyze_git_repo_loc.analysis_runner import _analyze_repositories_parallel as impl
+    from analyze_git_repo_loc.analysis.analysis_runner import _analyze_repositories_parallel as impl
 
     impl(
         args=args,
@@ -804,7 +804,7 @@ def _print_repository_exclude_summaries(
 
 def analyze_git_repositories(args: argparse.Namespace) -> list[pd.DataFrame]:
     """Analyze the LOC in the Git repositories."""
-    from analyze_git_repo_loc.analysis_runner import analyze_git_repositories as impl
+    from analyze_git_repo_loc.analysis.analysis_runner import analyze_git_repositories as impl
 
     return impl(
         args,

@@ -46,7 +46,7 @@ from analyze_git_repo_loc.interactive.tui_auth import (
     build_auth_method_statuses,
     choose_auto_auth_status,
 )
-from analyze_git_repo_loc.yaml_config import load_yaml_data
+from analyze_git_repo_loc.config.yaml_config import load_yaml_data
 
 
 SECRET_KEY_PARTS = ("token", "password", "secret", "client_id")

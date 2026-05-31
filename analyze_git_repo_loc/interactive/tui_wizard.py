@@ -37,7 +37,7 @@ from urllib.parse import urlparse
 
 from colorama import Fore, Style, just_fix_windows_console
 
-from analyze_git_repo_loc.exclude_templates import (
+from analyze_git_repo_loc.analysis.exclude_templates import (
     build_exclude_recommendation,
     load_exclude_templates,
     normalize_exclude_template_mode,

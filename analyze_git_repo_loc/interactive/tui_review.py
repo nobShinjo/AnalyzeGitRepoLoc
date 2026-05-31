@@ -21,7 +21,7 @@ from typing import Callable
 from colorama import Fore, Style
 
 from analyze_git_repo_loc.doctor import run_data_diagnostics
-from analyze_git_repo_loc.exclude_templates import (
+from analyze_git_repo_loc.analysis.exclude_templates import (
     build_exclude_recommendation,
     load_exclude_templates,
 )
