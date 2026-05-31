@@ -37,6 +37,7 @@ from typing import Any
 import yaml
 from colorama import Fore, Style, just_fix_windows_console
 
+from analyze_git_repo_loc.doctor import run_data_diagnostics
 from analyze_git_repo_loc.exclude_templates import (
     build_exclude_recommendation,
     load_exclude_templates,
@@ -1085,6 +1086,11 @@ def render_final_review(
         if state.recommendations.detected_templates
         else tr("tui.none")
     )
+    doctor_result = run_data_diagnostics(wizard_state_to_config(state), remote=False)
+    doctor_summary = (
+        f"Doctor: {len(doctor_result.errors)} errors, "
+        f"{len(doctor_result.warnings)} warnings"
+    )
     summary = _review_summary(state)
     if not detailed:
         return "\n".join(
@@ -1097,6 +1103,7 @@ def render_final_review(
                     value=recommended_languages,
                     source=state.recommendations.language_source,
                 ),
+                doctor_summary,
                 "",
                 _color(
                     tr("tui.final_actions"),
@@ -1133,9 +1140,16 @@ def render_final_review(
         tr("tui.output_line", path=state.output),
         tr("tui.cache", policy=cache_policy),
         tr("tui.auto_display", value=tr("tui.off") if state.no_plot_show else tr("tui.on")),
-        "",
-        _color(tr("tui.repositories"), Fore.CYAN, enabled=color),
+        doctor_summary,
     ]
+    for issue in doctor_result.issues:
+        lines.append(f"[{issue.severity.upper()}] {issue.message}")
+    lines.extend(
+        [
+            "",
+            _color(tr("tui.repositories"), Fore.CYAN, enabled=color),
+        ]
+    )
     for repository in state.selected_repositories:
         include = repository.include_subpath or "."
         excludes = _combined_excludes(state, repository)
@@ -1262,7 +1276,10 @@ def wizard_state_to_config(state: TuiWizardState) -> dict[str, Any]:
     Returns:
         dict[str, Any]: YAML-safe config data without authentication tokens.
     """
-    providers: dict[str, Any] = {}
+    providers: dict[str, Any] = {
+        "github": {"enabled": False, "api_base_url": "https://api.github.com"},
+        "gitlab": {"enabled": False, "base_url": "https://gitlab.com"},
+    }
     for target in state.provider_targets:
         if target.provider == "github":
             providers["github"] = {"enabled": True, "api_base_url": target.base_url}

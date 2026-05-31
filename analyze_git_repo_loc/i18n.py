@@ -43,6 +43,58 @@ _MESSAGES: dict[str, dict[str, str]] = {
         "cli.display_language_help": (
             "Display language for this run (auto, en, or jp; default: auto)."
         ),
+        "cli.doctor_help": "Validate YAML configuration before running analysis.",
+        "cli.doctor_remote_help": "Also verify configured remote providers.",
+        "cli.doctor_strict_help": "Treat warnings as doctor failures.",
+        "doctor.error.date_format": "{name} must be YYYY-MM-DD.",
+        "doctor.error.date_order": "settings.since must be earlier than or equal to settings.until.",
+        "doctor.error.clone_protocol": "interactive.defaults.clone_protocol must be 'https' or 'ssh'.",
+        "doctor.error.include_subpath_relative": "{label}.include_subpath must be repository-relative.",
+        "doctor.error.include_subpath_traversal": "{label}.include_subpath must not traverse outside the repository.",
+        "doctor.error.interval": "settings.interval must be daily, weekly, or monthly.",
+        "doctor.error.interactive_providers_required": "interactive.providers must be configured.",
+        "doctor.error.mapping": "YAML config '{key}' must be a mapping.",
+        "doctor.error.provider_enabled_required": "At least one interactive provider must be enabled.",
+        "doctor.error.remote_auth_required": (
+            "{provider} environment token or CLI login is required for --remote diagnostics."
+        ),
+        "doctor.error.remote_branch_missing": (
+            "Remote branch '{branch}' was not found for repository '{repository}'."
+        ),
+        "doctor.error.remote_provider_unsupported": (
+            "Unsupported remote provider '{provider}'."
+        ),
+        "doctor.error.remote_repo_missing": (
+            "Remote repository was not found in remote provider catalog: {path}"
+        ),
+        "doctor.error.repositories_list": "YAML config 'repositories' must be a list.",
+        "doctor.error.repositories_non_empty": (
+            "YAML config 'repositories' must be non-empty unless interactive is configured."
+        ),
+        "doctor.error.repositories_or_interactive_required": (
+            "YAML config must define repositories or interactive providers."
+        ),
+        "doctor.error.repository_entry_type": "{label} must be a mapping or path string.",
+        "doctor.error.repository_path_required": "{label}.path is required.",
+        "doctor.error.secret_key": "Secret-like key must not be stored in YAML: {path}",
+        "doctor.error.top_level_mapping": "YAML config must be a mapping at the top level.",
+        "doctor.error.workers_int": "settings.workers must be an integer.",
+        "doctor.error.workers_min": "settings.workers must be 1 or greater.",
+        "doctor.report_success": "No doctor issues found.",
+        "doctor.report_title": "Doctor diagnostics",
+        "doctor.warning.exclude_dir_relative": (
+            "{label}.exclude_dirs should be repository-relative: {path}"
+        ),
+        "doctor.warning.exclude_template_file_missing": (
+            "Exclude template file does not exist: {path}"
+        ),
+        "doctor.warning.output_parent_missing": (
+            "Output parent directory does not exist: {path}"
+        ),
+        "doctor.warning.remote_skipped": (
+            "--remote skipped because interactive providers are not configured."
+        ),
+        "doctor.warning.repository_path_missing": "Repository path does not exist: {path}",
         "cli.init_config_help": (
             "YAML configuration file path to create (default: config.yml)."
         ),
@@ -242,6 +294,70 @@ _MESSAGES: dict[str, dict[str, str]] = {
         "cli.display_language_help": (
             "この実行の表示言語 (auto, en, jp / 既定: auto)。"
         ),
+        "cli.doctor_help": "解析前に YAML 設定を検査します。",
+        "cli.doctor_remote_help": "設定済みリモートプロバイダーも検査します。",
+        "cli.doctor_strict_help": "警告も doctor の失敗として扱います。",
+        "doctor.error.date_format": "{name} は YYYY-MM-DD 形式で指定してください。",
+        "doctor.error.date_order": "settings.since は settings.until 以下である必要があります。",
+        "doctor.error.clone_protocol": (
+            "interactive.defaults.clone_protocol は 'https' または 'ssh' にしてください。"
+        ),
+        "doctor.error.include_subpath_relative": (
+            "{label}.include_subpath はリポジトリ相対パスで指定してください。"
+        ),
+        "doctor.error.include_subpath_traversal": (
+            "{label}.include_subpath はリポジトリ外を指してはいけません。"
+        ),
+        "doctor.error.interval": "settings.interval は daily, weekly, monthly のいずれかにしてください。",
+        "doctor.error.interactive_providers_required": (
+            "interactive.providers を設定してください。"
+        ),
+        "doctor.error.mapping": "YAML 設定の '{key}' は mapping である必要があります。",
+        "doctor.error.provider_enabled_required": (
+            "少なくとも 1 つの interactive provider を有効にしてください。"
+        ),
+        "doctor.error.remote_auth_required": (
+            "{provider} の環境変数トークン、または CLI ログインが --remote 診断に必要です。"
+        ),
+        "doctor.error.remote_branch_missing": (
+            "リモートブランチ '{branch}' がリポジトリ '{repository}' に存在しません。"
+        ),
+        "doctor.error.remote_provider_unsupported": (
+            "未対応のリモートプロバイダーです: '{provider}'。"
+        ),
+        "doctor.error.remote_repo_missing": (
+            "リモートプロバイダーのカタログに対象リポジトリが見つかりません: {path}"
+        ),
+        "doctor.error.repositories_list": "YAML 設定の 'repositories' は list である必要があります。",
+        "doctor.error.repositories_non_empty": (
+            "interactive 未設定時、YAML 設定の 'repositories' は空にできません。"
+        ),
+        "doctor.error.repositories_or_interactive_required": (
+            "YAML 設定には repositories または interactive providers が必要です。"
+        ),
+        "doctor.error.repository_entry_type": (
+            "{label} は mapping または path 文字列である必要があります。"
+        ),
+        "doctor.error.repository_path_required": "{label}.path は必須です。",
+        "doctor.error.secret_key": "YAML に秘密情報らしきキーを保存してはいけません: {path}",
+        "doctor.error.top_level_mapping": "YAML 設定のトップレベルは mapping である必要があります。",
+        "doctor.error.workers_int": "settings.workers は整数である必要があります。",
+        "doctor.error.workers_min": "settings.workers は 1 以上である必要があります。",
+        "doctor.report_success": "Doctor の問題は見つかりませんでした。",
+        "doctor.report_title": "Doctor 診断",
+        "doctor.warning.exclude_dir_relative": (
+            "{label}.exclude_dirs はリポジトリ相対パスにしてください: {path}"
+        ),
+        "doctor.warning.exclude_template_file_missing": (
+            "exclude template file が存在しません: {path}"
+        ),
+        "doctor.warning.output_parent_missing": (
+            "出力先の親ディレクトリが存在しません: {path}"
+        ),
+        "doctor.warning.remote_skipped": (
+            "interactive providers が未設定のため --remote をスキップしました。"
+        ),
+        "doctor.warning.repository_path_missing": "リポジトリパスが存在しません: {path}",
         "cli.init_config_help": (
             "作成する YAML 設定ファイルのパス (既定: config.yml)。"
         ),

@@ -33,6 +33,8 @@ from typing import Any
 from urllib.parse import quote, urlencode, urljoin
 from urllib.request import Request, urlopen
 
+from analyze_git_repo_loc.i18n import tr
+
 
 class RemoteCatalogError(ValueError):
     """Repository catalog discovery failed."""
@@ -150,9 +152,9 @@ def load_tui_settings(config_data: dict) -> TuiSettings:
         RemoteCatalogError: If the interactive configuration is invalid.
     """
     if not isinstance(config_data, dict):
-        raise RemoteCatalogError("YAML config must be a mapping at the top level.")
+        raise RemoteCatalogError(tr("doctor.error.top_level_mapping"))
     if "interactive" not in config_data:
-        raise RemoteCatalogError("interactive.providers must be configured.")
+        raise RemoteCatalogError(tr("doctor.error.interactive_providers_required"))
     interactive = _require_mapping(
         config_data.get("interactive"),
         "interactive",
@@ -190,12 +192,10 @@ def load_tui_settings(config_data: dict) -> TuiSettings:
     )
     clone_protocol = _read_text(defaults.get("clone_protocol"), default="https").lower()
     if clone_protocol not in {"https", "ssh"}:
-        raise RemoteCatalogError(
-            "interactive.defaults.clone_protocol must be 'https' or 'ssh'."
-        )
+        raise RemoteCatalogError(tr("doctor.error.clone_protocol"))
 
     if not github_settings.enabled and not gitlab_settings.enabled:
-        raise RemoteCatalogError("At least one interactive provider must be enabled.")
+        raise RemoteCatalogError(tr("doctor.error.provider_enabled_required"))
 
     return TuiSettings(
         providers=TuiProviderSettings(github=github_settings, gitlab=gitlab_settings),

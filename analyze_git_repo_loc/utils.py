@@ -465,6 +465,48 @@ def parse_arguments(parser: argparse.ArgumentParser) -> argparse.Namespace:
         no_plot_show=None,
     )
 
+    doctor_parser = subparsers.add_parser(
+        "doctor",
+        help=tr("cli.doctor_help"),
+        description=tr("cli.description"),
+    )
+    _add_display_language_argument(doctor_parser)
+    doctor_parser.add_argument(
+        "--config",
+        type=Path,
+        default=Path("config.yml"),
+        help=tr("cli.config_help"),
+    )
+    doctor_parser.add_argument(
+        "--remote",
+        action="store_true",
+        default=False,
+        help=tr("cli.doctor_remote_help"),
+    )
+    doctor_parser.add_argument(
+        "--strict",
+        action="store_true",
+        default=False,
+        help=tr("cli.doctor_strict_help"),
+    )
+    doctor_parser.set_defaults(
+        interactive=False,
+        repo_paths=None,
+        output=None,
+        since=None,
+        until=None,
+        interval=None,
+        lang=None,
+        author_name=None,
+        exclude_dirs=None,
+        exclude_template_mode="auto",
+        exclude_template_names=None,
+        exclude_template_files=None,
+        workers=None,
+        clear_cache=None,
+        no_plot_show=None,
+    )
+
     run_parser = subparsers.add_parser(
         "run",
         help=tr("cli.run_help"),
@@ -524,7 +566,7 @@ def parse_arguments(parser: argparse.ArgumentParser) -> argparse.Namespace:
     args = parser.parse_args()
     set_language_override(resolve_display_language(getattr(args, "display_language", None)))
     try:
-        if args.command == "init":
+        if args.command in {"init", "doctor"}:
             return args
         args = merge_yaml_config(
             args=args,

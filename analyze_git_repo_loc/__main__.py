@@ -39,6 +39,7 @@ from analyze_git_repo_loc.analysis_helpers import (
 )
 from analyze_git_repo_loc.chart_builder import ChartBuilder, ChartStrategy
 from analyze_git_repo_loc.colored_console_printer import ColoredConsolePrinter
+from analyze_git_repo_loc.doctor import format_diagnostic_report, run_config_diagnostics
 from analyze_git_repo_loc.html_report import ProgressEvent, generate_html_report
 from analyze_git_repo_loc.i18n import tr
 from analyze_git_repo_loc.init_wizard import run_init_config_wizard
@@ -396,6 +397,10 @@ def main() -> None:
     if args.command == "init":
         run_init_config_wizard(default_path=args.config)
         return
+    if args.command == "doctor":
+        result = run_config_diagnostics(args.config, remote=args.remote)
+        print(format_diagnostic_report(result))
+        sys.exit(result.exit_code(strict=args.strict))
 
     # Initialize ColoredConsolePrinter
     console = ColoredConsolePrinter()
