@@ -7,6 +7,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
+from analyze_git_repo_loc.remote_auth import build_host_provider_env_var
 from analyze_git_repo_loc.remote_auth import RemoteAuthService
 from analyze_git_repo_loc.remote_auth import build_host_token_env_var
 from analyze_git_repo_loc.remote_repos import RemoteRepoManager
@@ -14,6 +15,18 @@ from analyze_git_repo_loc.remote_repos import RemoteRepoManager
 
 class RemoteRepoManagerCacheTests(unittest.TestCase):
     """Remote repository cache path and cleanup tests."""
+
+    def test_origin_match_treats_dot_git_suffix_as_equivalent(self) -> None:
+        manager = RemoteRepoManager()
+        repo = Mock()
+        repo.remotes = Mock()
+        repo.remotes.origin.url = "https://github.com/acme/AnalyzeGitRepoLoc.git"
+        repo.working_tree_dir = "cache/repo"
+
+        manager._ensure_origin_matches(
+            repo,
+            "https://github.com/acme/AnalyzeGitRepoLoc",
+        )
 
     def test_cache_path_uses_remote_identity_to_avoid_name_collisions(self) -> None:
         manager = RemoteRepoManager()
@@ -120,6 +133,66 @@ class RemoteAuthServiceTests(unittest.TestCase):
         self.assertEqual(
             candidates[0],
             "https://oauth2:host-token@git.example.com/team/private.git",
+        )
+
+    def test_host_specific_token_uses_github_username_with_provider_hint(self) -> None:
+        auth = RemoteAuthService()
+        env_name = build_host_token_env_var("git.example.com")
+        provider_env = build_host_provider_env_var("git.example.com")
+
+        with patch.dict(
+            "os.environ",
+            {env_name: "host-token", provider_env: "github"},
+            clear=True,
+        ):
+            candidates = auth.build_auth_candidates(
+                "https://git.example.com/team/private.git"
+            )
+
+        self.assertEqual(
+            candidates[0],
+            "https://x-access-token:host-token@git.example.com/team/private.git",
+        )
+
+    def test_github_token_fallback_uses_provider_hint_for_self_hosted_github(self) -> None:
+        auth = RemoteAuthService()
+        provider_env = build_host_provider_env_var("git.example.com")
+
+        with patch.dict(
+            "os.environ",
+            {provider_env: "github", "GITHUB_TOKEN": "gh-token"},
+            clear=True,
+        ):
+            candidates = auth.build_auth_candidates(
+                "https://git.example.com/team/private.git"
+            )
+
+        self.assertEqual(
+            candidates[0],
+            "https://x-access-token:gh-token@git.example.com/team/private.git",
+        )
+
+    def test_github_cli_token_uses_provider_hint_for_self_hosted_github(self) -> None:
+        auth = RemoteAuthService()
+        provider_env = build_host_provider_env_var("git.example.com")
+        runner = Mock(return_value=Mock(returncode=0, stdout="gh-token\n"))
+
+        with patch.dict("os.environ", {provider_env: "github"}, clear=True):
+            with patch("analyze_git_repo_loc.remote_auth.shutil.which", return_value="gh"):
+                with patch("analyze_git_repo_loc.remote_auth.subprocess.run", runner):
+                    candidates = auth.build_auth_candidates(
+                        "https://git.example.com/acme/private.git"
+                    )
+
+        self.assertEqual(
+            candidates[0],
+            "https://x-access-token:gh-token@git.example.com/acme/private.git",
+        )
+        runner.assert_called_once_with(
+            ["gh", "auth", "token", "--hostname", "git.example.com"],
+            capture_output=True,
+            text=True,
+            timeout=15,
         )
 
     def test_github_cli_token_is_used_when_env_token_is_missing(self) -> None:

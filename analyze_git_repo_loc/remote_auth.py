@@ -51,6 +51,20 @@ def build_host_token_env_var(host: str) -> str:
     return f"ANALYZE_GIT_REPO_LOC_TOKEN_{normalized}"
 
 
+def build_host_provider_env_var(host: str) -> str:
+    """
+    Build the environment variable name used for a host-specific provider hint.
+
+    Args:
+        host (str): Git hosting hostname.
+
+    Returns:
+        str: Process environment variable name for the host provider hint.
+    """
+    normalized = re.sub(r"[^A-Za-z0-9]+", "_", host).strip("_").upper()
+    return f"ANALYZE_GIT_REPO_LOC_PROVIDER_{normalized}"
+
+
 def get_cli_token(
     provider: str,
     base_url: str,
@@ -124,6 +138,19 @@ def _provider_from_hostname(hostname: str) -> str | None:
     if "gitlab" in normalized:
         return "gitlab"
     return None
+
+
+def _normalize_provider_name(provider: str | None) -> str | None:
+    normalized = (provider or "").strip().lower()
+    if normalized in {"github", "gitlab"}:
+        return normalized
+    return None
+
+
+def _provider_hint_for_hostname(hostname: str) -> str | None:
+    return _normalize_provider_name(
+        os.getenv(build_host_provider_env_var(hostname.lower()))
+    )
 
 
 def _base_url_for_hostname(parsed_url: ParseResult) -> str:
@@ -284,15 +311,25 @@ class RemoteAuthService:
         if not host:
             return None
         normalized = host.lower()
+        provider = _provider_hint_for_hostname(normalized) or _provider_from_hostname(
+            normalized
+        )
+        if provider is None:
+            github_token = os.getenv("GITHUB_TOKEN")
+            gitlab_token = os.getenv("GITLAB_TOKEN")
+            if github_token and not gitlab_token:
+                provider = "github"
+            elif gitlab_token and not github_token:
+                provider = "gitlab"
         host_token = os.getenv(build_host_token_env_var(normalized))
         if host_token:
-            username = "x-access-token" if "github" in normalized else "oauth2"
+            username = "x-access-token" if provider == "github" else "oauth2"
             return host_token, username
-        if "github" in normalized:
+        if provider == "github":
             token = os.getenv("GITHUB_TOKEN")
             if token:
                 return token, "x-access-token"
-        if "gitlab" in normalized:
+        if provider == "gitlab":
             token = os.getenv("GITLAB_TOKEN")
             if token:
                 return token, "oauth2"
@@ -330,7 +367,9 @@ class RemoteAuthService:
         parsed = urlparse(repo_url)
         if parsed.scheme not in {"http", "https"} or not parsed.hostname:
             return None
-        provider = _provider_from_hostname(parsed.hostname)
+        provider = _provider_hint_for_hostname(parsed.hostname) or _provider_from_hostname(
+            parsed.hostname
+        )
         if provider is None:
             return None
         token = get_cli_token(provider, _base_url_for_hostname(parsed))

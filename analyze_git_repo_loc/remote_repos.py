@@ -90,15 +90,21 @@ class RemoteRepoManager:
         Returns:
             tuple[str, str] | None: Normalized identity for comparison.
         """
+        def normalize_path(value: str) -> str:
+            normalized = value.lstrip("/").rstrip("/")
+            if normalized.endswith(".git"):
+                normalized = normalized[:-4]
+            return normalized
+
         if repo_url.startswith("git@"):
             host_path = repo_url.split("@", 1)[-1]
             if ":" not in host_path:
                 return None
             host, path = host_path.split(":", 1)
-            return host.lower(), path.lstrip("/")
+            return host.lower(), normalize_path(path)
         parsed = urlparse(repo_url)
         if parsed.hostname and parsed.path:
-            return parsed.hostname.lower(), parsed.path.lstrip("/")
+            return parsed.hostname.lower(), normalize_path(parsed.path)
         return None
 
     def _ensure_origin_matches(self, repo: Repo, repo_url: str) -> None:
