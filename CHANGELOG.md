@@ -4,6 +4,9 @@
 
 ### Added
 
+- Added `doctor` command for lightweight YAML/config diagnostics before
+  analysis, with optional remote provider checks and strict warning handling.
+
 ### Changed
 
 ### Fixed

@@ -44,8 +44,9 @@ python -m analyze_git_repo_loc run [--config config.yml] [options]
 python -m analyze_git_repo_loc run -i [--config config.yml]
 ```
 
-Use `init` to create a starter config, `run -i` for the guided interactive
-workflow, and `run` for non-interactive batch analysis from YAML.
+Use `init` to create a starter config, `doctor` to validate YAML before a run,
+`run -i` for the guided interactive workflow, and `run` for non-interactive
+batch analysis from YAML.
 
 Direct `repo_paths` arguments are no longer a command-line entry point. Define
 repositories in YAML, or select them with `run -i` and save the generated config.
@@ -95,6 +96,17 @@ When only one provider is configured and `GITHUB_TOKEN` / `GITLAB_TOKEN` or an
 existing `gh` / `glab` login is available, `run -i` starts at Quick Review.
 Press Enter to run, `e` to edit, `d` for details, `s` to save config then run,
 or `c` to cancel.
+
+#### Example : Validate configuration
+
+```shell
+python -m analyze_git_repo_loc doctor --config ./config.yml
+```
+
+`doctor` performs lightweight local checks for YAML structure, analysis settings,
+repository paths, output paths, and secret-like keys. Add `--remote` to verify
+configured GitHub/GitLab providers through their APIs, and `--strict` to treat
+warnings as failures.
 
 #### Example : Batch run from YAML
 
@@ -284,8 +296,9 @@ usage: analyze_git_repo_loc [-h] {init,run} ...
 Analyze Git repositories and visualize code LOC.
 
 positional arguments:
-  {init,run}
+  {init,doctor,run}
     init          Create an initial YAML configuration file interactively.
+    doctor        Validate YAML configuration before running analysis.
     run           Run analysis from a YAML configuration file, optionally interactively.
 
 options:
