@@ -21,8 +21,8 @@ from urllib.parse import urlparse
 
 import yaml
 
-from analyze_git_repo_loc.remote_auth import build_host_provider_env_var
-from analyze_git_repo_loc.remote_repos import RemoteRepoManager
+from analyze_git_repo_loc.remote.remote_auth import build_host_provider_env_var
+from analyze_git_repo_loc.remote.remote_repos import RemoteRepoManager
 
 
 def load_yaml_data(config_path: Path) -> dict:

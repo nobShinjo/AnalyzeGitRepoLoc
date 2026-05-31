@@ -1,4 +1,4 @@
-"""Compatibility wrapper for interactive TUI selector helpers.
+"""Compatibility wrapper for interactive TUI review helpers.
 
 Description:
     Aliases the historical module path to the implementation in the
@@ -7,6 +7,6 @@ Description:
 
 import sys
 
-from analyze_git_repo_loc.interactive import tui_selector as _impl
+from analyze_git_repo_loc.interactive import tui_review as _impl
 
 sys.modules[__name__] = _impl

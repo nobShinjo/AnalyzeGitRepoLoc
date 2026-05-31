@@ -37,18 +37,21 @@ from analyze_git_repo_loc.analysis_helpers import (
     prepare_summary_data,
     prepare_trend_data,
 )
-from analyze_git_repo_loc.chart_builder import ChartBuilder, ChartStrategy
+from analyze_git_repo_loc.reporting.chart_builder import ChartBuilder, ChartStrategy
 from analyze_git_repo_loc.colored_console_printer import ColoredConsolePrinter
 from analyze_git_repo_loc.doctor import format_diagnostic_report, run_config_diagnostics
-from analyze_git_repo_loc.html_report import ProgressEvent, generate_html_report
+from analyze_git_repo_loc.reporting.html_report import (
+    ProgressEvent,
+    generate_html_report,
+)
 from analyze_git_repo_loc.i18n import tr
 from analyze_git_repo_loc.init_wizard import run_init_config_wizard
-from analyze_git_repo_loc.markdown_summary import generate_markdown_summary
-from analyze_git_repo_loc.remote_catalog import (
+from analyze_git_repo_loc.reporting.markdown_summary import generate_markdown_summary
+from analyze_git_repo_loc.remote.remote_catalog import (
     RemoteCatalogError,
 )
-from analyze_git_repo_loc.tui_selector import TuiSelectionCancelled
-from analyze_git_repo_loc.tui_wizard import run_tui_wizard
+from analyze_git_repo_loc.interactive.tui_selector import TuiSelectionCancelled
+from analyze_git_repo_loc.interactive.tui_wizard import run_tui_wizard
 from analyze_git_repo_loc.utils import (
     analyze_git_repositories,
     analyze_trends,

@@ -1,15 +1,24 @@
-"""
-This module provides utility functions for analyzing lines of code (LOC) in Git repositories.
+"""Compatibility utilities for CLI and analysis helpers.
 
+Description:
+    Preserves the historical import surface for argument parsing, error
+    handling, and repository analysis while delegating larger responsibilities
+    to focused modules.
 Functions:
-    parse_repos_paths(input_string: str) -> list[tuple[Path | str, str]]:
-    parse_arguments(parser: argparse.ArgumentParser) -> argparse.Namespace:
-        Parse command line arguments.
-    handle_exception(ex: Exception) -> None:
-    get_time_interval_and_period(interval: str) -> Union[str, str]:
-    save_repository_branch_info(repo_paths, output_file: Path) -> None:
-    analyze_trends(
-    analyze_git_repositories(args: argparse.Namespace) -> list[pd.DataFrame]:
+    parse_repos_paths:
+        Parse repository path inputs into repository, branch, and exclude data.
+    parse_arguments:
+        Parse CLI arguments and normalize config-backed runtime values.
+    handle_exception:
+        Print a user-facing error report and exit.
+    get_time_interval_and_period:
+        Resolve chart grouping labels from an interval key.
+    save_repository_branch_info:
+        Persist repository and branch selections for the current run.
+    analyze_trends:
+        Aggregate LOC data into interval-based trend tables.
+    analyze_git_repositories:
+        Analyze all configured repositories and return their LOC dataframes.
 """
 
 import argparse
@@ -184,51 +193,26 @@ def _emit_repo_progress(
     repository_name: str,
     value: int = 0,
 ) -> None:
-    """
-    Emit a repository progress event when configured.
+    """Emit a repository progress event when configured."""
+    from analyze_git_repo_loc.repo_progress import emit_repo_progress as impl
 
-    Args:
-        progress_queue (object | None): Queue-like object for events.
-        kind (str): Event kind ("start", "total", "advance", or "finish").
-        repository_index (int): Repository index for the event.
-        repository_name (str): Repository name for the event.
-        value (int): Optional value for total/advance events.
-    """
-    if progress_queue is None:
-        return
-    try:
-        progress_queue.put((kind, repository_index, repository_name, value))
-    except (AttributeError, EOFError, OSError, ValueError):
-        # Ignore queue errors to avoid breaking analysis.
-        return
+    impl(progress_queue, kind, repository_index, repository_name, value)
 
 
 def _truncate_repo_label(name: str, max_width: int) -> str:
-    """
-    Truncate a repository label to fit within a width constraint.
+    """Truncate a repository label to fit within a width constraint."""
+    from analyze_git_repo_loc.repo_progress import truncate_repo_label as impl
 
-    Args:
-        name (str): Repository name.
-        max_width (int): Maximum width for the formatted text.
-
-    Returns:
-        str: Formatted active repository list.
-    """
-    if len(name) <= max_width:
-        return name
-    if max_width <= 3:
-        return "." * max(0, max_width)
-    trimmed = name[: max(0, max_width - 3)]
-    return trimmed + "..."
+    return impl(name, max_width)
 
 
 def _format_repo_progress_description(label: str, status: str) -> str:
     """Format a fixed-width repository child progress description."""
-    fixed_label = _truncate_repo_label(label, _REPO_PROGRESS_LABEL_WIDTH)
-    return (
-        f"  Repo: {fixed_label:<{_REPO_PROGRESS_LABEL_WIDTH}} "
-        f"({status:<{_REPO_PROGRESS_STATUS_WIDTH}})"
+    from analyze_git_repo_loc.repo_progress import (
+        format_repo_progress_description as impl,
     )
+
+    return impl(label, status)
 
 
 def _apply_repo_progress_event(
@@ -238,65 +222,10 @@ def _apply_repo_progress_event(
     label: str,
     value: int,
 ) -> bool:
-    """
-    Apply a repository progress event to a child progress bar.
+    """Apply a repository progress event to a child progress bar."""
+    from analyze_git_repo_loc.repo_progress import apply_repo_progress_event as impl
 
-    Args:
-        kind (str): Event kind.
-        bar (tqdm | None): Target progress bar, if available.
-        label (str): Repository label for display.
-        value (int): Event payload value.
-
-    Returns:
-        bool: True to continue listening, False to stop.
-    """
-    if kind == _REPO_EVENT_STOP:
-        return False
-    if bar is None:
-        return True
-    if kind == _REPO_EVENT_START:
-        bar.set_description_str(
-            _format_repo_progress_description(
-                label, tr("progress.repo.status.getting_commits")
-            )
-        )
-        bar.refresh()
-    elif kind == _REPO_EVENT_SCAN_TOTAL:
-        total = max(0, int(value))
-        bar.set_description_str(
-            _format_repo_progress_description(
-                label, tr("progress.repo.status.getting_commits")
-            )
-        )
-        bar.total = total
-        bar.n = 0
-        bar.refresh()
-    elif kind == _REPO_EVENT_SCAN_ADVANCE:
-        step = max(0, int(value))
-        if step:
-            bar.update(step)
-    elif kind == _REPO_EVENT_TOTAL:
-        total = max(0, int(value))
-        bar.set_description_str(
-            _format_repo_progress_description(
-                label, tr("progress.repo.status.analyzing_commits")
-            )
-        )
-        bar.total = total
-        bar.n = 0
-        bar.refresh()
-    elif kind == _REPO_EVENT_ADVANCE:
-        step = max(0, int(value))
-        if step:
-            bar.update(step)
-    elif kind == _REPO_EVENT_FINISH:
-        if bar.total is not None and bar.n < bar.total:
-            bar.update(bar.total - bar.n)
-        bar.set_description_str(
-            _format_repo_progress_description(label, tr("progress.repo.status.done"))
-        )
-        bar.refresh()
-    return True
+    return impl(kind=kind, bar=bar, label=label, value=value)
 
 
 def _start_repo_progress_listener(
@@ -305,42 +234,14 @@ def _start_repo_progress_listener(
     repo_bars: dict[int, tqdm],
     repo_labels: dict[int, str],
 ) -> tuple[Event, Thread]:
-    """
-    Start a background listener that updates repository child progress bars.
+    """Start a background listener that updates repository child progress bars."""
+    from analyze_git_repo_loc.repo_progress import start_repo_progress_listener as impl
 
-    Args:
-        progress_queue (object): Queue-like object for events.
-        repo_bars (dict[int, tqdm]): Repository progress bars by index.
-        repo_labels (dict[int, str]): Repository labels by index.
-
-    Returns:
-        tuple[Event, Thread]: Stop event and listener thread.
-    """
-    stop_event = Event()
-
-    def loop() -> None:
-        while True:
-            try:
-                kind, repository_index, repository_name, value = progress_queue.get(
-                    timeout=0.1
-                )
-            except queue_module.Empty:
-                if stop_event.is_set():
-                    break
-                continue
-            bar = repo_bars.get(repository_index)
-            label = repo_labels.get(repository_index, repository_name)
-            if not _apply_repo_progress_event(
-                kind=kind,
-                bar=bar,
-                label=label,
-                value=value,
-            ):
-                break
-
-    thread = Thread(target=loop, daemon=True)
-    thread.start()
-    return stop_event, thread
+    return impl(
+        progress_queue=progress_queue,
+        repo_bars=repo_bars,
+        repo_labels=repo_labels,
+    )
 
 
 def _parse_optional_iso_date(
@@ -421,181 +322,22 @@ def _add_display_language_argument(
 
 
 def parse_arguments(parser: argparse.ArgumentParser) -> argparse.Namespace:
-    """
-    parse_arguments Parse command line arguments.
+    """Parse command-line arguments."""
+    from analyze_git_repo_loc.cli_args import parse_arguments as parse_cli_arguments
 
-    Args:
-        parser (ArgumentParser): ArgumentParser object.
-
-    Returns:
-        argparse.Namespace: Parsed command line arguments.
-    """
-    _apply_display_language_from_argv(sys.argv[1:])
-    parser.description = tr("cli.description")
-    _add_display_language_argument(parser, default="auto")
-    subparsers = parser.add_subparsers(dest="command", required=True)
-
-    init_parser = subparsers.add_parser(
-        "init",
-        help=tr("cli.init_help"),
-        description=tr("cli.description"),
+    return parse_cli_arguments(
+        parser,
+        translate=tr,
+        resolve_display_language=resolve_display_language,
+        set_language_override=set_language_override,
+        merge_yaml_config=merge_yaml_config,
+        normalize_optional_list=_normalize_optional_list,
+        parse_optional_iso_date=_parse_optional_iso_date,
+        normalize_optional_int=_normalize_optional_int,
+        validate_date_range=_validate_date_range,
+        normalize_exclude_template_mode=normalize_exclude_template_mode,
+        remote_repo_manager=_REMOTE_REPO_MANAGER,
     )
-    _add_display_language_argument(init_parser)
-    init_parser.add_argument(
-        "--config",
-        type=Path,
-        default=Path("config.yml"),
-        help=tr("cli.init_config_help"),
-    )
-    init_parser.set_defaults(
-        interactive=False,
-        repo_paths=None,
-        output=None,
-        since=None,
-        until=None,
-        interval=None,
-        lang=None,
-        author_name=None,
-        exclude_dirs=None,
-        exclude_template_mode="auto",
-        exclude_template_names=None,
-        exclude_template_files=None,
-        workers=None,
-        clear_cache=None,
-        no_plot_show=None,
-    )
-
-    doctor_parser = subparsers.add_parser(
-        "doctor",
-        help=tr("cli.doctor_help"),
-        description=tr("cli.description"),
-    )
-    _add_display_language_argument(doctor_parser)
-    doctor_parser.add_argument(
-        "--config",
-        type=Path,
-        default=Path("config.yml"),
-        help=tr("cli.config_help"),
-    )
-    doctor_parser.add_argument(
-        "--remote",
-        action="store_true",
-        default=False,
-        help=tr("cli.doctor_remote_help"),
-    )
-    doctor_parser.add_argument(
-        "--strict",
-        action="store_true",
-        default=False,
-        help=tr("cli.doctor_strict_help"),
-    )
-    doctor_parser.set_defaults(
-        interactive=False,
-        repo_paths=None,
-        output=None,
-        since=None,
-        until=None,
-        interval=None,
-        lang=None,
-        author_name=None,
-        exclude_dirs=None,
-        exclude_template_mode="auto",
-        exclude_template_names=None,
-        exclude_template_files=None,
-        workers=None,
-        clear_cache=None,
-        no_plot_show=None,
-    )
-
-    run_parser = subparsers.add_parser(
-        "run",
-        help=tr("cli.run_help"),
-        description=tr("cli.description"),
-    )
-    _add_display_language_argument(run_parser)
-    run_parser.add_argument(
-        "--config",
-        type=Path,
-        default=Path("config.yml"),
-        help=tr("cli.config_help"),
-    )
-    run_parser.add_argument("-o", "--output", type=Path, default=None, help=tr("cli.output_help"))
-    run_parser.add_argument(
-        "-i",
-        "--interactive",
-        action="store_true",
-        default=False,
-        help=tr("cli.interactive_help"),
-    )
-    run_parser.add_argument(
-        "--since",
-        type=str,
-        default=None,
-        help=tr("cli.since_help"),
-    )
-    run_parser.add_argument(
-        "--until",
-        type=str,
-        default=None,
-        help=tr("cli.until_help"),
-    )
-    run_parser.add_argument(
-        "--interval",
-        choices=["daily", "weekly", "monthly"],
-        default=None,
-        help=tr("cli.interval_help"),
-    )
-    run_parser.add_argument(
-        "--no-plot-show",
-        action="store_true",
-        default=None,
-        help=tr("cli.no_plot_show_help"),
-    )
-    run_parser.set_defaults(
-        repo_paths=None,
-        lang=None,
-        author_name=None,
-        exclude_dirs=None,
-        exclude_template_mode="auto",
-        exclude_template_names=None,
-        exclude_template_files=None,
-        workers=None,
-        clear_cache=None,
-    )
-
-    args = parser.parse_args()
-    set_language_override(resolve_display_language(getattr(args, "display_language", None)))
-    try:
-        if args.command in {"init", "doctor"}:
-            return args
-        args = merge_yaml_config(
-            args=args,
-            repo_manager=_REMOTE_REPO_MANAGER,
-            normalize_list=_normalize_optional_list,
-        )
-        args.since = _parse_optional_iso_date(args.since, "--since")
-        args.until = _parse_optional_iso_date(args.until, "--until")
-        args.lang = _normalize_optional_list(args.lang)
-        args.author_name = _normalize_optional_list(args.author_name)
-        args.exclude_dirs = _normalize_optional_list(args.exclude_dirs)
-        args.exclude_template_mode = normalize_exclude_template_mode(
-            getattr(args, "exclude_template_mode", "auto")
-        )
-        args.exclude_template_names = _normalize_optional_list(
-            getattr(args, "exclude_template_names", None)
-        )
-        args.exclude_template_files = _normalize_optional_list(
-            getattr(args, "exclude_template_files", None)
-        )
-        args.workers = _normalize_optional_int(args.workers, "--workers")
-        if args.clear_cache is None:
-            args.clear_cache = False
-        if args.no_plot_show is None:
-            args.no_plot_show = False
-        _validate_date_range(args.since, args.until)
-    except ValueError as ex:
-        parser.error(str(ex))
-    return args
 
 
 def handle_exception(ex: Exception) -> None:
@@ -668,28 +410,10 @@ def _apply_include_subpath(
     analysis_repo_path: Path | str,
     include_subpath: str | Path | None,
 ) -> Path | str:
-    """
-    Apply a repository-root-relative include subpath when configured.
+    """Apply a repository-root-relative include subpath when configured."""
+    from analyze_git_repo_loc.analysis_runner import _apply_include_subpath as impl
 
-    Args:
-        analysis_repo_path (Path | str): Resolved repository root.
-        include_subpath (str | Path | None): Optional include subpath.
-
-    Returns:
-        Path | str: Repository root or selected subpath.
-    """
-    if include_subpath in {None, ""}:
-        return analysis_repo_path
-    subpath = Path(include_subpath)
-    if subpath == Path("."):
-        return analysis_repo_path
-    if subpath.is_absolute():
-        raise ValueError("include_subpath must be repository-root-relative.")
-    root = Path(analysis_repo_path).resolve()
-    candidate = (root / subpath).resolve()
-    if candidate != root and root not in candidate.parents:
-        raise ValueError("include_subpath must resolve within repository root.")
-    return candidate
+    return impl(analysis_repo_path, include_subpath)
 
 
 def _create_analyzer(
@@ -788,114 +512,34 @@ def _analyze_single_repository(
     show_progress: bool,
     progress_queue: object | None = None,
 ) -> tuple[int, str, pd.DataFrame, list[str], dict[str, object]]:
-    """
-    Analyze a single repository and return its index, name, and LOC data.
-    """
-    if show_progress:
-        os.environ.pop("ANALYZE_GIT_REPO_LOC_LOG_AUTH", None)
-    else:
-        os.environ["ANALYZE_GIT_REPO_LOC_LOG_AUTH"] = "0"
-    console = ColoredConsolePrinter() if show_progress else None
-    repository_name = GitRepoLOCAnalyzer.get_repository_name(repo_path)
-    _emit_repo_progress(
-        progress_queue,
-        _REPO_EVENT_START,
-        index,
-        repository_name,
+    """Analyze a single repository and return its index, name, and LOC data."""
+    from analyze_git_repo_loc.analysis_runner import _analyze_single_repository as impl
+
+    return impl(
+        index=index,
+        repo_path=repo_path,
+        branch_name=branch_name,
+        exclude_dirs=exclude_dirs,
+        include_subpath=include_subpath,
+        exclude_template_mode=exclude_template_mode,
+        exclude_template_names=exclude_template_names,
+        exclude_template_files=exclude_template_files,
+        output_dir=output_dir,
+        since=since,
+        until=until,
+        authors=authors,
+        languages=languages,
+        clear_cache=clear_cache,
+        show_progress=show_progress,
+        progress_queue=progress_queue,
+        resolve_analysis_repo_path=_resolve_analysis_repo_path,
+        apply_include_subpath=_apply_include_subpath,
+        build_exclude_recommendation_for_repo=_build_exclude_recommendation_for_repo,
+        build_exclude_summary=_build_exclude_summary,
+        create_analyzer=_create_analyzer,
+        maybe_clear_cache=_maybe_clear_cache,
+        ensure_repo_output_dir=_ensure_repo_output_dir,
     )
-    if show_progress and console is not None:
-        console.print_h1("\n")
-        console.print_h1(
-            "# "
-            + tr(
-                "run.section.repository_analysis",
-                repository=repository_name,
-                branch=branch_name,
-            ),
-        )
-    try:
-        analysis_repo_path = _resolve_analysis_repo_path(
-            repo_path=repo_path,
-            branch_name=branch_name,
-            cache_dir=output_dir / ".cache",
-        )
-        analysis_repo_path = _apply_include_subpath(
-            analysis_repo_path,
-            include_subpath,
-        )
-        exclude_recommendation = _build_exclude_recommendation_for_repo(
-            analysis_repo_path=analysis_repo_path,
-            manual_excludes=exclude_dirs,
-            template_mode=exclude_template_mode,
-            template_names=exclude_template_names,
-            template_files=exclude_template_files,
-        )
-        exclude_summary = _build_exclude_summary(
-            repository_name=repository_name,
-            recommendation=exclude_recommendation,
-        )
-        final_exclude_dirs = exclude_recommendation.paths or None
-        manual_warning_dirs = exclude_recommendation.manual_paths
-        if show_progress and console is not None and final_exclude_dirs is not None:
-            console.print_h1(
-                "## "
-                + tr("run.section.excluded_directories", paths=final_exclude_dirs)
-            )
-
-        analyzer = _create_analyzer(
-            analysis_repo_path=analysis_repo_path,
-            repo_ref=repo_path,
-            branch_name=branch_name,
-            cache_dir=output_dir / ".cache",
-            output_dir=output_dir,
-            since=since,
-            until=until,
-            authors=authors,
-            languages=languages,
-            exclude_dirs=final_exclude_dirs,
-            exclude_warning_dirs=manual_warning_dirs,
-            show_progress=show_progress,
-        )
-
-        _maybe_clear_cache(
-            analyzer=analyzer,
-            console=console,
-            clear_cache=clear_cache,
-            show_progress=show_progress,
-        )
-
-        def progress_callback(kind: str, value: int) -> None:
-            event_kind = _REPO_EVENT_ADVANCE
-            if kind == "total":
-                event_kind = _REPO_EVENT_TOTAL
-            elif kind == "scan_total":
-                event_kind = _REPO_EVENT_SCAN_TOTAL
-            elif kind == "scan_advance":
-                event_kind = _REPO_EVENT_SCAN_ADVANCE
-            _emit_repo_progress(
-                progress_queue,
-                event_kind,
-                index,
-                repository_name,
-                value,
-            )
-
-        loc_data = analyzer.get_commit_analysis(
-            progress_callback=progress_callback if progress_queue is not None else None
-        )
-        analyzer.save_cache()
-
-        repo_output_dir = _ensure_repo_output_dir(output_dir, repository_name)
-        loc_data.to_csv(repo_output_dir / "loc_data.csv")
-
-        return index, repository_name, loc_data, analyzer._warnings, exclude_summary
-    finally:
-        _emit_repo_progress(
-            progress_queue,
-            _REPO_EVENT_FINISH,
-            index,
-            repository_name,
-        )
 
 
 def _ensure_repo_output_dir(output_dir: Path, repository_name: str) -> Path:
@@ -911,27 +555,10 @@ def _ensure_repo_output_dir(output_dir: Path, repository_name: str) -> Path:
 
 
 def save_repository_branch_info(repo_paths, output_file: Path) -> None:
-    """
-    Saves the repository and branch information to a file.
+    """Save repository and branch information to a file."""
+    from analyze_git_repo_loc.analysis_runner import save_repository_branch_info as impl
 
-    Args:
-        repo_paths: The list of repository paths and branch names.
-        output_file (Path): The path to the output file.
-
-    Writes:
-        A file named "repo_list.txt" in the specified `analysis_output_dir` containing
-        the repository paths and branch names in the format:
-        "repository: <repo_path>, branch: <branch_name>"
-    """
-    with open(output_file, "w", encoding="utf-8") as f:
-        f.write(
-            "\n".join(
-                [
-                    f"repository: {entry[0]}, branch: {entry[1]}"
-                    for entry in repo_paths
-                ]
-            )
-        )
+    impl(repo_paths, output_file)
 
 
 def analyze_trends(
@@ -941,48 +568,10 @@ def analyze_trends(
     analysis_data: pd.DataFrame,
     output_path: Path = None,
 ) -> pd.DataFrame:
-    """
-    Analyze the trends in the LOC data and save the results to a CSV file.
+    """Analyze the trends in the LOC data and save the results to a CSV file."""
+    from analyze_git_repo_loc.analysis_runner import analyze_trends as impl
 
-    Args:
-        category_column (str): The column name in `loc_data` representing the category to group by.
-        interval (str): The column name in `loc_data` representing the interval to group by.
-        loc_data (pd.DataFrame): A DataFrame containing lines of code data with at least
-                                 the columns specified by `category_column`, `interval`, and 'NLOC'.
-        analysis_data (pd.DataFrame): A DataFrame containing the aggregated LOC data for each group.
-                                      If None, the DataFrame will be created from scratch.
-        output_path (Path): The path to save the output CSV file. If None, the file will not be saved.
-
-    Returns:
-        pd.DataFrame: A DataFrame containing the aggregated LOC data for each group.
-
-    """
-    aggregate_functions = {
-        "Datetime": "min",
-        "Repository": "first",
-        "Branch": "first",
-        "Commit_hash": "first",
-        "Author": "first",
-        "Language": "first",
-        "NLOC_Added": "sum",
-        "NLOC_Deleted": "sum",
-        "NLOC": "sum",
-    }
-    # Remove the category column from the aggregate functions.
-    # It will be used as the index in the groupby operation.
-    aggregate_functions.pop(category_column, None)
-    trends_data = (
-        loc_data.groupby([interval, category_column])
-        .agg(aggregate_functions)
-        .reset_index()
-    )
-    trends_data.drop(columns=["Datetime", "Commit_hash"], inplace=True)
-
-    if output_path is not None:
-        output_prefix = category_column.lower()
-        trends_data.to_csv(output_path / f"{output_prefix}_trends.csv", index=False)
-
-    return pd.concat([analysis_data, trends_data], ignore_index=True)
+    return impl(category_column, interval, loc_data, analysis_data, output_path)
 
 
 def _resolve_exclude_dirs(
@@ -1088,54 +677,20 @@ def _analyze_repositories_sequential(
     warnings: list[str],
     exclude_summaries: list[dict[str, object]],
 ) -> None:
-    """
-    Analyze repositories sequentially and update results in-place.
-    """
-    for index, repo_entry in enumerate(repo_entries):
-        (
-            repo_path,
-            branch_name,
-            exclude_dirs,
-            include_subpath,
-            repo_template_mode,
-            repo_template_names,
-        ) = _unpack_repo_entry(repo_entry)
-        resolved_excludes = _resolve_exclude_dirs(args, exclude_dirs)
-        template_mode = _resolve_exclude_template_mode(args, repo_template_mode)
-        template_names = _resolve_exclude_template_names(args, repo_template_names)
-        try:
-            (
-                _,
-                repository_name,
-                loc_data,
-                repo_warnings,
-                exclude_summary,
-            ) = _analyze_single_repository(
-                index=index,
-                repo_path=repo_path,
-                branch_name=branch_name,
-                exclude_dirs=resolved_excludes,
-                include_subpath=include_subpath,
-                exclude_template_mode=template_mode,
-                exclude_template_names=template_names,
-                exclude_template_files=getattr(args, "exclude_template_files", None),
-                output_dir=args.output,
-                since=args.since,
-                until=args.until,
-                authors=args.author_name,
-                languages=args.lang,
-                clear_cache=args.clear_cache,
-                show_progress=False,
-                progress_queue=progress_queue,
-            )
-        except (OSError, ValueError) as ex:
-            handle_exception(ex)
-        warnings.extend(
-            f"{repository_name}: {warning}" for warning in repo_warnings
-        )
-        exclude_summaries.append(exclude_summary)
-        results[index] = loc_data
-        progress.update(1)
+    """Analyze repositories sequentially and update results in-place."""
+    from analyze_git_repo_loc.analysis_runner import _analyze_repositories_sequential as impl
+
+    impl(
+        args=args,
+        repo_entries=repo_entries,
+        progress=progress,
+        progress_queue=progress_queue,
+        results=results,
+        warnings=warnings,
+        exclude_summaries=exclude_summaries,
+        analyze_single_repository=_analyze_single_repository,
+        error_handler=handle_exception,
+    )
 
 
 def _build_repo_progress_bars(
@@ -1144,27 +699,16 @@ def _build_repo_progress_bars(
     progress: tqdm,
     label_width: int,
 ) -> tuple[dict[int, tqdm], dict[int, str]]:
-    """
-    Build child progress bars and labels for repository analysis.
-    """
-    repo_bars: dict[int, tqdm] = {}
-    repo_labels: dict[int, str] = {}
-    for index, repo_entry in enumerate(repo_entries):
-        repo_path, _, _, _, _, _ = _unpack_repo_entry(repo_entry)
-        repo_name = GitRepoLOCAnalyzer.get_repository_name(repo_path)
-        label = _truncate_repo_label(repo_name, label_width)
-        repo_labels[index] = label
-        repo_bars[index] = tqdm(
-            total=None,
-            desc=_format_repo_progress_description(
-                label, tr("progress.repo.status.queued")
-            ),
-            position=progress.pos + 1 + index,
-            leave=True,
-            unit="commit",
-            bar_format=_REPO_PROGRESS_BAR_FORMAT,
-        )
-    return repo_bars, repo_labels
+    """Build child progress bars and labels for repository analysis."""
+    from analyze_git_repo_loc.analysis_runner import _build_repo_progress_bars as impl
+
+    return impl(
+        repo_entries,
+        progress=progress,
+        label_width=label_width,
+        progress_factory=tqdm,
+        bar_format=_REPO_PROGRESS_BAR_FORMAT,
+    )
 
 
 def _cleanup_repo_progress_listener(
@@ -1175,18 +719,16 @@ def _cleanup_repo_progress_listener(
     manager: SyncManager,
     progress_queue: object,
 ) -> None:
-    """
-    Stop the progress listener and clean up related resources.
-    """
-    stop_event.set()
-    try:
-        progress_queue.put((_REPO_EVENT_STOP, -1, "", 0))
-    except (AttributeError, EOFError, OSError, ValueError):
-        pass
-    listener_thread.join()
-    for bar in repo_bars.values():
-        bar.close()
-    manager.shutdown()
+    """Stop the progress listener and clean up related resources."""
+    from analyze_git_repo_loc.analysis_runner import _cleanup_repo_progress_listener as impl
+
+    impl(
+        stop_event=stop_event,
+        listener_thread=listener_thread,
+        repo_bars=repo_bars,
+        manager=manager,
+        progress_queue=progress_queue,
+    )
 
 
 def _analyze_repositories_parallel(
@@ -1200,61 +742,21 @@ def _analyze_repositories_parallel(
     warnings: list[str],
     exclude_summaries: list[dict[str, object]],
 ) -> None:
-    """
-    Analyze repositories in parallel and update results in-place.
-    """
-    futures = []
-    with ProcessPoolExecutor(max_workers=worker_count) as executor:
-        for index, repo_entry in enumerate(repo_entries):
-            (
-                repo_path,
-                branch_name,
-                exclude_dirs,
-                include_subpath,
-                repo_template_mode,
-                repo_template_names,
-            ) = _unpack_repo_entry(repo_entry)
-            resolved_excludes = _resolve_exclude_dirs(args, exclude_dirs)
-            template_mode = _resolve_exclude_template_mode(args, repo_template_mode)
-            template_names = _resolve_exclude_template_names(args, repo_template_names)
-            futures.append(
-                executor.submit(
-                    _analyze_single_repository,
-                    index=index,
-                    repo_path=repo_path,
-                    branch_name=branch_name,
-                    exclude_dirs=resolved_excludes,
-                    include_subpath=include_subpath,
-                    exclude_template_mode=template_mode,
-                    exclude_template_names=template_names,
-                    exclude_template_files=getattr(args, "exclude_template_files", None),
-                    output_dir=args.output,
-                    since=args.since,
-                    until=args.until,
-                    authors=args.author_name,
-                    languages=args.lang,
-                    clear_cache=args.clear_cache,
-                    show_progress=False,
-                    progress_queue=progress_queue,
-                )
-            )
-        for future in as_completed(futures):
-            try:
-                (
-                    index,
-                    repository_name,
-                    loc_data,
-                    repo_warnings,
-                    exclude_summary,
-                ) = future.result()
-            except (OSError, ValueError) as ex:
-                handle_exception(ex)
-            results[index] = loc_data
-            warnings.extend(
-                f"{repository_name}: {warning}" for warning in repo_warnings
-            )
-            exclude_summaries.append(exclude_summary)
-            progress.update(1)
+    """Analyze repositories in parallel and update results in-place."""
+    from analyze_git_repo_loc.analysis_runner import _analyze_repositories_parallel as impl
+
+    impl(
+        args=args,
+        repo_entries=repo_entries,
+        worker_count=worker_count,
+        progress=progress,
+        progress_queue=progress_queue,
+        results=results,
+        warnings=warnings,
+        exclude_summaries=exclude_summaries,
+        analyze_single_repository=_analyze_single_repository,
+        error_handler=handle_exception,
+    )
 
 
 def _print_repository_warnings(warnings: list[str]) -> None:
@@ -1301,85 +803,20 @@ def _print_repository_exclude_summaries(
 
 
 def analyze_git_repositories(args: argparse.Namespace) -> list[pd.DataFrame]:
-    """
-    Analyze the LOC in the Git repositories.
+    """Analyze the LOC in the Git repositories."""
+    from analyze_git_repo_loc.analysis_runner import analyze_git_repositories as impl
 
-    Args:
-        args (argparse.Namespace): The command line arguments.
-
-    Returns:
-        list[pd.DataFrame]: The list of LOC dataframes for each repository.
-    """
-    # Analyze the LOC in the Git repositories
-    loc_data_repositories: list[pd.DataFrame] = []
-    repo_entries = list(args.repo_paths)
-    repo_count = len(repo_entries)
-    worker_count = _resolve_worker_count(args.workers, repo_count)
-    results: dict[int, pd.DataFrame] = {}
-    warnings: list[str] = []
-    exclude_summaries: list[dict[str, object]] = []
-
-    with tqdm(total=repo_count, desc=tr("progress.repo.analyzing")) as progress:
-        manager: SyncManager | None = None
-        progress_queue: object | None = None
-        repo_bars: dict[int, tqdm] = {}
-        stop_event: Event | None = None
-        listener_thread: Thread | None = None
-        try:
-            if repo_count:
-                manager = Manager()
-                progress_queue = manager.Queue()
-                repo_bars, repo_labels = _build_repo_progress_bars(
-                    repo_entries,
-                    progress=progress,
-                    label_width=_REPO_PROGRESS_LABEL_WIDTH,
-                )
-                stop_event, listener_thread = _start_repo_progress_listener(
-                    progress_queue=progress_queue,
-                    repo_bars=repo_bars,
-                    repo_labels=repo_labels,
-                )
-            if worker_count <= 1:
-                _analyze_repositories_sequential(
-                    args=args,
-                    repo_entries=repo_entries,
-                    progress=progress,
-                    progress_queue=progress_queue,
-                    results=results,
-                    warnings=warnings,
-                    exclude_summaries=exclude_summaries,
-                )
-            else:
-                _analyze_repositories_parallel(
-                    args=args,
-                    repo_entries=repo_entries,
-                    worker_count=worker_count,
-                    progress=progress,
-                    progress_queue=progress_queue,
-                    results=results,
-                    warnings=warnings,
-                    exclude_summaries=exclude_summaries,
-                )
-        finally:
-            if (
-                manager is not None
-                and progress_queue is not None
-                and stop_event is not None
-                and listener_thread is not None
-            ):
-                _cleanup_repo_progress_listener(
-                    stop_event=stop_event,
-                    listener_thread=listener_thread,
-                    repo_bars=repo_bars,
-                    manager=manager,
-                    progress_queue=progress_queue,
-                )
-
-    args.exclude_metadata = exclude_summaries
-    _print_repository_exclude_summaries(exclude_summaries)
-    _print_repository_warnings(warnings)
-
-    for index in sorted(results.keys()):
-        loc_data_repositories.append(results[index])
-
-    return loc_data_repositories
+    return impl(
+        args,
+        error_handler=handle_exception,
+        worker_count_resolver=_resolve_worker_count,
+        build_repo_progress_bars=_build_repo_progress_bars,
+        progress_listener_starter=_start_repo_progress_listener,
+        sequential_analyzer=_analyze_repositories_sequential,
+        parallel_analyzer=_analyze_repositories_parallel,
+        progress_listener_cleanup=_cleanup_repo_progress_listener,
+        repository_warning_printer=_print_repository_warnings,
+        repository_exclude_summary_printer=_print_repository_exclude_summaries,
+        progress_factory=tqdm,
+        manager_factory=Manager,
+    )

@@ -29,7 +29,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 from analyze_git_repo_loc.i18n import tr
-from analyze_git_repo_loc.remote_catalog import (
+from analyze_git_repo_loc.remote.remote_catalog import (
     GitHubProviderSettings,
     GitLabProviderSettings,
     RemoteCatalogError,
@@ -42,7 +42,7 @@ from analyze_git_repo_loc.remote_catalog import (
     fetch_remote_repositories,
     load_tui_settings,
 )
-from analyze_git_repo_loc.tui_auth import (
+from analyze_git_repo_loc.interactive.tui_auth import (
     build_auth_method_statuses,
     choose_auto_auth_status,
 )
