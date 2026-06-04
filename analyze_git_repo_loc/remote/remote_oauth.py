@@ -25,12 +25,11 @@ import webbrowser
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
-from urllib.parse import urlencode, urljoin
 from urllib.error import HTTPError
+from urllib.parse import urlencode, urljoin
 from urllib.request import Request, urlopen
 
 from analyze_git_repo_loc.i18n import tr
-
 
 DEVICE_CODE_GRANT_TYPE = "urn:ietf:params:oauth:grant-type:device_code"
 DEFAULT_GITHUB_SCOPES = ("repo", "read:org")
@@ -87,7 +86,9 @@ def _read_device_authorization(payload: dict[str, Any]) -> DeviceAuthorization:
         user_code = str(payload["user_code"])
         verification_uri = str(payload["verification_uri"])
     except KeyError as ex:
-        raise DeviceCodeLoginError("OAuth device authorization response is incomplete.") from ex
+        raise DeviceCodeLoginError(
+            "OAuth device authorization response is incomplete."
+        ) from ex
     return DeviceAuthorization(
         device_code=device_code,
         user_code=user_code,
@@ -105,7 +106,8 @@ def _default_notify(authorization: DeviceAuthorization) -> None:
     print(tr("auth.device.waiting"))
     try:
         webbrowser.open(authorization.verification_uri)
-    except Exception:
+    except (webbrowser.Error, OSError):
+        # Ignore failures to open the browser (non-fatal for device flow)
         pass
 
 
@@ -142,7 +144,9 @@ def _poll_device_token(
             raise DeviceCodeLoginError(f"OAuth Device Code login failed: {error}")
         if error:
             raise DeviceCodeLoginError(f"OAuth Device Code login failed: {error}")
-        raise DeviceCodeLoginError("OAuth token response did not include an access token.")
+        raise DeviceCodeLoginError(
+            "OAuth token response did not include an access token."
+        )
     raise DeviceCodeLoginError("OAuth Device Code login expired before authorization.")
 
 

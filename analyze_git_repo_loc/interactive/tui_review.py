@@ -20,11 +20,12 @@ from typing import Callable
 
 from colorama import Fore, Style
 
-from analyze_git_repo_loc.doctor import run_data_diagnostics
 from analyze_git_repo_loc.analysis.exclude_templates import (
     build_exclude_recommendation,
     load_exclude_templates,
+    normalize_exclude_template_mode,
 )
+from analyze_git_repo_loc.doctor import run_data_diagnostics
 from analyze_git_repo_loc.i18n import tr
 from analyze_git_repo_loc.interactive.tui_config import wizard_state_to_config
 from analyze_git_repo_loc.interactive.tui_state import (
@@ -32,16 +33,19 @@ from analyze_git_repo_loc.interactive.tui_state import (
     TuiWizardState,
 )
 
+NONE_TEXT = "(none)"
+TUI_NONE_KEY = "tui.none"
+
 
 def format_optional_list(value: list[str] | None) -> str:
     """Format an optional list for prompts and review text."""
-    return ", ".join(value) if value else "(none)"
+    return ", ".join(value) if value else NONE_TEXT
 
 
 def format_compact_list(value: list[str] | None, *, limit: int = 5) -> str:
     """Format a list with a compact overflow marker."""
     if not value:
-        return "(none)"
+        return NONE_TEXT
     visible = value[:limit]
     suffix = ""
     remaining = len(value) - len(visible)
@@ -56,7 +60,7 @@ def _format_date(value: datetime | None) -> str:
     return value.date().isoformat()
 
 
-def _color(text: str, color: str, *, enabled: bool) -> str:
+def _color(text: str, color: object, *, enabled: bool) -> str:
     if not enabled:
         return text
     return f"{color}{text}{Style.RESET_ALL}"
@@ -77,7 +81,7 @@ def _provider_review_label(state: TuiWizardState) -> str:
         if auth_label:
             label = f"{label} via {auth_label}"
         values.append(label)
-    return ", ".join(values) or "(none)"
+    return ", ".join(values) or NONE_TEXT
 
 
 def _review_summary(state: TuiWizardState) -> str:
@@ -85,8 +89,8 @@ def _review_summary(state: TuiWizardState) -> str:
     return (
         f"{_provider_review_label(state)} | "
         f"{len(state.selected_repositories)} {repo_label} | {state.interval} | "
-        f"{_format_date(state.since) or '(none)'} -> "
-        f"{_format_date(state.until) or '(none)'} | "
+        f"{_format_date(state.since) or NONE_TEXT} -> "
+        f"{_format_date(state.until) or NONE_TEXT} | "
         f"cache: {_cache_policy_label(state)} | "
         f"display: {'off' if state.no_plot_show else 'on'}"
     )
@@ -135,7 +139,9 @@ def _combined_excludes(
             if repository.exclude_template_names is not None
             else state.exclude_template_names
         ),
-        mode=repository.exclude_template_mode or state.exclude_template_mode,
+        mode=normalize_exclude_template_mode(
+            repository.exclude_template_mode or state.exclude_template_mode
+        ),
         templates=load_exclude_templates(state.exclude_template_files),
     )
     return recommendation.paths or None
@@ -151,17 +157,17 @@ def render_final_review(
     """Render the final wizard review."""
     providers = ", ".join(
         f"{target.label} ({target.base_url})" for target in state.provider_targets
-    ) or tr("tui.none")
+    ) or tr(TUI_NONE_KEY)
     cache_policy = _cache_policy_label(state)
     recommended_languages = (
         format_compact_list(state.recommendations.languages, limit=5)
         if state.recommendations.languages
-        else tr("tui.none")
+        else tr(TUI_NONE_KEY)
     )
     detected_templates = (
         format_compact_list(state.recommendations.detected_templates, limit=5)
         if state.recommendations.detected_templates
-        else tr("tui.none")
+        else tr(TUI_NONE_KEY)
     )
     doctor_result = run_data_diagnostics(wizard_state_to_config(state), remote=False)
     doctor_summary = (
@@ -196,8 +202,8 @@ def render_final_review(
         tr("tui.repository_count", count=len(state.selected_repositories)),
         tr(
             "tui.period",
-            since=_format_date(state.since) or tr("tui.none"),
-            until=_format_date(state.until) or tr("tui.none"),
+            since=_format_date(state.since) or tr(TUI_NONE_KEY),
+            until=_format_date(state.until) or tr(TUI_NONE_KEY),
         ),
         tr("tui.interval", value=state.interval),
         tr("tui.authors", value=format_optional_list(state.author_name)),
@@ -207,7 +213,9 @@ def render_final_review(
             value=recommended_languages,
             source=state.recommendations.language_source,
         ),
-        tr("tui.global_excludes", value=format_optional_list(state.global_exclude_dirs)),
+        tr(
+            "tui.global_excludes", value=format_optional_list(state.global_exclude_dirs)
+        ),
         f"Exclude template mode: {state.exclude_template_mode}",
         f"Detected exclude templates: {detected_templates}",
         tr(
@@ -216,7 +224,10 @@ def render_final_review(
         ),
         tr("tui.output_line", path=state.output),
         tr("tui.cache", policy=cache_policy),
-        tr("tui.auto_display", value=tr("tui.off") if state.no_plot_show else tr("tui.on")),
+        tr(
+            "tui.auto_display",
+            value=tr("tui.off") if state.no_plot_show else tr("tui.on"),
+        ),
         doctor_summary,
     ]
     for issue in doctor_result.issues:

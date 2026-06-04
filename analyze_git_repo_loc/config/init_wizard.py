@@ -1,318 +1,50 @@
 """Run the full-screen first-run configuration wizard.
 
 Description:
-    Provides the prompt_toolkit-backed `init` wizard UI. Keeps YAML data
-    generation in `init_config` and only owns editable wizard state, rendering,
-    validation, and final file writing.
-Classes:
-    InitWizardState:
-        Stores editable state for the full-screen `init` wizard.
+    Owns the init wizard controller, step navigation, field application, and
+    final file writing. Shared state/loading helpers live in
+    `init_wizard_support`, while prompt_toolkit runtime wiring lives in
+    `init_wizard_runtime`.
+
 Functions:
-    render_init_config_summary:
-        Render a concise final summary for generated config values.
     run_init_config_wizard:
         Run the full-screen config initialization wizard.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
+from typing import Callable
 
-from colorama import Fore, Style, just_fix_windows_console
+from colorama import Fore, Style  # pyright: ignore[reportMissingModuleSource]
 
-from analyze_git_repo_loc.analysis.exclude_templates import BUILTIN_EXCLUDE_TEMPLATES
 from analyze_git_repo_loc.config.init_config import (
-    InitConfigOptions,
     build_init_config_data,
     render_init_config_yaml,
 )
+from analyze_git_repo_loc.config.init_wizard_runtime import run_prompt_toolkit_wizard
+from analyze_git_repo_loc.config.init_wizard_support import (
+    CACHE_POLICY_OPTIONS,
+    COMMON_LANGUAGE_CHOICES,
+    DEFAULT_GITLAB_BASE_URL,
+    DEFAULT_INIT_CONFIG_PATH,
+    EXCLUDE_TEMPLATE_CHOICES,
+    EXCLUDE_TEMPLATE_MODE_OPTIONS,
+    GITLAB_DOT_COM_PROVIDER_KEY,
+    GITLAB_SELF_HOSTED_PROVIDER_KEY,
+    INIT_SELECT_INSTRUCTIONS_KEY,
+    INTERVAL_OPTIONS,
+    YES_NO_OPTIONS,
+    InitWizardState as _InitWizardState,
+    _load_existing_init_wizard_state,
+    _validate_choice,
+    render_init_config_summary,
+)
 from analyze_git_repo_loc.i18n import tr
 from analyze_git_repo_loc.language_extensions import LanguageExtensions
-from analyze_git_repo_loc.config.yaml_config import load_yaml_data
 
-
-INTERVAL_OPTIONS = ["daily", "weekly", "monthly"]
-CACHE_POLICY_OPTIONS = ["use", "update", "clear"]
-EXCLUDE_TEMPLATE_MODE_OPTIONS = ["auto", "manual", "off"]
-EXCLUDE_TEMPLATE_CHOICES = [
-    template.name for template in sorted(BUILTIN_EXCLUDE_TEMPLATES, key=lambda item: item.priority)
-]
-YES_NO_OPTIONS = ["yes", "no"]
-COMMON_LANGUAGE_CHOICES = [
-    "C#",
-    "Python",
-    "C++",
-    "C",
-    "Java",
-    "JavaScript",
-    "TypeScript",
-    "Go",
-    "Rust",
-    "Kotlin",
-    "PHP",
-    "Ruby",
-]
-
-
-@dataclass
-class InitWizardState:
-    """Editable state for the full-screen first-run config wizard."""
-
-    config_path: Path = Path("config.yml")
-    overwrite_existing: bool = False
-    github_enabled: bool = True
-    gitlab_enabled: bool = False
-    gitlab_base_url: str = "https://gitlab.com"
-    output: Path = Path("out")
-    interval: str = "monthly"
-    since: str | None = None
-    until: str | None = None
-    no_plot_show: bool = True
-    cache_policy: str = "use"
-    exclude_dirs: list[str] = field(default_factory=lambda: ["node_modules", ".venv"])
-    exclude_template_mode: str = "auto"
-    exclude_template_names: list[str] = field(default_factory=list)
-    exclude_template_files: list[str] = field(default_factory=list)
-    lang: list[str] = field(default_factory=list)
-
-    def toggle_provider(self, key: str) -> None:
-        """Toggle a provider checkbox while keeping GitLab targets exclusive."""
-        if key == "github":
-            self.github_enabled = not self.github_enabled
-            return
-        if key == "gitlab.com":
-            if self.gitlab_enabled and self.gitlab_base_url == "https://gitlab.com":
-                self.gitlab_enabled = False
-                return
-            self.gitlab_enabled = True
-            self.gitlab_base_url = "https://gitlab.com"
-            return
-        if key == "gitlab.self_hosted":
-            if self.gitlab_enabled and self.gitlab_base_url != "https://gitlab.com":
-                self.gitlab_enabled = False
-                self.gitlab_base_url = "https://gitlab.com"
-                return
-            self.gitlab_enabled = True
-            self.gitlab_base_url = ""
-            return
-        raise ValueError(f"Unsupported provider key '{key}'.")
-
-    def to_options(self) -> InitConfigOptions:
-        """Convert wizard state to generated config options."""
-        return InitConfigOptions(
-            github_enabled=self.github_enabled,
-            gitlab_enabled=self.gitlab_enabled,
-            gitlab_base_url=self.gitlab_base_url or "https://gitlab.com",
-            output=self.output,
-            interval=self.interval,
-            since=self.since,
-            until=self.until,
-            no_plot_show=self.no_plot_show,
-            cache_policy=self.cache_policy,
-            exclude_dirs=self.exclude_dirs,
-            exclude_template_mode=self.exclude_template_mode,
-            exclude_template_names=self.exclude_template_names,
-            exclude_template_files=self.exclude_template_files,
-            lang=self.lang,
-        )
-
-
-def _load_existing_init_wizard_state(config_path: Path) -> InitWizardState:
-    """Load existing config values into first-run wizard state."""
-    state = InitWizardState(config_path=config_path)
-    if not config_path.exists():
-        return state
-
-    config_data = load_yaml_data(config_path)
-    settings = _as_mapping(config_data.get("settings"), "settings")
-    interactive = _as_mapping(config_data.get("interactive"), "interactive")
-    providers = _as_mapping(interactive.get("providers"), "interactive.providers")
-    quick_defaults = _as_mapping(
-        interactive.get("quick_defaults"),
-        "interactive.quick_defaults",
-    )
-
-    _apply_provider_defaults(state, providers)
-    state.output = Path(_pick_existing_value(settings, quick_defaults, "output", "out"))
-    state.interval = _validate_choice(
-        str(_pick_existing_value(settings, quick_defaults, "interval", "monthly")),
-        {"daily", "weekly", "monthly"},
-        "interval",
-    )
-    state.since = _normalize_optional_date(
-        _pick_existing_value(settings, quick_defaults, "since", None)
-    )
-    state.until = _normalize_optional_date(
-        _pick_existing_value(settings, quick_defaults, "until", None)
-    )
-    state.lang = _normalize_string_list(
-        _pick_existing_value(settings, quick_defaults, "lang", [])
-    )
-    state.no_plot_show = _normalize_bool(
-        _pick_existing_value(settings, quick_defaults, "no_plot_show", True),
-        "no_plot_show",
-    )
-    state.cache_policy = _validate_choice(
-        str(quick_defaults.get("cache_policy") or "use").strip().casefold(),
-        {"use", "update", "clear"},
-        "cache_policy",
-    )
-    state.exclude_dirs = _normalize_string_list(
-        quick_defaults.get("exclude_dirs", settings.get("exclude_dirs"))
-    ) or ["node_modules", ".venv"]
-    state.exclude_template_mode = _validate_choice(
-        quick_defaults.get(
-            "exclude_template_mode",
-            settings.get("exclude_template_mode", "auto"),
-        ),
-        {"auto", "manual", "off"},
-        "exclude_template_mode",
-    )
-    state.exclude_template_names = _normalize_string_list(
-        quick_defaults.get(
-            "exclude_template_names",
-            settings.get("exclude_template_names"),
-        )
-    ) or []
-    state.exclude_template_files = _normalize_string_list(
-        quick_defaults.get(
-            "exclude_template_files",
-            settings.get("exclude_template_files"),
-        )
-    ) or []
-    return state
-
-
-def _as_mapping(value: object, key: str) -> dict:
-    if value is None:
-        return {}
-    if not isinstance(value, dict):
-        raise ValueError(f"YAML config '{key}' must be a mapping.")
-    return value
-
-
-def _pick_existing_value(
-    settings: dict,
-    quick_defaults: dict,
-    key: str,
-    default: object,
-) -> object:
-    value = settings.get(key)
-    if value is not None and value != "":
-        return value
-    value = quick_defaults.get(key)
-    if value is not None and value != "":
-        return value
-    return default
-
-
-def _normalize_optional_date(value: object) -> str | None:
-    if value is None or value == "":
-        return None
-    normalized = str(value)
-    try:
-        datetime.fromisoformat(normalized)
-    except ValueError as ex:
-        raise ValueError(f"Invalid date '{normalized}'. Use YYYY-MM-DD.") from ex
-    return normalized
-
-
-def _normalize_string_list(value: object) -> list[str]:
-    if value is None or value == "":
-        return []
-    if isinstance(value, str):
-        return [item.strip() for item in value.split(",") if item.strip()]
-    if isinstance(value, list):
-        return [str(item).strip() for item in value if str(item).strip()]
-    raise ValueError(f"Expected a string or list value, got {type(value).__name__}.")
-
-
-def _normalize_bool(value: object, key: str) -> bool:
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, str):
-        normalized = value.strip().casefold()
-        if normalized in {"1", "true", "yes", "on", "y"}:
-            return True
-        if normalized in {"0", "false", "no", "off", "n"}:
-            return False
-    raise ValueError(f"Invalid {key} value '{value}'.")
-
-
-def _validate_choice(value: str, choices: set[str], key: str) -> str:
-    normalized = value.strip().casefold()
-    if normalized not in choices:
-        raise ValueError(f"Invalid {key} value '{value}'.")
-    return normalized
-
-
-def _apply_provider_defaults(state: InitWizardState, providers: dict) -> None:
-    github = _as_mapping(providers.get("github"), "interactive.providers.github")
-    gitlab = _as_mapping(providers.get("gitlab"), "interactive.providers.gitlab")
-    if "enabled" in github:
-        state.github_enabled = _normalize_bool(github["enabled"], "github.enabled")
-    if "enabled" in gitlab:
-        state.gitlab_enabled = _normalize_bool(gitlab["enabled"], "gitlab.enabled")
-    if gitlab.get("base_url"):
-        state.gitlab_base_url = str(gitlab["base_url"]).rstrip("/")
-
-
-def render_init_config_summary(state: InitWizardState, *, color: bool = False) -> str:
-    """Render a concise summary of the config that will be written.
-
-    Args:
-        state (InitWizardState): Wizard state to summarize.
-        color (bool): If True, color labels and values for console display.
-
-    Returns:
-        str: Human-readable summary.
-    """
-    providers: list[str] = []
-    if state.github_enabled:
-        providers.append("GitHub")
-    if state.gitlab_enabled:
-        label = (
-            "GitLab.com"
-            if state.gitlab_base_url.rstrip("/") == "https://gitlab.com"
-            else "Self-hosted GitLab"
-        )
-        providers.append(label)
-    period = f"{state.since or tr('init.value.blank')} -> {state.until or tr('init.value.blank')}"
-    excludes = ", ".join(state.exclude_dirs) if state.exclude_dirs else tr("init.value.none")
-    template_names = (
-        ", ".join(state.exclude_template_names)
-        if state.exclude_template_names
-        else tr("init.value.blank")
-    )
-    languages = ", ".join(state.lang) if state.lang else tr("init.value.all")
-    rows = [
-        (tr("init.label.config"), str(state.config_path)),
-        (tr("init.label.providers"), ", ".join(providers) if providers else tr("init.value.none")),
-        (tr("init.label.output"), str(state.output)),
-        (tr("init.label.interval"), state.interval),
-        (tr("init.label.languages"), languages),
-        (tr("init.label.period"), period),
-        (tr("init.label.auto_display"), tr("tui.off") if state.no_plot_show else tr("tui.on")),
-        (tr("init.label.cache"), state.cache_policy),
-        (tr("init.label.exclude_dirs"), excludes),
-        ("Exclude template mode", state.exclude_template_mode),
-        ("Exclude templates", template_names),
-    ]
-    if color:
-        label_style = Fore.CYAN + Style.BRIGHT
-        value_style = Fore.WHITE + Style.BRIGHT
-        return "\n".join(
-            [
-                f"{label_style}{label}:{Style.RESET_ALL} "
-                f"{value_style}{value}{Style.RESET_ALL}"
-                for label, value in rows
-            ]
-        )
-    return "\n".join(
-        [f"{label}: {value}" for label, value in rows]
-    )
+InitWizardState = _InitWizardState
 
 
 class _InitWizardController:
@@ -323,7 +55,11 @@ class _InitWizardController:
         "init.step.runtime_behavior",
         "init.step.review",
     ]
-    _provider_keys = ["github", "gitlab.com", "gitlab.self_hosted"]
+    _provider_keys = [
+        "github",
+        GITLAB_DOT_COM_PROVIDER_KEY,
+        GITLAB_SELF_HOSTED_PROVIDER_KEY,
+    ]
 
     def __init__(self, default_path: Path) -> None:
         self.state = _load_existing_init_wizard_state(default_path)
@@ -346,36 +82,29 @@ class _InitWizardController:
 
     def current_value(self) -> str:
         """Return the editable value for the current text field."""
-        key = self._current_field_key()
+        key = self.current_field_key()
+        if key in {
+            "overwrite",
+            "interval",
+            "open_plots",
+            "cache_policy",
+            "exclude_template_mode",
+            "exclude_template_names",
+        }:
+            return ""
         if key == "config_path":
             return str(self.state.config_path)
-        if key == "overwrite":
-            return ""
         if key == "gitlab_base_url":
             return self.state.gitlab_base_url
         if key == "output":
             return str(self.state.output)
-        if key == "interval":
-            return ""
         if key == "languages":
             return self.language_query
-        if key == "since":
-            return self.state.since or ""
-        if key == "until":
-            return self.state.until or ""
-        if key == "open_plots":
-            return ""
-        if key == "cache_policy":
-            return ""
-        if key == "exclude_template_mode":
-            return ""
         if key == "exclude_dirs":
             return ",".join(self.state.exclude_dirs)
-        if key == "exclude_template_names":
-            return ""
         if key == "exclude_template_files":
             return ",".join(self.state.exclude_template_files)
-        return ""
+        return getattr(self.state, key, None) or ""
 
     def render(self) -> str:
         """Render the full-screen wizard content as ANSI text."""
@@ -387,13 +116,12 @@ class _InitWizardController:
         for index, step_key in enumerate(self._steps):
             marker = ">" if index == self.step else " "
             checked = "x" if index < self.step else " "
-            color = (
-                Fore.GREEN
-                if index < self.step
-                else Fore.CYAN
-                if index == self.step
-                else ""
-            )
+            if index < self.step:
+                color = Fore.GREEN
+            elif index == self.step:
+                color = Fore.CYAN
+            else:
+                color = ""
             lines.append(
                 self._color(
                     f"{marker} [{checked}] "
@@ -584,8 +312,7 @@ class _InitWizardController:
         selected_matches = [
             language
             for language in self.state.lang
-            if query in language.lower()
-            and language not in common_matches
+            if query in language.lower() and language not in common_matches
         ]
         all_matches = [
             language
@@ -648,49 +375,40 @@ class _InitWizardController:
         """Apply the current input value and advance when valid."""
         value = value.strip()
         try:
-            if self.step == 1 and not self._needs_self_hosted_url():
+            if self.step == 1 and not self.needs_self_hosted_url():
                 return self._advance_from_provider_step()
             if self.step == 4:
                 self.confirmed = True
                 return True
-            key = self._current_field_key()
-            if key == "interval":
-                if value:
-                    self._apply_field(key, value)
-                else:
-                    self.select_current_interval()
-                return self._advance_field()
-            if key == "cache_policy":
-                if value:
-                    self._apply_field(key, value)
-                else:
-                    self.select_current_cache_policy()
-                return self._advance_field()
-            if key == "exclude_template_mode":
-                if value:
-                    self._apply_field(key, value)
-                else:
-                    self.select_current_exclude_template_mode()
-                return self._advance_field()
+            key = self.current_field_key()
+            selectors = {
+                "interval": self.select_current_interval,
+                "cache_policy": self.select_current_cache_policy,
+                "exclude_template_mode": self.select_current_exclude_template_mode,
+            }
+            if key in selectors:
+                return self._apply_or_select_current_field(
+                    key,
+                    value,
+                    selectors[key],
+                )
             if key == "exclude_template_names":
-                if value:
-                    self._apply_field(key, value)
-                return self._advance_field()
+                return self._apply_optional_current_field(key, value)
             if key in {"overwrite", "open_plots"}:
-                if value:
-                    self._apply_field(key, value)
-                else:
-                    self.select_current_yes_no()
-                return self._advance_field()
+                return self._apply_or_select_current_field(
+                    key,
+                    value,
+                    self.select_current_yes_no,
+                )
             if key == "languages":
-                self.language_query = ""
-                self.language_suggestion_cursor = 0
-                return self._advance_field()
-            self._apply_field(self._current_field_key(), value)
+                self._finalize_language_field()
+                return True
+            self._apply_field(key, value)
         except ValueError as ex:
             self.message = str(ex)
             return False
-        return self._advance_field()
+        self._advance_field()
+        return True
 
     def cancel(self) -> None:
         """Mark the wizard as cancelled."""
@@ -711,13 +429,13 @@ class _InitWizardController:
         self.message = "Set analysis defaults."
         return True
 
-    def _advance_field(self) -> bool:
+    def _advance_field(self) -> None:
         fields = self._fields_for_current_step()
         if self.field + 1 < len(fields):
             self.field += 1
             self._sync_current_field_cursor()
             self.message = f"Set {fields[self.field][1]}."
-            return True
+            return
         self.step += 1
         self.field = 0
         self._sync_current_field_cursor()
@@ -726,82 +444,127 @@ class _InitWizardController:
             if self.step == 4
             else f"Step {self.step + 1}: {self._steps[self.step]}."
         )
-        return True
 
     def _apply_field(self, key: str, value: str) -> None:
-        if key == "config_path":
-            self.state = _load_existing_init_wizard_state(Path(value or "config.yml"))
-            self.state.overwrite_existing = False
-            self.language_query = ""
-            self.language_suggestion_cursor = 0
-            self._sync_cursors_to_state()
-            return
-        if key == "overwrite":
-            self.state.overwrite_existing = self._parse_bool(
-                value,
-                default=self.state.overwrite_existing,
-            )
-            self.yes_no_cursor = 0 if self.state.overwrite_existing else 1
-            if self.state.config_path.exists() and not self.state.overwrite_existing:
-                self.field = 0
-                raise ValueError("Enter another config path or confirm overwrite.")
-            return
-        if key == "gitlab_base_url":
-            if not value:
-                raise ValueError("Self-hosted GitLab base URL is required.")
-            self.state.gitlab_base_url = value.rstrip("/")
-            self.self_hosted_url_prompt = False
-            return
-        if key == "output":
-            self.state.output = Path(value or "out")
-            return
-        if key == "interval":
-            if value not in {"daily", "weekly", "monthly"}:
-                raise ValueError("Invalid interval. Use daily, weekly, or monthly.")
-            self.state.interval = value
-            self.interval_cursor = INTERVAL_OPTIONS.index(value)
-            return
+        handlers = {
+            "config_path": self._apply_config_path_field,
+            "overwrite": self._apply_overwrite_field,
+            "gitlab_base_url": self._apply_gitlab_base_url_field,
+            "output": self._apply_output_field,
+            "interval": self._apply_interval_field,
+            "open_plots": self._apply_open_plots_field,
+            "cache_policy": self._apply_cache_policy_field,
+            "exclude_dirs": lambda raw: self._apply_csv_list_field(
+                "exclude_dirs",
+                raw,
+            ),
+            "exclude_template_mode": self._apply_exclude_template_mode_field,
+            "exclude_template_names": lambda raw: self._apply_csv_list_field(
+                "exclude_template_names",
+                raw,
+            ),
+            "exclude_template_files": lambda raw: self._apply_csv_list_field(
+                "exclude_template_files",
+                raw,
+            ),
+        }
         if key in {"since", "until"}:
-            parsed = self._parse_optional_date(value)
-            setattr(self.state, key, parsed)
+            self._apply_date_field(key, value)
             return
-        if key == "open_plots":
-            self.state.no_plot_show = not self._parse_bool(
-                value,
-                default=not self.state.no_plot_show,
-            )
-            self.yes_no_cursor = 0 if not self.state.no_plot_show else 1
-            return
-        if key == "cache_policy":
-            if value not in {"use", "update", "clear"}:
-                raise ValueError("Invalid cache policy. Use use, update, or clear.")
-            self.state.cache_policy = value
-            self.cache_policy_cursor = CACHE_POLICY_OPTIONS.index(value)
-            return
-        if key == "exclude_dirs":
-            self.state.exclude_dirs = [
-                item.strip() for item in value.split(",") if item.strip()
-            ]
-            return
-        if key == "exclude_template_mode":
-            self.state.exclude_template_mode = _validate_choice(
-                value,
-                set(EXCLUDE_TEMPLATE_MODE_OPTIONS),
-                "exclude_template_mode",
-            )
-            self.exclude_template_mode_cursor = EXCLUDE_TEMPLATE_MODE_OPTIONS.index(
-                self.state.exclude_template_mode
-            )
-            return
-        if key == "exclude_template_names":
-            self.state.exclude_template_names = [
-                item.strip() for item in value.split(",") if item.strip()
-            ]
-            return
-        if key == "exclude_template_files":
-            self.state.exclude_template_files = [
-                item.strip() for item in value.split(",") if item.strip()
-            ]
+        handler = handlers.get(key)
+        if handler is None:
+            raise ValueError(f"Unexpected field '{key}'.")
+        handler(value)
+
+    def _apply_or_select_current_field(
+        self,
+        key: str,
+        value: str,
+        selector: Callable[[], None],
+    ) -> bool:
+        if value:
+            self._apply_field(key, value)
+        else:
+            selector()
+        self._advance_field()
+        return True
+
+    def _apply_optional_current_field(self, key: str, value: str) -> bool:
+        if value:
+            self._apply_field(key, value)
+        self._advance_field()
+        return True
+
+    def _finalize_language_field(self) -> None:
+        self.language_query = ""
+        self.language_suggestion_cursor = 0
+        self._advance_field()
+
+    def _apply_config_path_field(self, value: str) -> None:
+        self.state = _load_existing_init_wizard_state(
+            Path(value or DEFAULT_INIT_CONFIG_PATH)
+        )
+        self.state.overwrite_existing = False
+        self.language_query = ""
+        self.language_suggestion_cursor = 0
+        self._sync_cursors_to_state()
+
+    def _apply_overwrite_field(self, value: str) -> None:
+        self.state.overwrite_existing = self._parse_bool(
+            value,
+            default=self.state.overwrite_existing,
+        )
+        self.yes_no_cursor = 0 if self.state.overwrite_existing else 1
+        if self.state.config_path.exists() and not self.state.overwrite_existing:
+            self.field = 0
+            raise ValueError("Enter another config path or confirm overwrite.")
+
+    def _apply_gitlab_base_url_field(self, value: str) -> None:
+        if not value:
+            raise ValueError("Self-hosted GitLab base URL is required.")
+        self.state.gitlab_base_url = value.rstrip("/")
+        self.self_hosted_url_prompt = False
+
+    def _apply_output_field(self, value: str) -> None:
+        self.state.output = Path(value or "out")
+
+    def _apply_interval_field(self, value: str) -> None:
+        normalized = _validate_choice(value, set(INTERVAL_OPTIONS), "interval")
+        self.state.interval = normalized
+        self.interval_cursor = INTERVAL_OPTIONS.index(normalized)
+
+    def _apply_date_field(self, key: str, value: str) -> None:
+        parsed = self._parse_optional_date(value)
+        setattr(self.state, key, parsed)
+
+    def _apply_open_plots_field(self, value: str) -> None:
+        self.state.no_plot_show = not self._parse_bool(
+            value,
+            default=not self.state.no_plot_show,
+        )
+        self.yes_no_cursor = 0 if not self.state.no_plot_show else 1
+
+    def _apply_cache_policy_field(self, value: str) -> None:
+        normalized = _validate_choice(value, set(CACHE_POLICY_OPTIONS), "cache_policy")
+        self.state.cache_policy = normalized
+        self.cache_policy_cursor = CACHE_POLICY_OPTIONS.index(normalized)
+
+    def _apply_exclude_template_mode_field(self, value: str) -> None:
+        self.state.exclude_template_mode = _validate_choice(
+            value,
+            set(EXCLUDE_TEMPLATE_MODE_OPTIONS),
+            "exclude_template_mode",
+        )
+        self.exclude_template_mode_cursor = EXCLUDE_TEMPLATE_MODE_OPTIONS.index(
+            self.state.exclude_template_mode
+        )
+
+    def _apply_csv_list_field(self, attribute: str, value: str) -> None:
+        setattr(
+            self.state,
+            attribute,
+            [item.strip() for item in value.split(",") if item.strip()],
+        )
 
     def _fields_for_current_step(self) -> list[tuple[str, str]]:
         if self.step == 0:
@@ -844,6 +607,14 @@ class _InitWizardController:
                 ("exclude_template_files", "Custom exclude template files"),
             ]
         return []
+
+    def current_field_key(self) -> str:
+        """Return the active editable field key for the current step."""
+        return self._current_field_key()
+
+    def needs_self_hosted_url(self) -> bool:
+        """Return whether the selected provider flow needs a self-hosted URL."""
+        return self._needs_self_hosted_url()
 
     def _current_field_key(self) -> str:
         fields = self._fields_for_current_step()
@@ -898,17 +669,17 @@ class _InitWizardController:
         rows = []
         labels = {
             "github": "GitHub",
-            "gitlab.com": "GitLab.com",
-            "gitlab.self_hosted": "Self-hosted GitLab",
+            GITLAB_DOT_COM_PROVIDER_KEY: "GitLab.com",
+            GITLAB_SELF_HOSTED_PROVIDER_KEY: "Self-hosted GitLab",
         }
         selected = {
             "github": self.state.github_enabled,
-            "gitlab.com": self.state.gitlab_enabled
-            and self.state.gitlab_base_url.rstrip("/") == "https://gitlab.com",
-            "gitlab.self_hosted": self.state.gitlab_enabled
+            GITLAB_DOT_COM_PROVIDER_KEY: self.state.gitlab_enabled
+            and self.state.gitlab_base_url.rstrip("/") == DEFAULT_GITLAB_BASE_URL,
+            GITLAB_SELF_HOSTED_PROVIDER_KEY: self.state.gitlab_enabled
             and (
                 self.self_hosted_url_prompt
-                or self.state.gitlab_base_url.rstrip("/") != "https://gitlab.com"
+                or self.state.gitlab_base_url.rstrip("/") != DEFAULT_GITLAB_BASE_URL
             ),
         }
         for index, key in enumerate(self._provider_keys):
@@ -924,7 +695,7 @@ class _InitWizardController:
             cursor = ">" if index == self.interval_cursor else " "
             checked = "x" if option == self.state.interval else " "
             rows.append(f"{cursor} [{checked}] {option}")
-        rows.extend(["", tr("init.select.instructions")])
+        rows.extend(["", tr(INIT_SELECT_INSTRUCTIONS_KEY)])
         return "\n".join(rows)
 
     def _render_cache_policy_step(self) -> str:
@@ -933,7 +704,7 @@ class _InitWizardController:
             cursor = ">" if index == self.cache_policy_cursor else " "
             checked = "x" if option == self.state.cache_policy else " "
             rows.append(f"{cursor} [{checked}] {option}")
-        rows.extend(["", tr("init.select.instructions")])
+        rows.extend(["", tr(INIT_SELECT_INSTRUCTIONS_KEY)])
         return "\n".join(rows)
 
     def _render_exclude_template_mode_step(self) -> str:
@@ -947,7 +718,7 @@ class _InitWizardController:
             cursor = ">" if index == self.exclude_template_mode_cursor else " "
             checked = "x" if option == self.state.exclude_template_mode else " "
             rows.append(f"{cursor} [{checked}] {option} - {descriptions[option]}")
-        rows.extend(["", tr("init.select.instructions")])
+        rows.extend(["", tr(INIT_SELECT_INSTRUCTIONS_KEY)])
         return "\n".join(rows)
 
     def _render_exclude_template_names_step(self) -> str:
@@ -979,23 +750,30 @@ class _InitWizardController:
             cursor = ">" if index == self.language_cursor else " "
             checked = "x" if language in self.state.lang else " "
             rows.append(f"{cursor} - [{checked}] {language}")
-        selected = ", ".join(self.state.lang) if self.state.lang else tr("init.value.all")
+        selected = (
+            ", ".join(self.state.lang) if self.state.lang else tr("init.value.all")
+        )
         rows.extend(["", tr("init.selected", value=selected)])
-        if self.language_query:
-            rows.append(tr("init.suggestions"))
-            suggestions = self.language_suggestions()
-            if suggestions:
-                for index, language in enumerate(suggestions):
-                    cursor = ">" if index == self.language_suggestion_cursor else " "
-                    checked = "x" if language in self.state.lang else " "
-                    rows.append(f"{cursor} [{checked}] {language}")
-            else:
-                rows.append(tr("init.language.suggestion_empty"))
-            rows.append(tr("init.language.suggestion_instructions"))
-        else:
-            rows.append(tr("init.language.search"))
-            rows.append(tr("init.language.instructions"))
+        rows.extend(self._render_language_query_section())
         return "\n".join(rows)
+
+    def _render_language_query_section(self) -> list[str]:
+        if not self.language_query:
+            return [
+                tr("init.language.search"),
+                tr("init.language.instructions"),
+            ]
+        rows = [tr("init.suggestions")]
+        suggestions = self.language_suggestions()
+        if suggestions:
+            for index, language in enumerate(suggestions):
+                cursor = ">" if index == self.language_suggestion_cursor else " "
+                checked = "x" if language in self.state.lang else " "
+                rows.append(f"{cursor} [{checked}] {language}")
+        else:
+            rows.append(tr("init.language.suggestion_empty"))
+        rows.append(tr("init.language.suggestion_instructions"))
+        return rows
 
     def _render_footer(self) -> str:
         if self.step == 4:
@@ -1120,7 +898,9 @@ class _InitWizardController:
         if key == "open_plots":
             self.state.no_plot_show = not value
             self.yes_no_cursor = 0 if value else 1
-            self.message = f"Open plots automatically set to {'yes' if value else 'no'}."
+            self.message = (
+                f"Open plots automatically set to {'yes' if value else 'no'}."
+            )
             return
         raise ValueError("Current field is not a yes/no field.")
 
@@ -1150,13 +930,13 @@ class _InitWizardController:
         return "Y/n" if default else "y/N"
 
     @staticmethod
-    def _color(text: str, color: str) -> str:
+    def _color(text: str, color: object) -> str:
         if not color:
             return text
         return f"{color}{text}{Style.RESET_ALL}"
 
 
-def run_init_config_wizard(default_path: Path = Path("config.yml")) -> Path:
+def run_init_config_wizard(default_path: Path = DEFAULT_INIT_CONFIG_PATH) -> Path:
     """Run the full-screen config initialization wizard.
 
     Args:
@@ -1165,163 +945,8 @@ def run_init_config_wizard(default_path: Path = Path("config.yml")) -> Path:
     Returns:
         Path: Written config file path.
     """
-    try:
-        from prompt_toolkit.application import Application
-        from prompt_toolkit.filters import Condition
-        from prompt_toolkit.formatted_text import ANSI
-        from prompt_toolkit.key_binding import KeyBindings
-        from prompt_toolkit.layout import HSplit, Layout, Window
-        from prompt_toolkit.layout.controls import FormattedTextControl
-        from prompt_toolkit.widgets import TextArea
-    except ImportError as ex:
-        raise RuntimeError(
-            "prompt_toolkit is required for --init. "
-            "Install dependencies with `uv sync --active`."
-        ) from ex
-
-    just_fix_windows_console()
     controller = _InitWizardController(default_path)
-    input_field = TextArea(height=1, prompt="Value: ", multiline=False)
-    input_field.text = controller.current_value()
-
-    def render_control() -> object:
-        if controller._current_field_key() == "languages":
-            controller.update_language_query(input_field.text)
-        return ANSI(controller.render())
-
-    control = FormattedTextControl(render_control)
-    kb = KeyBindings()
-    app: Application | None = None
-
-    def refresh_input() -> None:
-        value = controller.current_value()
-        input_field.text = value
-        input_field.buffer.cursor_position = len(value)
-        if app is not None:
-            app.invalidate()
-
-    provider_filter = Condition(
-        lambda: controller.step == 1 and not controller._needs_self_hosted_url()
-    )
-    interval_filter = Condition(lambda: controller._current_field_key() == "interval")
-    cache_policy_filter = Condition(
-        lambda: controller._current_field_key() == "cache_policy"
-    )
-    exclude_template_mode_filter = Condition(
-        lambda: controller._current_field_key() == "exclude_template_mode"
-    )
-    exclude_template_names_filter = Condition(
-        lambda: controller._current_field_key() == "exclude_template_names"
-    )
-    yes_no_filter = Condition(
-        lambda: controller._current_field_key() in {"overwrite", "open_plots"}
-    )
-    language_filter = Condition(lambda: controller._current_field_key() == "languages")
-    selection_filter = (
-        provider_filter
-        | interval_filter
-        | cache_policy_filter
-        | exclude_template_mode_filter
-        | exclude_template_names_filter
-        | yes_no_filter
-        | language_filter
-    )
-
-    @kb.add("up", filter=selection_filter)
-    def _(_: object) -> None:
-        controller.move_up()
-        refresh_input()
-
-    @kb.add("down", filter=selection_filter)
-    def _(_: object) -> None:
-        controller.move_down()
-        refresh_input()
-
-    @kb.add(" ", filter=provider_filter)
-    def _(_: object) -> None:
-        controller.toggle_current_provider()
-        refresh_input()
-
-    @kb.add(" ", filter=interval_filter)
-    def _(_: object) -> None:
-        controller.select_current_interval()
-        refresh_input()
-
-    @kb.add(" ", filter=cache_policy_filter)
-    def _(_: object) -> None:
-        controller.select_current_cache_policy()
-        refresh_input()
-
-    @kb.add(" ", filter=exclude_template_mode_filter)
-    def _(_: object) -> None:
-        controller.select_current_exclude_template_mode()
-        refresh_input()
-
-    @kb.add(" ", filter=exclude_template_names_filter)
-    def _(_: object) -> None:
-        controller.toggle_current_exclude_template()
-        refresh_input()
-
-    @kb.add(" ", filter=yes_no_filter)
-    def _(_: object) -> None:
-        controller.select_current_yes_no()
-        refresh_input()
-
-    @kb.add("y", filter=yes_no_filter)
-    def _(_: object) -> None:
-        controller.apply_yes_no_shortcut("y")
-        refresh_input()
-
-    @kb.add("n", filter=yes_no_filter)
-    def _(_: object) -> None:
-        controller.apply_yes_no_shortcut("n")
-        refresh_input()
-
-    @kb.add(" ", filter=language_filter)
-    def _(_: object) -> None:
-        controller.update_language_query(input_field.text)
-        if controller.language_query:
-            controller.toggle_selected_language_suggestion()
-        else:
-            controller.toggle_current_language()
-        refresh_input()
-
-    @kb.add("c-b")
-    def _(_: object) -> None:
-        controller.back()
-        refresh_input()
-
-    @kb.add("enter")
-    def _(_: object) -> None:
-        if language_filter():
-            controller.update_language_query(input_field.text)
-        if controller.apply_current_input(input_field.text):
-            if controller.confirmed and app is not None:
-                app.exit()
-                return
-            refresh_input()
-
-    @kb.add("escape")
-    @kb.add("c-c")
-    def _(_: object) -> None:
-        controller.cancel()
-        if app is not None:
-            app.exit()
-
-    application = Application(
-        layout=Layout(
-            HSplit(
-                [
-                    Window(content=control, always_hide_cursor=True),
-                    input_field,
-                ]
-            )
-        ),
-        key_bindings=kb,
-        full_screen=True,
-    )
-    app = application
-    application.run()
+    run_prompt_toolkit_wizard(controller)
     if controller.cancelled or not controller.confirmed:
         print(tr("init.cancelled"))
         raise SystemExit(130)
@@ -1331,10 +956,9 @@ def run_init_config_wizard(default_path: Path = Path("config.yml")) -> Path:
     config_data = build_init_config_data(controller.state.to_options())
     config_path.write_text(render_init_config_yaml(config_data), encoding="utf-8")
     print(
-        Fore.GREEN
-        + Style.BRIGHT
-        + tr("init.created_config", path=config_path)
-        + Style.RESET_ALL
+        f"{Fore.GREEN}{Style.BRIGHT}"
+        f"{tr('init.created_config', path=config_path)}"
+        f"{Style.RESET_ALL}"
     )
     print(tr("init.next", path=config_path))
     return config_path

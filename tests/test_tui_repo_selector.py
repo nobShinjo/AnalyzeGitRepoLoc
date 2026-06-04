@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+# pylint: disable=missing-function-docstring
+
 import argparse
 import os
 import sys
 import tempfile
+import types
 import unittest
 from io import BytesIO
 from pathlib import Path
@@ -34,6 +37,7 @@ from analyze_git_repo_loc.interactive.tui_selector import (
     TuiSelectionCancelled,
     calculate_selector_pane_widths,
     choose_selector_layout_orientation,
+    run_repository_selector,
 )
 from analyze_git_repo_loc.interactive.tui_wizard import (
     ProviderTarget,
@@ -1128,6 +1132,108 @@ class RepositorySelectorStateTests(unittest.TestCase):
         state.unselect_visible()
 
         self.assertEqual(state.selected_refs, [ref])
+
+    def test_run_repository_selector_initializes_body_before_app_binding(self) -> None:
+        class _FakeEvent:
+            def __iadd__(self, _handler: object) -> "_FakeEvent":
+                return self
+
+        class _FakeBuffer:
+            def __init__(self) -> None:
+                self.on_text_changed = _FakeEvent()
+                self.text = ""
+
+        class _FakeTextArea:
+            def __init__(self, **_kwargs: object) -> None:
+                self.buffer = _FakeBuffer()
+
+        class _FakeFormattedTextControl:
+            def __init__(self, callback: object) -> None:
+                self.callback = callback
+
+        class _FakeWindow:
+            def __init__(self, **_kwargs: object) -> None:
+                pass
+
+        class _FakeSplit:
+            def __init__(self, children: list[object]) -> None:
+                self.children = children
+
+        class _FakeDynamicContainer:
+            def __init__(self, callback: object) -> None:
+                callback()
+
+        class _FakeLayout:
+            def __init__(self, container: object) -> None:
+                self.container = container
+
+        class _FakeKeyBindings:
+            def add(self, *_args: object, **_kwargs: object):
+                def decorator(func: object) -> object:
+                    return func
+
+                return decorator
+
+        class _FakeDimension:
+            @staticmethod
+            def exact(value: int) -> int:
+                return value
+
+        class _FakeApplication:
+            def __init__(self, **_kwargs: object) -> None:
+                pass
+
+            def run(self) -> None:
+                return None
+
+        fake_modules = {
+            "prompt_toolkit": types.ModuleType("prompt_toolkit"),
+            "prompt_toolkit.application": types.ModuleType(
+                "prompt_toolkit.application"
+            ),
+            "prompt_toolkit.key_binding": types.ModuleType(
+                "prompt_toolkit.key_binding"
+            ),
+            "prompt_toolkit.layout": types.ModuleType("prompt_toolkit.layout"),
+            "prompt_toolkit.layout.containers": types.ModuleType(
+                "prompt_toolkit.layout.containers"
+            ),
+            "prompt_toolkit.layout.controls": types.ModuleType(
+                "prompt_toolkit.layout.controls"
+            ),
+            "prompt_toolkit.layout.dimension": types.ModuleType(
+                "prompt_toolkit.layout.dimension"
+            ),
+            "prompt_toolkit.widgets": types.ModuleType("prompt_toolkit.widgets"),
+        }
+        fake_modules["prompt_toolkit.application"].Application = _FakeApplication
+        fake_modules["prompt_toolkit.key_binding"].KeyBindings = _FakeKeyBindings
+        fake_modules["prompt_toolkit.layout"].HSplit = _FakeSplit
+        fake_modules["prompt_toolkit.layout"].Layout = _FakeLayout
+        fake_modules["prompt_toolkit.layout"].VSplit = _FakeSplit
+        fake_modules["prompt_toolkit.layout"].Window = _FakeWindow
+        fake_modules["prompt_toolkit.layout.containers"].DynamicContainer = (
+            _FakeDynamicContainer
+        )
+        fake_modules["prompt_toolkit.layout.controls"].FormattedTextControl = (
+            _FakeFormattedTextControl
+        )
+        fake_modules["prompt_toolkit.layout.dimension"].Dimension = _FakeDimension
+        fake_modules["prompt_toolkit.widgets"].TextArea = _FakeTextArea
+
+        ref = RemoteRepositoryRef(
+            "github",
+            "alpha",
+            "org/alpha",
+            "https://a.git",
+            "",
+            "",
+            "main",
+        )
+
+        with patch.dict(sys.modules, fake_modules):
+            with self.assertRaises(TuiSelectionCancelled):
+                run_repository_selector([ref])
 
 
 class TuiWizardStateTests(unittest.TestCase):

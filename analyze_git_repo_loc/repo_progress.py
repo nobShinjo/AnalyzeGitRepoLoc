@@ -17,10 +17,30 @@ from __future__ import annotations
 
 import queue as queue_module
 from threading import Event, Thread
+from typing import Protocol, TypeAlias
 
 from tqdm import tqdm
 
 from analyze_git_repo_loc.i18n import tr
+
+RepoProgressEvent: TypeAlias = tuple[str, int, str, int]
+
+
+class ProgressQueue(Protocol):
+    """Queue interface used by repository progress helpers."""
+
+    def put(self, item: RepoProgressEvent) -> object:
+        """Store a repository progress event."""
+        raise NotImplementedError
+
+    def get(
+        self,
+        block: bool = True,
+        timeout: float | None = None,
+    ) -> RepoProgressEvent:
+        """Read a repository progress event."""
+        raise NotImplementedError
+
 
 REPO_EVENT_START = "start"
 REPO_EVENT_SCAN_TOTAL = "scan_total"
@@ -41,7 +61,7 @@ REPO_PROGRESS_BAR_FORMAT = (
 
 
 def emit_repo_progress(
-    progress_queue: object | None,
+    progress_queue: ProgressQueue | None,
     kind: str,
     repository_index: int,
     repository_name: str,
@@ -52,7 +72,7 @@ def emit_repo_progress(
         return
     try:
         progress_queue.put((kind, repository_index, repository_name, value))
-    except (AttributeError, EOFError, OSError, ValueError):
+    except AttributeError, EOFError, OSError, ValueError:
         return
 
 
@@ -73,6 +93,15 @@ def format_repo_progress_description(label: str, status: str) -> str:
         f"  Repo: {fixed_label:<{REPO_PROGRESS_LABEL_WIDTH}} "
         f"({status:<{REPO_PROGRESS_STATUS_WIDTH}})"
     )
+
+
+def _advance_bar(progress_bar: tqdm | None, value: int) -> None:
+    """Advance a child progress bar by a positive integer value."""
+    if progress_bar is None:
+        return
+    step = max(0, int(value))
+    if step:
+        progress_bar.update(step)
 
 
 def apply_repo_progress_event(
@@ -107,9 +136,7 @@ def apply_repo_progress_event(
         bar.n = 0
         bar.refresh()
     elif kind == REPO_EVENT_SCAN_ADVANCE:
-        step = max(0, int(value))
-        if step:
-            bar.update(step)
+        _advance_bar(bar, value)
     elif kind == REPO_EVENT_TOTAL:
         total = max(0, int(value))
         bar.set_description_str(
@@ -122,9 +149,7 @@ def apply_repo_progress_event(
         bar.n = 0
         bar.refresh()
     elif kind == REPO_EVENT_ADVANCE:
-        step = max(0, int(value))
-        if step:
-            bar.update(step)
+        _advance_bar(bar, value)
     elif kind == REPO_EVENT_FINISH:
         if bar.total is not None and bar.n < bar.total:
             bar.update(bar.total - bar.n)
@@ -137,7 +162,7 @@ def apply_repo_progress_event(
 
 def start_repo_progress_listener(
     *,
-    progress_queue: object,
+    progress_queue: ProgressQueue,
     repo_bars: dict[int, tqdm],
     repo_labels: dict[int, str],
 ) -> tuple[Event, Thread]:
@@ -154,11 +179,11 @@ def start_repo_progress_listener(
                 if stop_event.is_set():
                     break
                 continue
-            bar = repo_bars.get(repository_index)
-            label = repo_labels.get(repository_index, repository_name)
+            progress_bar = repo_bars.get(repository_index)
+            label = repo_labels.get(repository_index) or repository_name
             if not apply_repo_progress_event(
                 kind=kind,
-                bar=bar,
+                bar=progress_bar,
                 label=label,
                 value=value,
             ):

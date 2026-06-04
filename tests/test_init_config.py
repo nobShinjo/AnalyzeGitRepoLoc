@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+# pylint: disable=missing-function-docstring,protected-access
+
 import argparse
 import sys
 import tempfile
@@ -18,6 +20,9 @@ from analyze_git_repo_loc.config.init_config import (
     build_init_config_data,
     render_init_config_yaml,
     resolve_init_config_path,
+)
+from analyze_git_repo_loc.config.init_wizard_runtime import (
+    _build_register_refresh_handler,
 )
 from analyze_git_repo_loc.config.init_wizard import (
     InitWizardState,
@@ -562,10 +567,40 @@ class InitWizardStateTests(unittest.TestCase):
         summary = render_init_config_summary(state, color=True)
 
         self.assertIn(
-            Fore.CYAN + Style.BRIGHT + f"{tr('init.label.config')}:" + Style.RESET_ALL,
+            f"{Fore.CYAN}{Style.BRIGHT}{tr('init.label.config')}:{Style.RESET_ALL}",
             summary,
         )
-        self.assertIn(Fore.WHITE + Style.BRIGHT + "config.yml" + Style.RESET_ALL, summary)
+        self.assertIn(
+            f"{Fore.WHITE}{Style.BRIGHT}config.yml{Style.RESET_ALL}",
+            summary,
+        )
+
+
+class InitWizardRuntimeTests(unittest.TestCase):
+    """prompt_toolkit runtime helper tests."""
+
+    def test_register_refresh_handler_omits_filter_when_not_provided(self) -> None:
+        class FakeKeyBindings:
+            def __init__(self) -> None:
+                self.calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+
+            def add(self, *args: object, **kwargs: object):
+                self.calls.append((args, kwargs))
+
+                def decorator(func: object) -> object:
+                    return func
+
+                return decorator
+
+        key_bindings = FakeKeyBindings()
+        register_refresh_handler = _build_register_refresh_handler(
+            key_bindings,
+            lambda: None,
+        )
+
+        register_refresh_handler("c-b", lambda: None)
+
+        self.assertEqual(key_bindings.calls, [(("c-b",), {})])
 
 
 class InitConfigPathTests(unittest.TestCase):

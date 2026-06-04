@@ -67,6 +67,102 @@ def _filter_present_excludes(
     return excludes or []
 
 
+def _build_provider_config(state: TuiWizardState) -> dict[str, Any]:
+    providers: dict[str, Any] = {
+        "github": {"enabled": False, "api_base_url": "https://api.github.com"},
+        "gitlab": {"enabled": False, "base_url": "https://gitlab.com"},
+    }
+    for target in state.provider_targets:
+        if target.provider == "github":
+            providers["github"] = {
+                "enabled": True,
+                "api_base_url": target.base_url,
+            }
+        elif target.provider == "gitlab":
+            providers["gitlab"] = {
+                "enabled": True,
+                "base_url": target.base_url,
+            }
+    return providers
+
+
+def _build_repository_entry(
+    state: TuiWizardState,
+    repository: SelectedRepositoryConfig,
+) -> dict[str, Any]:
+    entry: dict[str, Any] = {
+        "path": repository.git_url(state.clone_protocol),
+        "branch": repository.branch or repository.ref.default_branch or "main",
+    }
+    if repository.exclude_dirs:
+        entry["exclude_dirs"] = repository.exclude_dirs
+    if repository.exclude_template_mode:
+        entry["exclude_template_mode"] = repository.exclude_template_mode
+    if repository.exclude_template_names:
+        entry["exclude_template_names"] = repository.exclude_template_names
+    if repository.include_subpath:
+        entry["include_subpath"] = repository.include_subpath
+    return entry
+
+
+def _apply_shared_state_settings(
+    target: dict[str, Any],
+    state: TuiWizardState,
+) -> None:
+    if state.exclude_template_names:
+        target["exclude_template_names"] = state.exclude_template_names
+    if state.exclude_template_files:
+        target["exclude_template_files"] = state.exclude_template_files
+    if state.since is not None:
+        target["since"] = _format_date(state.since)
+    if state.until is not None:
+        target["until"] = _format_date(state.until)
+    if state.author_name:
+        target["author_name"] = state.author_name
+    if state.lang:
+        target["lang"] = state.lang
+    if state.global_exclude_dirs:
+        target["exclude_dirs"] = state.global_exclude_dirs
+    if state.workers is not None:
+        target["workers"] = state.workers
+
+
+def _build_settings(state: TuiWizardState) -> dict[str, Any]:
+    settings: dict[str, Any] = {
+        "output": str(state.output),
+        "interval": state.interval,
+        "clear_cache": state.clear_cache,
+        "no_plot_show": state.no_plot_show,
+        "exclude_template_mode": state.exclude_template_mode,
+    }
+    _apply_shared_state_settings(settings, state)
+    return settings
+
+
+def _build_quick_defaults(state: TuiWizardState) -> dict[str, Any]:
+    cache_policy = "clear" if state.clear_cache else "use"
+    if state.refresh_remote_cache_only:
+        cache_policy = "update"
+    quick_defaults: dict[str, Any] = {
+        "output": str(state.output),
+        "interval": state.interval,
+        "cache_policy": cache_policy,
+        "no_plot_show": state.no_plot_show,
+        "exclude_template_mode": state.exclude_template_mode,
+    }
+    _apply_shared_state_settings(quick_defaults, state)
+    return quick_defaults
+
+
+def _render_yaml_text(data: dict[str, Any]) -> str:
+    rendered = yaml.safe_dump(data, sort_keys=False)
+    if isinstance(rendered, bytes):
+        return rendered.decode("utf-8")
+    if rendered is None:
+        raise TypeError("yaml.safe_dump returned no YAML text.")
+    return rendered
+
+
 def apply_wizard_state(
     args: argparse.Namespace,
     state: TuiWizardState,
@@ -105,86 +201,18 @@ def apply_wizard_state(
 
 def wizard_state_to_config(state: TuiWizardState) -> dict[str, Any]:
     """Convert wizard state to a non-secret YAML configuration mapping."""
-    providers: dict[str, Any] = {
-        "github": {"enabled": False, "api_base_url": "https://api.github.com"},
-        "gitlab": {"enabled": False, "base_url": "https://gitlab.com"},
-    }
-    for target in state.provider_targets:
-        if target.provider == "github":
-            providers["github"] = {"enabled": True, "api_base_url": target.base_url}
-        if target.provider == "gitlab":
-            providers["gitlab"] = {"enabled": True, "base_url": target.base_url}
-    repositories = []
-    for repository in state.selected_repositories:
-        entry: dict[str, Any] = {
-            "path": repository.git_url(state.clone_protocol),
-            "branch": repository.branch or repository.ref.default_branch or "main",
-        }
-        if repository.exclude_dirs:
-            entry["exclude_dirs"] = repository.exclude_dirs
-        if repository.exclude_template_mode:
-            entry["exclude_template_mode"] = repository.exclude_template_mode
-        if repository.exclude_template_names:
-            entry["exclude_template_names"] = repository.exclude_template_names
-        if repository.include_subpath:
-            entry["include_subpath"] = repository.include_subpath
-        repositories.append(entry)
-    settings: dict[str, Any] = {
-        "output": str(state.output),
-        "interval": state.interval,
-        "clear_cache": state.clear_cache,
-        "no_plot_show": state.no_plot_show,
-        "exclude_template_mode": state.exclude_template_mode,
-    }
-    if state.exclude_template_names:
-        settings["exclude_template_names"] = state.exclude_template_names
-    if state.exclude_template_files:
-        settings["exclude_template_files"] = state.exclude_template_files
-    if state.since is not None:
-        settings["since"] = _format_date(state.since)
-    if state.until is not None:
-        settings["until"] = _format_date(state.until)
-    if state.author_name:
-        settings["author_name"] = state.author_name
-    if state.lang:
-        settings["lang"] = state.lang
-    if state.workers is not None:
-        settings["workers"] = state.workers
-    if state.global_exclude_dirs:
-        settings["exclude_dirs"] = state.global_exclude_dirs
-    cache_policy = "clear" if state.clear_cache else "use"
-    if state.refresh_remote_cache_only:
-        cache_policy = "update"
-    quick_defaults: dict[str, Any] = {
-        "output": str(state.output),
-        "interval": state.interval,
-        "cache_policy": cache_policy,
-        "no_plot_show": state.no_plot_show,
-        "exclude_template_mode": state.exclude_template_mode,
-    }
-    if state.exclude_template_names:
-        quick_defaults["exclude_template_names"] = state.exclude_template_names
-    if state.exclude_template_files:
-        quick_defaults["exclude_template_files"] = state.exclude_template_files
-    if state.since is not None:
-        quick_defaults["since"] = _format_date(state.since)
-    if state.until is not None:
-        quick_defaults["until"] = _format_date(state.until)
-    if state.author_name:
-        quick_defaults["author_name"] = state.author_name
-    if state.lang:
-        quick_defaults["lang"] = state.lang
-    if state.global_exclude_dirs:
-        quick_defaults["exclude_dirs"] = state.global_exclude_dirs
-    if state.workers is not None:
-        quick_defaults["workers"] = state.workers
+    providers = _build_provider_config(state)
+    repositories = [
+        _build_repository_entry(state, repository)
+        for repository in state.selected_repositories
+    ]
     return {
-        "settings": settings,
+        "settings": _build_settings(state),
         "repositories": repositories,
         "interactive": {
             "providers": providers,
             "defaults": {"clone_protocol": state.clone_protocol},
-            "quick_defaults": quick_defaults,
+            "quick_defaults": _build_quick_defaults(state),
         },
     }
 
@@ -192,6 +220,6 @@ def wizard_state_to_config(state: TuiWizardState) -> dict[str, Any]:
 def save_wizard_config(path: Path, state: TuiWizardState) -> None:
     """Save non-secret wizard settings to YAML."""
     path.write_text(
-        yaml.safe_dump(wizard_state_to_config(state), sort_keys=False),
+        _render_yaml_text(wizard_state_to_config(state)),
         encoding="utf-8",
     )

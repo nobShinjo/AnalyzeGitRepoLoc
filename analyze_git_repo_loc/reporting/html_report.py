@@ -39,9 +39,9 @@ from analyze_git_repo_loc.analysis.analysis_helpers import (
     prepare_summary_data,
     prepare_trend_data,
 )
+from analyze_git_repo_loc.i18n import tr
 from analyze_git_repo_loc.reporting.chart_builder import ChartBuilder, ChartStrategy
 from analyze_git_repo_loc.reporting.chart_ticks import build_client_tick_policy
-from analyze_git_repo_loc.i18n import tr
 
 _ASSETS_DIR_NAME = "assets"
 _NO_DATA_MESSAGE = '<p class="text-muted">No data available.</p>'
@@ -200,7 +200,9 @@ class HtmlReportBuilder:
         """
         if self.charts_root is None:
             return dict.fromkeys(repos, None)
-        mapping = {repo: self.charts_root / repo for repo in repos}
+        mapping: dict[str, Path | None] = {
+            repo: self.charts_root / repo for repo in repos
+        }
         if len(repos) == 1:
             only_repo = repos[0]
             default_dir = self.charts_root
@@ -304,9 +306,9 @@ class HtmlReportBuilder:
             progress_callback=progress_callback,
             chunk_size=chunk_size,
         )
-        languages = sorted({row["language"] for row in rows})
-        authors = sorted({row["author"] for row in rows})
-        repositories = sorted({row["repository"] for row in rows})
+        languages = sorted({str(row["language"]) for row in rows})
+        authors = sorted({str(row["author"]) for row in rows})
+        repositories = sorted({str(row["repository"]) for row in rows})
         return {
             "time_interval": self.time_interval,
             "tick_policy": build_client_tick_policy(),
@@ -387,7 +389,13 @@ class HtmlReportBuilder:
             end = min(start + chunk_size, total_rows)
             chunk = detail_data.iloc[start:end].copy()
             chunk = self._transform_filter_rows(chunk, interval_col)
-            rows.extend(chunk.to_dict(orient="records"))
+            rows.extend(
+                {
+                    str(key): value
+                    for key, value in record.items()
+                }
+                for record in chunk.to_dict(orient="records")
+            )
             if progress_callback is not None:
                 progress_callback(
                     ProgressEvent(
@@ -759,9 +767,11 @@ class HtmlReportBuilder:
         """
         Convert a value to int safely.
         """
+        if not isinstance(value, (int, float, str)):
+            return 0
         try:
             return int(value)
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             return 0
 
     @classmethod

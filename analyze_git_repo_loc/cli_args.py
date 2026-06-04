@@ -17,12 +17,15 @@ import sys
 from pathlib import Path
 from typing import Any, Callable
 
+CLI_DESCRIPTION_KEY = "cli.description"
+DEFAULT_CONFIG_PATH = Path("config.yml")
+
 
 def _apply_display_language_from_argv(
     argv: list[str],
     *,
-    resolve_display_language: Callable[[str | None], str],
-    set_language_override: Callable[[str], None],
+    resolve_display_language: Callable[[str | None], str | None],
+    set_language_override: Callable[[str | None], None],
 ) -> None:
     """Apply a display-language override before parser help text is built."""
     for index, item in enumerate(argv):
@@ -60,8 +63,8 @@ def parse_arguments(
     parser: argparse.ArgumentParser,
     *,
     translate: Callable[..., str],
-    resolve_display_language: Callable[[str | None], str],
-    set_language_override: Callable[[str], None],
+    resolve_display_language: Callable[[str | None], str | None],
+    set_language_override: Callable[[str | None], None],
     merge_yaml_config: Callable[..., argparse.Namespace],
     normalize_optional_list: Callable[[Any], list[str] | None],
     parse_optional_iso_date: Callable[[Any, str], Any],
@@ -78,7 +81,7 @@ def parse_arguments(
         resolve_display_language=resolve_display_language,
         set_language_override=set_language_override,
     )
-    parser.description = translate("cli.description")
+    parser.description = translate(CLI_DESCRIPTION_KEY)
     _add_display_language_argument(
         parser,
         translate=translate,
@@ -89,13 +92,13 @@ def parse_arguments(
     init_parser = subparsers.add_parser(
         "init",
         help=translate("cli.init_help"),
-        description=translate("cli.description"),
+        description=translate(CLI_DESCRIPTION_KEY),
     )
     _add_display_language_argument(init_parser, translate=translate)
     init_parser.add_argument(
         "--config",
         type=Path,
-        default=Path("config.yml"),
+        default=DEFAULT_CONFIG_PATH,
         help=translate("cli.init_config_help"),
     )
     init_parser.set_defaults(
@@ -119,13 +122,13 @@ def parse_arguments(
     doctor_parser = subparsers.add_parser(
         "doctor",
         help=translate("cli.doctor_help"),
-        description=translate("cli.description"),
+        description=translate(CLI_DESCRIPTION_KEY),
     )
     _add_display_language_argument(doctor_parser, translate=translate)
     doctor_parser.add_argument(
         "--config",
         type=Path,
-        default=Path("config.yml"),
+        default=DEFAULT_CONFIG_PATH,
         help=translate("cli.config_help"),
     )
     doctor_parser.add_argument(
@@ -161,13 +164,13 @@ def parse_arguments(
     run_parser = subparsers.add_parser(
         "run",
         help=translate("cli.run_help"),
-        description=translate("cli.description"),
+        description=translate(CLI_DESCRIPTION_KEY),
     )
     _add_display_language_argument(run_parser, translate=translate)
     run_parser.add_argument(
         "--config",
         type=Path,
-        default=Path("config.yml"),
+        default=DEFAULT_CONFIG_PATH,
         help=translate("cli.config_help"),
     )
     run_parser.add_argument(

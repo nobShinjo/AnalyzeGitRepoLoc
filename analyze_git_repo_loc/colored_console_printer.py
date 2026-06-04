@@ -58,7 +58,7 @@ class ColoredConsolePrinter:
             print(Cursor.FORWARD(forward), end="")
 
     def print_colored(
-        self, text: str, color: str, bright: bool = False, end=os.linesep
+        self, text: str, color: object, bright: bool = False, end=os.linesep
     ) -> None:
         """
         Prints the specified text with the desired color and brightness.
@@ -70,7 +70,7 @@ class ColoredConsolePrinter:
 
         Args:
             text (str): The text to be printed.
-            color (str): The color code for the text. Expected to be a Colorama Fore attribute.
+            color (object): The color code for the text. Expected to be a Colorama Fore attribute.
             bright (bool, optional): If True, the text will be printed in a brighter shade.
 
         Examples:
@@ -78,7 +78,7 @@ class ColoredConsolePrinter:
             - print_colored("Attention!", Fore.YELLOW, bright=True, up=1, forward=10)
         """
         style = Style.BRIGHT if bright else ""
-        print(style + color + text, end=end)
+        print(f"{style}{color}{text}", end=end)
 
     def print_ok(self, up: int = 0, forward: int = 0) -> None:
         """

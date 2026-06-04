@@ -101,8 +101,14 @@ def get_cli_token(
 
     command_runner = runner or subprocess.run
     try:
-        result = command_runner(command, capture_output=True, text=True, timeout=15)
-    except (OSError, subprocess.SubprocessError):
+        result = command_runner(
+            command,
+            capture_output=True,
+            text=True,
+            timeout=15,
+            check=False,
+        )
+    except OSError, subprocess.SubprocessError:
         return None
     if result.returncode != 0:
         return None
@@ -311,20 +317,34 @@ class RemoteAuthService:
         if not host:
             return None
         normalized = host.lower()
-        provider = _provider_hint_for_hostname(normalized) or _provider_from_hostname(
-            normalized
-        )
-        if provider is None:
-            github_token = os.getenv("GITHUB_TOKEN")
-            gitlab_token = os.getenv("GITLAB_TOKEN")
-            if github_token and not gitlab_token:
-                provider = "github"
-            elif gitlab_token and not github_token:
-                provider = "gitlab"
+        provider = self._provider_for_host(normalized)
         host_token = os.getenv(build_host_token_env_var(normalized))
         if host_token:
-            username = "x-access-token" if provider == "github" else "oauth2"
-            return host_token, username
+            return host_token, self._username_for_provider(provider)
+        return self._provider_token(provider)
+
+    def _provider_for_host(self, normalized_host: str) -> str | None:
+        """Infer the hosting provider for a normalized host name."""
+        provider = _provider_hint_for_hostname(normalized_host)
+        if provider is not None:
+            return provider
+        provider = _provider_from_hostname(normalized_host)
+        if provider is not None:
+            return provider
+        return self._sole_configured_provider()
+
+    def _sole_configured_provider(self) -> str | None:
+        """Return the only configured provider when exactly one token exists."""
+        github_token = os.getenv("GITHUB_TOKEN")
+        gitlab_token = os.getenv("GITLAB_TOKEN")
+        if github_token and not gitlab_token:
+            return "github"
+        if gitlab_token and not github_token:
+            return "gitlab"
+        return None
+
+    def _provider_token(self, provider: str | None) -> tuple[str, str] | None:
+        """Return the configured token pair for the selected provider."""
         if provider == "github":
             token = os.getenv("GITHUB_TOKEN")
             if token:
@@ -334,6 +354,12 @@ class RemoteAuthService:
             if token:
                 return token, "oauth2"
         return None
+
+    def _username_for_provider(self, provider: str | None) -> str:
+        """Return the HTTPS username used for token-authenticated Git URLs."""
+        if provider == "github":
+            return "x-access-token"
+        return "oauth2"
 
     def _build_https_token_url(self, repo_url: str) -> str | None:
         """
@@ -367,9 +393,9 @@ class RemoteAuthService:
         parsed = urlparse(repo_url)
         if parsed.scheme not in {"http", "https"} or not parsed.hostname:
             return None
-        provider = _provider_hint_for_hostname(parsed.hostname) or _provider_from_hostname(
+        provider = _provider_hint_for_hostname(
             parsed.hostname
-        )
+        ) or _provider_from_hostname(parsed.hostname)
         if provider is None:
             return None
         token = get_cli_token(provider, _base_url_for_hostname(parsed))

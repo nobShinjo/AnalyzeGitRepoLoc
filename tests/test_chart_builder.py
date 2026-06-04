@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+# pylint: disable=missing-function-docstring
+
 import warnings
+from typing import cast
 
 import pandas as pd
+import plotly.graph_objects as go
 
 from analyze_git_repo_loc.reporting.chart_builder import ChartBuilder, ChartStrategy
 
@@ -40,8 +44,10 @@ def test_weekly_trend_chart_uses_span_based_ticks_for_sparse_long_ranges() -> No
         )
     )
 
-    assert fig.layout.xaxis.dtick == "M1"
-    assert fig.layout.xaxis.tickformat == "%b %Y"
+    xaxis = cast(go.layout.XAxis, fig.layout.xaxis)
+
+    assert xaxis.dtick == "M1"
+    assert xaxis.tickformat == "%b %Y"
 
 
 def test_daily_trend_chart_uses_sparse_ticks_for_medium_ranges() -> None:
@@ -59,12 +65,14 @@ def test_daily_trend_chart_uses_sparse_ticks_for_medium_ranges() -> None:
         )
     )
 
-    assert fig.layout.xaxis.dtick == "D14"
-    assert fig.layout.xaxis.tickformat == "%b %d"
-    assert fig.layout.xaxis.tickmode == "array"
-    assert len(fig.layout.xaxis.tickvals) <= 10
-    assert fig.layout.xaxis.tickvals[0] == dates[0]
-    assert fig.layout.xaxis.tickvals[-1] == dates[-1]
+    xaxis = cast(go.layout.XAxis, fig.layout.xaxis)
+
+    assert xaxis.dtick == "D14"
+    assert xaxis.tickformat == "%b %d"
+    assert xaxis.tickmode == "array"
+    assert len(xaxis.tickvals) <= 10
+    assert xaxis.tickvals[0] == dates[0]
+    assert xaxis.tickvals[-1] == dates[-1]
 
 
 def test_trend_chart_build_does_not_emit_plotly_deprecation_warning() -> None:

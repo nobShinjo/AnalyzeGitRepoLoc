@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+# pylint: disable=missing-function-docstring
+
 from pathlib import Path
 
 from analyze_git_repo_loc.analysis.exclude_templates import (

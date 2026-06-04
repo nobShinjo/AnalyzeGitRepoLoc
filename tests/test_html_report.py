@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+# pylint: disable=missing-function-docstring,protected-access
+
 import tempfile
 import unittest
 import argparse

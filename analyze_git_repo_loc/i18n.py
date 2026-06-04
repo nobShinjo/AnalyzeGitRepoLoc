@@ -22,9 +22,12 @@ from __future__ import annotations
 import locale
 from typing import Any
 
-
 SUPPORTED_LANGUAGES = {"en", "jp"}
 _LANGUAGE_OVERRIDE: str | None = None
+_EN_NONE_TEXT = "(none)"
+_JP_NONE_TEXT = "(なし)"
+_EN_PROVIDERS_LABEL = "Providers"
+_JP_PROVIDERS_LABEL = "プロバイダー"
 
 _MESSAGES: dict[str, dict[str, str]] = {
     "en": {
@@ -33,9 +36,7 @@ _MESSAGES: dict[str, dict[str, str]] = {
         "auth.device.required": "OAuth Device Code login is required.",
         "auth.device.waiting": "Waiting for authorization in the browser...",
         "auth.enter_number": "Enter a number from the list.",
-        "auth.gitlab_client_id_prompt": (
-            "GitLab OAuth Application ID for this run: "
-        ),
+        "auth.gitlab_client_id_prompt": ("GitLab OAuth Application ID for this run: "),
         "auth.not_available": "{label} is not available.",
         "auth.provider_title": "{provider} authentication",
         "cli.config_help": "YAML configuration file path (default: config.yml).",
@@ -47,20 +48,32 @@ _MESSAGES: dict[str, dict[str, str]] = {
         "cli.doctor_remote_help": "Also verify configured remote providers.",
         "cli.doctor_strict_help": "Treat warnings as doctor failures.",
         "doctor.error.date_format": "{name} must be YYYY-MM-DD.",
-        "doctor.error.date_order": "settings.since must be earlier than or equal to settings.until.",
-        "doctor.error.clone_protocol": "interactive.defaults.clone_protocol must be 'https' or 'ssh'.",
-        "doctor.error.include_subpath_relative": "{label}.include_subpath must be repository-relative.",
-        "doctor.error.include_subpath_traversal": "{label}.include_subpath must not traverse outside the repository.",
-        "doctor.error.interval": "settings.interval must be daily, weekly, or monthly.",
-        "doctor.error.interactive_providers_required": "interactive.providers must be configured.",
-        "doctor.error.mapping": "YAML config '{key}' must be a mapping.",
-        "doctor.error.provider_enabled_required": "At least one interactive provider must be enabled.",
+        "doctor.error.date_order": (
+            "settings.since must be earlier than or equal to settings.until."
+        ),
+        "doctor.error.clone_protocol": (
+            "interactive.defaults.clone_protocol must be 'https' or 'ssh'."
+        ),
+        "doctor.error.include_subpath_relative": (
+            "{label}.include_subpath must be repository-relative."
+        ),
+        "doctor.error.include_subpath_traversal": (
+            "{label}.include_subpath must not traverse outside the repository."
+        ),
+        "doctor.error.interval": (
+            "settings.interval must be daily, weekly, or monthly."
+        ),
+        "doctor.error.interactive_providers_required": (
+            "interactive.providers must be configured."
+        ),
+        "doctor.error.mapping": "YAML config '{config_key}' must be a mapping.",
+        "doctor.error.provider_enabled_required": (
+            "At least one interactive provider must be enabled."
+        ),
         "doctor.error.remote_auth_required": (
             "{provider} environment token or CLI login is required for --remote diagnostics."
         ),
-        "doctor.error.remote_branch_missing": (
-            "Remote branch '{branch}' was not found for repository '{repository}'."
-        ),
+        "doctor.error.remote_branch_missing": "Remote branch '{branch}' was not found for repository '{repository}'.",
         "doctor.error.remote_provider_unsupported": (
             "Unsupported remote provider '{provider}'."
         ),
@@ -116,7 +129,7 @@ _MESSAGES: dict[str, dict[str, str]] = {
         "error.stack_trace": "Stack trace:",
         "error.type": "Error type: {type}",
         "error.unexpected": "An unexpected error occurred:",
-        "exclude.summary.none": "(none)",
+        "exclude.summary.none": _EN_NONE_TEXT,
         "exclude.summary.paths": "Excluded paths",
         "exclude.summary.title": "Exclude templates:",
         "init.cache_policy": "Cache policy",
@@ -142,10 +155,10 @@ _MESSAGES: dict[str, dict[str, str]] = {
         "init.label.languages": "Languages",
         "init.label.output": "Output",
         "init.label.period": "Period",
-        "init.label.providers": "Providers",
+        "init.label.providers": _EN_PROVIDERS_LABEL,
         "init.value.all": "(all)",
         "init.value.blank": "(blank)",
-        "init.value.none": "(none)",
+        "init.value.none": _EN_NONE_TEXT,
         "init.created_config": "Created config: {path}",
         "init.footer.enter_value": "Enter accept value   Ctrl-B Back   Esc/Ctrl-C Cancel",
         "init.footer.interval": "Up/Down move   Space select   Enter continue   Ctrl-B Back",
@@ -174,7 +187,7 @@ _MESSAGES: dict[str, dict[str, str]] = {
         "init.step": "Step {current}/5 {name}",
         "init.step.analysis_defaults": "Analysis defaults",
         "init.step.config_file": "Config file",
-        "init.step.providers": "Providers",
+        "init.step.providers": _EN_PROVIDERS_LABEL,
         "init.step.review": "Review",
         "init.step.runtime_behavior": "Runtime behavior",
         "init.suggestions": "Suggestions:",
@@ -230,7 +243,7 @@ _MESSAGES: dict[str, dict[str, str]] = {
         "tui.category.done": "Done",
         "tui.category.output": "Output / Cache / Display",
         "tui.category.paths": "Path Rules",
-        "tui.category.providers": "Providers",
+        "tui.category.providers": _EN_PROVIDERS_LABEL,
         "tui.category.repositories": "Repositories / Branches",
         "tui.choose_action": "Choose Enter, e, d, s, or c.",
         "tui.choose_category": "Choose a category number or name.",
@@ -247,7 +260,7 @@ _MESSAGES: dict[str, dict[str, str]] = {
         "tui.interval_prompt": "Interval (daily/weekly/monthly)",
         "tui.languages": "Languages: {value}",
         "tui.language_filter": "Language filter",
-        "tui.none": "(none)",
+        "tui.none": _EN_NONE_TEXT,
         "tui.off": "off",
         "tui.on": "on",
         "tui.output_cache_display": "Output / Cache / Display",
@@ -312,7 +325,7 @@ _MESSAGES: dict[str, dict[str, str]] = {
         "doctor.error.interactive_providers_required": (
             "interactive.providers を設定してください。"
         ),
-        "doctor.error.mapping": "YAML 設定の '{key}' は mapping である必要があります。",
+        "doctor.error.mapping": "YAML 設定の '{config_key}' は mapping である必要があります。",
         "doctor.error.provider_enabled_required": (
             "少なくとも 1 つの interactive provider を有効にしてください。"
         ),
@@ -362,9 +375,7 @@ _MESSAGES: dict[str, dict[str, str]] = {
             "作成する YAML 設定ファイルのパス (既定: config.yml)。"
         ),
         "cli.init_help": "初期 YAML 設定ファイルを対話形式で作成します。",
-        "cli.interactive_help": (
-            "解析前に対話形式で設定を確認・調整します。"
-        ),
+        "cli.interactive_help": ("解析前に対話形式で設定を確認・調整します。"),
         "cli.interval_help": "この実行だけ集計間隔を上書きします。",
         "cli.no_plot_show_help": (
             "チャートやレポートを自動表示せず、出力だけ生成します。"
@@ -377,7 +388,7 @@ _MESSAGES: dict[str, dict[str, str]] = {
         "error.stack_trace": "スタックトレース:",
         "error.type": "エラー種別: {type}",
         "error.unexpected": "予期しないエラーが発生しました:",
-        "exclude.summary.none": "(なし)",
+        "exclude.summary.none": _JP_NONE_TEXT,
         "exclude.summary.paths": "除外パス",
         "exclude.summary.title": "除外テンプレート:",
         "init.cache_policy": "キャッシュポリシー",
@@ -403,10 +414,10 @@ _MESSAGES: dict[str, dict[str, str]] = {
         "init.label.languages": "言語",
         "init.label.output": "出力",
         "init.label.period": "期間",
-        "init.label.providers": "プロバイダー",
+        "init.label.providers": _JP_PROVIDERS_LABEL,
         "init.value.all": "(すべて)",
         "init.value.blank": "(空)",
-        "init.value.none": "(なし)",
+        "init.value.none": _JP_NONE_TEXT,
         "init.created_config": "設定ファイルを作成しました: {path}",
         "init.footer.enter_value": "Enter 値を確定   Ctrl-B 戻る   Esc/Ctrl-C キャンセル",
         "init.footer.interval": "上下 移動   Space 選択   Enter 続行   Ctrl-B 戻る",
@@ -431,7 +442,7 @@ _MESSAGES: dict[str, dict[str, str]] = {
         "init.step": "ステップ {current}/5 {name}",
         "init.step.analysis_defaults": "解析既定値",
         "init.step.config_file": "設定ファイル",
-        "init.step.providers": "プロバイダー",
+        "init.step.providers": _JP_PROVIDERS_LABEL,
         "init.step.review": "確認",
         "init.step.runtime_behavior": "実行時の動作",
         "init.suggestions": "候補:",
@@ -485,7 +496,7 @@ _MESSAGES: dict[str, dict[str, str]] = {
         "tui.category.done": "完了",
         "tui.category.output": "出力 / キャッシュ / 表示",
         "tui.category.paths": "パスルール",
-        "tui.category.providers": "プロバイダー",
+        "tui.category.providers": _JP_PROVIDERS_LABEL,
         "tui.category.repositories": "リポジトリ / ブランチ",
         "tui.choose_action": "Enter、e、d、s、c のいずれかを選んでください。",
         "tui.choose_category": "カテゴリ番号または名前を入力してください。",
@@ -502,7 +513,7 @@ _MESSAGES: dict[str, dict[str, str]] = {
         "tui.interval_prompt": "集計間隔 (daily/weekly/monthly)",
         "tui.languages": "言語: {value}",
         "tui.language_filter": "言語フィルター",
-        "tui.none": "(なし)",
+        "tui.none": _JP_NONE_TEXT,
         "tui.off": "オフ",
         "tui.on": "オン",
         "tui.output_cache_display": "出力 / キャッシュ / 表示",
@@ -541,7 +552,7 @@ def resolve_language(locale_name: str | None) -> str:
     if not locale_name:
         return "en"
     normalized = locale_name.strip().casefold()
-    if normalized.startswith("ja") or normalized.startswith("japanese"):
+    if normalized.startswith(("ja", "japanese")):
         return "jp"
     return "en"
 
@@ -572,14 +583,16 @@ def current_language() -> str:
         return _LANGUAGE_OVERRIDE
     try:
         locale_name = locale.getlocale()[0]
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         locale_name = None
     return resolve_language(locale_name)
 
 
 def tr(key: str, *, language: str | None = None, **kwargs: Any) -> str:
     """Translate a message key and format it with keyword arguments."""
-    selected_language = language if language in SUPPORTED_LANGUAGES else current_language()
+    selected_language = (
+        language if language in SUPPORTED_LANGUAGES else current_language()
+    )
     template = _MESSAGES.get(selected_language, {}).get(key)
     if template is None:
         template = _MESSAGES["en"].get(key, key)

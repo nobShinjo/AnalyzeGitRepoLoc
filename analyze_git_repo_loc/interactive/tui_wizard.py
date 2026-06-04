@@ -29,7 +29,6 @@ from __future__ import annotations
 
 import argparse
 from collections import Counter
-from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -43,6 +42,39 @@ from analyze_git_repo_loc.analysis.exclude_templates import (
     normalize_exclude_template_mode,
 )
 from analyze_git_repo_loc.i18n import tr
+from analyze_git_repo_loc.interactive.tui_auth import run_tui_auth_selection
+from analyze_git_repo_loc.interactive.tui_config import (
+    apply_wizard_state as _apply_wizard_state_impl,
+)
+from analyze_git_repo_loc.interactive.tui_config import (
+    save_wizard_config as _save_wizard_config_impl,
+)
+from analyze_git_repo_loc.interactive.tui_config import (
+    wizard_state_to_config as _wizard_state_to_config_impl,
+)
+from analyze_git_repo_loc.interactive.tui_review import (
+    format_compact_list as _format_compact_list_impl,
+)
+from analyze_git_repo_loc.interactive.tui_review import (
+    format_optional_list as _format_optional_list_impl,
+)
+from analyze_git_repo_loc.interactive.tui_review import (
+    render_final_review as _render_final_review_impl,
+)
+from analyze_git_repo_loc.interactive.tui_selector import (
+    RepositorySelectionResult,
+    run_repository_selector,
+)
+from analyze_git_repo_loc.interactive.tui_state import (
+    LightweightRecommendations,
+    ProviderTarget,
+    SelectedRepositoryConfig,
+    TuiQuickDefaults,
+    TuiWizardState,
+)
+from analyze_git_repo_loc.interactive.tui_state import (
+    load_quick_defaults as _load_quick_defaults_impl,
+)
 from analyze_git_repo_loc.language_extensions import LanguageExtensions
 from analyze_git_repo_loc.remote.remote_catalog import (
     GitHubProviderSettings,
@@ -59,110 +91,6 @@ from analyze_git_repo_loc.remote.remote_catalog import (
     load_tui_settings,
 )
 from analyze_git_repo_loc.remote.remote_repos import RemoteRepoManager
-from analyze_git_repo_loc.interactive.tui_config import (
-    apply_wizard_state as _apply_wizard_state_impl,
-    save_wizard_config as _save_wizard_config_impl,
-    wizard_state_to_config as _wizard_state_to_config_impl,
-)
-from analyze_git_repo_loc.interactive.tui_review import (
-    format_compact_list as _format_compact_list_impl,
-    format_optional_list as _format_optional_list_impl,
-    render_final_review as _render_final_review_impl,
-)
-from analyze_git_repo_loc.interactive.tui_state import (
-    load_quick_defaults as _load_quick_defaults_impl,
-)
-from analyze_git_repo_loc.interactive.tui_auth import run_tui_auth_selection
-from analyze_git_repo_loc.interactive.tui_selector import (
-    RepositorySelectionResult,
-    run_repository_selector,
-)
-
-
-@dataclass(frozen=True)
-class ProviderTarget:
-    """Provider endpoint selected for repository discovery."""
-
-    key: str
-    provider: str
-    label: str
-    base_url: str
-
-
-@dataclass
-class SelectedRepositoryConfig:
-    """Per-repository runtime settings selected in the wizard."""
-
-    ref: RemoteRepositoryRef
-    branch: str
-    cache_status: str = "missing"
-    include_subpath: str | None = None
-    exclude_dirs: list[str] = field(default_factory=list)
-    exclude_template_mode: str | None = None
-    exclude_template_names: list[str] | None = None
-
-    def git_url(self, clone_protocol: str) -> str:
-        """Return the repository URL for the selected clone protocol."""
-        return self.ref.git_url(clone_protocol)
-
-
-@dataclass
-class TuiQuickDefaults:
-    """Non-secret defaults used by the quick TUI review."""
-
-    since: datetime | None = None
-    until: datetime | None = None
-    interval: str | None = None
-    author_name: list[str] | None = None
-    lang: list[str] | None = None
-    exclude_dirs: list[str] | None = None
-    exclude_template_mode: str | None = None
-    exclude_template_names: list[str] | None = None
-    exclude_template_files: list[str] | None = None
-    workers: int | None = None
-    output: Path | None = None
-    cache_policy: str | None = None
-    no_plot_show: bool | None = None
-
-
-@dataclass
-class LightweightRecommendations:
-    """Recommendations inferred without cloning new repositories."""
-
-    languages: list[str] = field(default_factory=list)
-    exclude_dirs: list[str] = field(default_factory=list)
-    detected_templates: list[str] = field(default_factory=list)
-    language_source: str = "not detected"
-    exclude_source: str = "exclude templates"
-
-
-@dataclass
-class TuiWizardState:
-    """Complete TUI state before it is applied to parsed CLI args."""
-
-    provider_targets: list[ProviderTarget]
-    auth_tokens: dict[str, str]
-    repository_catalog: list[RemoteRepositoryRef]
-    selected_repositories: list[SelectedRepositoryConfig]
-    auth_labels: dict[str, str] = field(default_factory=dict)
-    clone_protocol: str = "https"
-    since: datetime | None = None
-    until: datetime | None = None
-    interval: str = "monthly"
-    author_name: list[str] | None = None
-    lang: list[str] | None = None
-    workers: int | None = None
-    global_exclude_dirs: list[str] | None = None
-    exclude_template_mode: str = "auto"
-    exclude_template_names: list[str] | None = None
-    exclude_template_files: list[str] | None = None
-    output: Path = Path("./out")
-    clear_cache: bool = False
-    refresh_remote_cache_only: bool = False
-    no_plot_show: bool = True
-    recommendations: LightweightRecommendations = field(
-        default_factory=LightweightRecommendations
-    )
 
 
 def build_provider_targets(settings: TuiSettings) -> list[ProviderTarget]:
@@ -187,8 +115,12 @@ def build_provider_targets(settings: TuiSettings) -> list[ProviderTarget]:
         )
     if settings.providers.gitlab.enabled:
         base_url = settings.providers.gitlab.base_url
-        label = "GitLab.com" if base_url.rstrip("/") == "https://gitlab.com" else "GitLab"
-        key = "gitlab.com" if label == "GitLab.com" else "gitlab.self_hosted"
+        label = (
+            GITLAB_DOT_COM_LABEL
+            if base_url.rstrip("/") == GITLAB_DOT_COM_BASE_URL
+            else "GitLab"
+        )
+        key = "gitlab.com" if label == GITLAB_DOT_COM_LABEL else GITLAB_SELF_HOSTED_KEY
         targets.append(
             ProviderTarget(
                 key=key,
@@ -236,16 +168,19 @@ def build_provider_candidates(settings: TuiSettings) -> list[ProviderTarget]:
         ProviderTarget(
             key="gitlab.com",
             provider="gitlab",
-            label="GitLab.com",
-            base_url="https://gitlab.com",
+            label=GITLAB_DOT_COM_LABEL,
+            base_url=GITLAB_DOT_COM_BASE_URL,
         ),
         ProviderTarget(
-            key="gitlab.self_hosted",
+            key=GITLAB_SELF_HOSTED_KEY,
             provider="gitlab",
             label="Self-hosted GitLab",
-            base_url=settings.providers.gitlab.base_url
-            if settings.providers.gitlab.base_url.rstrip("/") != "https://gitlab.com"
-            else "",
+            base_url=(
+                settings.providers.gitlab.base_url
+                if settings.providers.gitlab.base_url.rstrip("/")
+                != GITLAB_DOT_COM_BASE_URL
+                else ""
+            ),
         ),
     ]
 
@@ -275,7 +210,7 @@ def selected_targets_to_settings(
             ),
             gitlab=GitLabProviderSettings(
                 enabled=gitlab is not None,
-                base_url=gitlab.base_url if gitlab else "https://gitlab.com",
+                base_url=gitlab.base_url if gitlab else GITLAB_DOT_COM_BASE_URL,
             ),
         ),
         defaults=TuiDefaults(clone_protocol=clone_protocol),
@@ -340,9 +275,7 @@ def _parse_optional_int(value: Any, key: str) -> int | None:
             f"Invalid interactive.quick_defaults.{key} value '{value}'."
         ) from ex
     if parsed < 1:
-        raise ValueError(
-            f"Invalid interactive.quick_defaults.{key}; use 1 or higher."
-        )
+        raise ValueError(f"Invalid interactive.quick_defaults.{key}; use 1 or higher.")
     return parsed
 
 
@@ -374,7 +307,7 @@ def _prompt_list_default(value: list[str] | None) -> str:
 
 def _prompt(text: str, default: str | None = None) -> str:
     try:
-        from prompt_toolkit import prompt
+        from prompt_toolkit import prompt  # pyright: ignore[reportMissingImports]
     except ImportError as ex:
         raise RuntimeError(
             "prompt_toolkit is required for interactive runs. "
@@ -407,7 +340,7 @@ def _prompt_provider_selection(settings: TuiSettings) -> list[ProviderTarget]:
         default = target.key in enabled_defaults
         if _prompt_bool(tr("tui.use_provider", label=target.label), default):
             base_url = target.base_url
-            if target.key == "gitlab.self_hosted":
+            if target.key == GITLAB_SELF_HOSTED_KEY:
                 base_url = _prompt(tr("tui.self_hosted_gitlab_base_url"), base_url)
                 if not base_url:
                     raise ValueError(tr("tui.self_hosted_gitlab_base_url_required"))
@@ -488,7 +421,7 @@ def determine_cache_path(
         Path: Expected cached clone path.
     """
     repo_manager = repo_manager or RemoteRepoManager()
-    return repo_manager._get_remote_cache_path(
+    return repo_manager.get_remote_cache_path(
         output / ".cache",
         ref.git_url(clone_protocol),
     )
@@ -504,6 +437,9 @@ DEFAULT_RECOMMENDED_EXCLUDES = [
     "build",
     "out",
 ]
+GITLAB_DOT_COM_LABEL = "GitLab.com"
+GITLAB_DOT_COM_BASE_URL = "https://gitlab.com"
+GITLAB_SELF_HOSTED_KEY = "gitlab.self_hosted"
 
 
 def _should_skip_scan_path(path: Path, root: Path) -> bool:
@@ -562,7 +498,9 @@ def build_lightweight_recommendations(
                 if repository.exclude_template_names is not None
                 else state.exclude_template_names
             ),
-            mode=repository.exclude_template_mode or state.exclude_template_mode,
+            mode=normalize_exclude_template_mode(
+                repository.exclude_template_mode or state.exclude_template_mode
+            ),
             templates=templates,
         )
         exclude_paths.extend(recommendation.paths)
@@ -673,7 +611,9 @@ def _build_branch_loader(
         if target is None:
             target = targets_by_provider.get(ref.provider)
         if target is None:
-            raise RemoteCatalogError(f"No provider target is available for {ref.provider}.")
+            raise RemoteCatalogError(
+                f"No provider target is available for {ref.provider}."
+            )
         token = auth_tokens.get(target.key)
         if not token:
             raise RemoteCatalogError(f"{target.label} authentication token is missing.")
@@ -833,36 +773,10 @@ def apply_repository_overrides(
         overrides (dict[str, dict[str, Any]]): Overrides keyed by full repo name.
     """
     for repository in state.selected_repositories:
-        override = {}
-        for key in _selected_repository_override_keys(repository):
-            override = overrides.get(key, {})
-            if override:
-                break
-        branch = str(override.get("branch") or "").strip()
-        if branch:
-            repository.branch = branch
-        include_subpath = str(override.get("include_subpath") or "").strip()
-        repository.include_subpath = include_subpath or repository.include_subpath
-        exclude_dirs = override.get("exclude_dirs")
-        if exclude_dirs is not None:
-            if isinstance(exclude_dirs, str):
-                repository.exclude_dirs = split_csv(exclude_dirs) or []
-            else:
-                repository.exclude_dirs = [
-                    str(item).strip()
-                    for item in exclude_dirs
-                    if str(item).strip()
-                ]
-        exclude_template_mode = override.get("exclude_template_mode")
-        if exclude_template_mode is not None:
-            repository.exclude_template_mode = normalize_exclude_template_mode(
-                exclude_template_mode
-            )
-        exclude_template_names = override.get("exclude_template_names")
-        if exclude_template_names is not None:
-            repository.exclude_template_names = _normalize_list_value(
-                exclude_template_names
-            )
+        _apply_repository_override(
+            repository,
+            _find_repository_override(repository, overrides),
+        )
 
 
 def _repository_override_key(path_value: Any) -> str | None:
@@ -960,13 +874,21 @@ def _prompt_branch_selection(state: TuiWizardState) -> None:
 def _prompt_analysis_scope(state: TuiWizardState) -> None:
     print()
     print(tr("tui.analysis_scope"))
-    state.since = _parse_date(_prompt(tr("tui.since_prompt"), _format_date(state.since)))
-    state.until = _parse_date(_prompt(tr("tui.until_prompt"), _format_date(state.until)))
+    state.since = _parse_date(
+        _prompt(tr("tui.since_prompt"), _format_date(state.since))
+    )
+    state.until = _parse_date(
+        _prompt(tr("tui.until_prompt"), _format_date(state.until))
+    )
     state.interval = _prompt(tr("tui.interval_prompt"), state.interval)
     if state.interval not in {"daily", "weekly", "monthly"}:
         raise ValueError(tr("tui.interval_error"))
-    state.author_name = split_csv(_prompt(tr("tui.author_filter"), _prompt_list_default(state.author_name)))
-    state.lang = split_csv(_prompt(tr("tui.language_filter"), _prompt_list_default(state.lang)))
+    state.author_name = split_csv(
+        _prompt(tr("tui.author_filter"), _prompt_list_default(state.author_name))
+    )
+    state.lang = split_csv(
+        _prompt(tr("tui.language_filter"), _prompt_list_default(state.lang))
+    )
     workers = _prompt(
         tr("tui.workers_prompt"),
         "" if state.workers is None else str(state.workers),
@@ -991,7 +913,10 @@ def _prompt_path_rules(state: TuiWizardState) -> None:
     )
     state.exclude_template_names = split_csv(selected_templates) or None
     state.global_exclude_dirs = split_csv(
-        _prompt(tr("tui.global_excludes_prompt"), _prompt_list_default(state.global_exclude_dirs))
+        _prompt(
+            tr("tui.global_excludes_prompt"),
+            _prompt_list_default(state.global_exclude_dirs),
+        )
     )
     state.recommendations = build_lightweight_recommendations(state)
     if state.recommendations.detected_templates:
@@ -999,7 +924,10 @@ def _prompt_path_rules(state: TuiWizardState) -> None:
         for template_name in state.recommendations.detected_templates:
             print(f"- [x] {template_name}")
     if state.recommendations.exclude_dirs:
-        print("Recommended excludes: " + format_compact_list(state.recommendations.exclude_dirs))
+        print(
+            "Recommended excludes: "
+            + format_compact_list(state.recommendations.exclude_dirs)
+        )
     if not _prompt_bool(tr("tui.edit_per_repo_paths"), False):
         return
     for repository in state.selected_repositories:
@@ -1041,7 +969,7 @@ def _prompt_output_cache_display(state: TuiWizardState) -> None:
     state.no_plot_show = not _prompt_bool(tr("tui.auto_display_prompt"), False)
 
 
-def _color(text: str, color: str, *, enabled: bool) -> str:
+def _color(text: str, color: object, *, enabled: bool) -> str:
     if not enabled:
         return text
     return f"{color}{text}{Style.RESET_ALL}"
@@ -1135,22 +1063,72 @@ def _combined_excludes(
             if repository.exclude_template_names is not None
             else state.exclude_template_names
         ),
-        mode=repository.exclude_template_mode or state.exclude_template_mode,
+        mode=normalize_exclude_template_mode(
+            repository.exclude_template_mode or state.exclude_template_mode
+        ),
         templates=load_exclude_templates(state.exclude_template_files),
     )
     return recommendation.paths or None
 
 
-def _filter_present_excludes(
-    state: TuiWizardState,
+def _find_repository_override(
     repository: SelectedRepositoryConfig,
+    overrides: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    for key in _selected_repository_override_keys(repository):
+        override = overrides.get(key, {})
+        if override:
+            return override
+    return {}
+
+
+def _normalize_override_exclude_dirs(value: Any) -> list[str] | None:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return split_csv(value) or []
+    return [str(item).strip() for item in value if str(item).strip()]
+
+
+def _apply_repository_override(
+    repository: SelectedRepositoryConfig,
+    override: dict[str, Any],
+) -> None:
+    branch = str(override.get("branch") or "").strip()
+    if branch:
+        repository.branch = branch
+
+    include_subpath = str(override.get("include_subpath") or "").strip()
+    if include_subpath:
+        repository.include_subpath = include_subpath
+
+    exclude_dirs = _normalize_override_exclude_dirs(override.get("exclude_dirs"))
+    if exclude_dirs is not None:
+        repository.exclude_dirs = exclude_dirs
+
+    exclude_template_mode = override.get("exclude_template_mode")
+    if exclude_template_mode is not None:
+        repository.exclude_template_mode = normalize_exclude_template_mode(
+            exclude_template_mode
+        )
+
+    exclude_template_names = override.get("exclude_template_names")
+    if exclude_template_names is not None:
+        repository.exclude_template_names = _normalize_list_value(
+            exclude_template_names
+        )
+
+
+def _filter_present_excludes(
     excludes: list[str] | None,
 ) -> list[str]:
     """Return selected excludes without dropping template paths that are absent now."""
     return excludes or []
 
 
-def apply_wizard_state(args: argparse.Namespace, state: TuiWizardState) -> argparse.Namespace:
+def apply_wizard_state(
+    args: argparse.Namespace, state: TuiWizardState
+) -> argparse.Namespace:
     """Apply confirmed wizard state to parsed CLI arguments."""
     return _apply_wizard_state_impl(args, state)
 

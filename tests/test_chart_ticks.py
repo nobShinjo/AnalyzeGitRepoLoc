@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+# pylint: disable=missing-function-docstring
+
 from analyze_git_repo_loc.reporting.chart_ticks import (
     build_client_tick_policy,
     normalize_interval_label,

@@ -7,6 +7,8 @@ name = "analyze-git-repo-loc"
 version = "3.0.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "colorama" },
+    { name = "gitpython" },
     { name = "jinja2" },
     { name = "pandas" },
     { name = "pip-licenses" },
@@ -24,6 +26,8 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "colorama", specifier = ">=0.4.6" },
+    { name = "gitpython", specifier = ">=3.1.43" },
     { name = "jinja2", specifier = ">=3.1.4" },
     { name = "pandas", specifier = ">=2.2.3" },
     { name = "pip-licenses", specifier = ">=5.0.0" },

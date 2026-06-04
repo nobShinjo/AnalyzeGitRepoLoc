@@ -162,7 +162,7 @@ def _mapping_value(
 ) -> dict[str, Any] | None:
     value = data.get(key) or {}
     if not isinstance(value, dict):
-        result.add("error", tr("doctor.error.mapping", key=key))
+        result.add("error", tr("doctor.error.mapping", config_key=key))
         return None
     return value
 
@@ -237,36 +237,75 @@ def _check_settings(
             result.add("warning", tr("doctor.warning.exclude_template_file_missing", path=path))
 
 
+def _normalize_repository_entry(entry: Any) -> dict[str, Any] | None:
+    """Normalize a repository entry into mapping form when possible."""
+    if isinstance(entry, str):
+        return {"path": entry}
+    if isinstance(entry, dict):
+        return entry
+    return None
+
+
+def _check_repository_path(
+    repository: dict[str, Any],
+    *,
+    label: str,
+    base_path: Path,
+    result: DiagnosticResult,
+) -> str | None:
+    """Validate repository path presence and warn about missing local targets."""
+    path_value = repository.get("path")
+    if not path_value:
+        result.add("error", tr("doctor.error.repository_path_required", label=label))
+        return None
+    path_text = str(path_value)
+    if _is_git_url(path_text):
+        return path_text
+    path = _resolve_path(base_path, Path(path_text))
+    if not path.exists():
+        result.add("warning", tr("doctor.warning.repository_path_missing", path=path))
+    return path_text
+
+
+def _check_repository_exclude_dirs(
+    repository: dict[str, Any],
+    *,
+    label: str,
+    result: DiagnosticResult,
+) -> None:
+    """Warn when repository exclude directories are absolute paths."""
+    for exclude_dir in _as_list(repository.get("exclude_dirs")):
+        exclude_path = Path(str(exclude_dir))
+        if exclude_path.is_absolute():
+            result.add(
+                "warning",
+                tr("doctor.warning.exclude_dir_relative", label=label, path=exclude_dir),
+            )
+
+
 def _check_repositories(
     repositories: list[Any],
     base_path: Path,
     result: DiagnosticResult,
 ) -> None:
     for index, entry in enumerate(repositories):
-        repository = {"path": entry} if isinstance(entry, str) else entry
         label = f"repositories[{index}]"
-        if not isinstance(repository, dict):
+        repository = _normalize_repository_entry(entry)
+        if repository is None:
             result.add("error", tr("doctor.error.repository_entry_type", label=label))
             continue
-        path_value = repository.get("path")
-        if not path_value:
-            result.add("error", tr("doctor.error.repository_path_required", label=label))
+        path_text = _check_repository_path(
+            repository,
+            label=label,
+            base_path=base_path,
+            result=result,
+        )
+        if path_text is None:
             continue
-        path_text = str(path_value)
-        if not _is_git_url(path_text):
-            path = _resolve_path(base_path, Path(path_text))
-            if not path.exists():
-                result.add("warning", tr("doctor.warning.repository_path_missing", path=path))
         include_subpath = repository.get("include_subpath")
         if include_subpath:
             _check_include_subpath(str(include_subpath), label, result)
-        for exclude_dir in _as_list(repository.get("exclude_dirs")):
-            exclude_path = Path(str(exclude_dir))
-            if exclude_path.is_absolute():
-                result.add(
-                    "warning",
-                    tr("doctor.warning.exclude_dir_relative", label=label, path=exclude_dir),
-                )
+        _check_repository_exclude_dirs(repository, label=label, result=result)
 
 
 def _check_include_subpath(
@@ -291,40 +330,68 @@ def _check_interactive(
         if remote:
             result.add("warning", tr("doctor.warning.remote_skipped"))
         return
-    settings: Any | None = None
+    settings = _load_interactive_settings(config_data, result, remote=remote)
+    if settings is None or not remote:
+        return
+    tokens = _provider_tokens(settings)
+    if _report_missing_remote_auth(tokens, result):
+        return
+    refs = _load_remote_references(settings, tokens, result)
+    if refs is None:
+        return
+    _check_remote_targets(
+        repositories=config_data.get("repositories") or [],
+        settings=settings,
+        refs=refs,
+        tokens=tokens,
+        result=result,
+    )
+
+
+def _load_interactive_settings(
+    config_data: dict[str, Any],
+    result: DiagnosticResult,
+    *,
+    remote: bool,
+) -> TuiSettings | None:
+    """Load interactive settings, recovering non-remote fields when possible."""
     try:
-        settings = load_tui_settings(config_data)
+        return load_tui_settings(config_data)
     except RemoteCatalogError as ex:
         result.add("error", str(ex))
         if not remote:
-            return
-        settings = _recover_remote_settings(config_data)
-        if settings is None:
-            return
-    if remote:
-        tokens = _provider_tokens(settings)
-        missing_auth = False
-        for provider, token in tokens.items():
-            if not token:
-                missing_auth = True
-                result.add(
-                    "error",
-                    tr("doctor.error.remote_auth_required", provider=provider),
-                )
-        if missing_auth:
-            return
-        try:
-            refs = fetch_remote_repositories(settings, auth_tokens=tokens)
-        except RemoteCatalogError as ex:
-            result.add("error", str(ex))
-            return
-        _check_remote_targets(
-            repositories=config_data.get("repositories") or [],
-            settings=settings,
-            refs=refs,
-            tokens=tokens,
-            result=result,
+            return None
+        return _recover_remote_settings(config_data)
+
+
+def _report_missing_remote_auth(
+    tokens: dict[str, str],
+    result: DiagnosticResult,
+) -> bool:
+    """Report missing remote provider authentication tokens."""
+    missing_auth = False
+    for provider, token in tokens.items():
+        if token:
+            continue
+        missing_auth = True
+        result.add(
+            "error",
+            tr("doctor.error.remote_auth_required", provider=provider),
         )
+    return missing_auth
+
+
+def _load_remote_references(
+    settings: TuiSettings,
+    tokens: dict[str, str],
+    result: DiagnosticResult,
+) -> list[RemoteRepositoryRef] | None:
+    """Fetch remote repository references and report catalog failures."""
+    try:
+        return fetch_remote_repositories(settings, auth_tokens=tokens)
+    except RemoteCatalogError as ex:
+        result.add("error", str(ex))
+        return None
 
 
 def _provider_tokens(settings: Any) -> dict[str, str]:
@@ -383,43 +450,72 @@ def _check_remote_targets(
     tokens: dict[str, str],
     result: DiagnosticResult,
 ) -> None:
-    refs_by_url = {
+    refs_by_url = _refs_by_url(refs)
+    for entry in repositories:
+        repository = _normalize_repository_entry(entry)
+        if repository is None:
+            continue
+        ref = _resolve_remote_repository_ref(repository, refs_by_url, result)
+        if ref is None:
+            continue
+        _check_remote_branch(repository, ref=ref, settings=settings, tokens=tokens, result=result)
+
+
+def _refs_by_url(refs: list[RemoteRepositoryRef]) -> dict[str, RemoteRepositoryRef]:
+    """Index remote repository references by normalized clone URL."""
+    return {
         _normalize_remote_url(url): ref
         for ref in refs
         for url in (ref.clone_url, ref.ssh_url)
         if url
     }
-    for entry in repositories:
-        repository = {"path": entry} if isinstance(entry, str) else entry
-        if not isinstance(repository, dict):
-            continue
-        path_value = repository.get("path")
-        if not path_value:
-            continue
-        path_text = str(path_value)
-        if not _is_git_url(path_text):
-            continue
-        ref = refs_by_url.get(_normalize_remote_url(path_text))
-        if ref is None:
-            result.add("error", tr("doctor.error.remote_repo_missing", path=path_text))
-            continue
-        branch = repository.get("branch")
-        if not branch:
-            continue
-        try:
-            branches = _fetch_remote_branches(ref=ref, settings=settings, tokens=tokens)
-        except RemoteCatalogError as ex:
-            result.add("error", str(ex))
-            continue
-        if str(branch) not in branches:
-            result.add(
-                "error",
-                tr(
-                    "doctor.error.remote_branch_missing",
-                    branch=branch,
-                    repository=ref.full_name,
-                ),
-            )
+
+
+def _resolve_remote_repository_ref(
+    repository: dict[str, Any],
+    refs_by_url: dict[str, RemoteRepositoryRef],
+    result: DiagnosticResult,
+) -> RemoteRepositoryRef | None:
+    """Resolve a configured remote repository to a fetched catalog entry."""
+    path_value = repository.get("path")
+    if not path_value:
+        return None
+    path_text = str(path_value)
+    if not _is_git_url(path_text):
+        return None
+    ref = refs_by_url.get(_normalize_remote_url(path_text))
+    if ref is None:
+        result.add("error", tr("doctor.error.remote_repo_missing", path=path_text))
+    return ref
+
+
+def _check_remote_branch(
+    repository: dict[str, Any],
+    *,
+    ref: RemoteRepositoryRef,
+    settings: TuiSettings,
+    tokens: dict[str, str],
+    result: DiagnosticResult,
+) -> None:
+    """Validate that a configured remote branch exists in the provider catalog."""
+    branch = repository.get("branch")
+    if not branch:
+        return
+    try:
+        branches = _fetch_remote_branches(ref=ref, settings=settings, tokens=tokens)
+    except RemoteCatalogError as ex:
+        result.add("error", str(ex))
+        return
+    if str(branch) in branches:
+        return
+    result.add(
+        "error",
+        tr(
+            "doctor.error.remote_branch_missing",
+            branch=branch,
+            repository=ref.full_name,
+        ),
+    )
 
 
 def _fetch_remote_branches(

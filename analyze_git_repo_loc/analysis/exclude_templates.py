@@ -162,9 +162,18 @@ def detect_exclude_templates(
     template_defs = templates if templates is not None else load_exclude_templates()
     detected: list[DetectedExcludeTemplate] = []
     for template in template_defs:
-        matches = tuple(pattern for pattern in template.detect if _matches_pattern(repo_root, pattern))
+        matches = tuple(
+            pattern
+            for pattern in template.detect
+            if _matches_pattern(repo_root, pattern)
+        )
         if matches:
-            detected.append(DetectedExcludeTemplate(template=template, matched_patterns=matches))
+            detected.append(
+                DetectedExcludeTemplate(
+                    template=template,
+                    matched_patterns=matches,
+                )
+            )
     return sorted(detected, key=lambda item: (item.template.priority, item.template.name))
 
 
@@ -264,13 +273,16 @@ def _parse_user_template(raw_template: Any, path: Path) -> ExcludeTemplate:
 
 
 def _string_tuple(value: object) -> tuple[str, ...]:
+    values: list[str]
     if value is None:
-        return ()
-    if isinstance(value, str):
-        return (value,)
-    if isinstance(value, list):
-        return tuple(str(item).strip() for item in value if str(item).strip())
-    raise ValueError("Template values must be strings or lists of strings.")
+        values = []
+    elif isinstance(value, str):
+        values = [value]
+    elif isinstance(value, list):
+        values = [text for item in value if (text := str(item).strip())]
+    else:
+        raise ValueError("Template values must be strings or lists of strings.")
+    return tuple(values)
 
 
 def _deduplicate(values: list[str] | tuple[str, ...]) -> list[str]:

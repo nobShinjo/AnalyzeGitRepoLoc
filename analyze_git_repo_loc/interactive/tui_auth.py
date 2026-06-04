@@ -33,8 +33,8 @@ from typing import Any
 from urllib.parse import urlparse
 
 from analyze_git_repo_loc.i18n import tr
-from analyze_git_repo_loc.remote.remote_auth import build_host_provider_env_var
 from analyze_git_repo_loc.remote.remote_auth import (
+    build_host_provider_env_var,
     build_host_token_env_var,
     get_cli_token,
 )
@@ -46,9 +46,12 @@ from analyze_git_repo_loc.remote.remote_oauth import (
     fetch_gitlab_device_code_token,
 )
 
-
 GITHUB_DEVICE_CLIENT_ID = ""
 GITLAB_DOTCOM_DEVICE_CLIENT_ID = ""
+PROMPT_TOOLKIT_REQUIRED_MESSAGE = (
+    "prompt_toolkit is required for interactive runs. "
+    "Install dependencies with `uv sync --active`."
+)
 
 
 @dataclass(frozen=True)
@@ -100,7 +103,10 @@ def _hostname_from_base_url(provider: str, base_url: str) -> str:
     if provider == "github" and base_url.rstrip("/") == "https://api.github.com":
         return "github.com"
     parsed = urlparse(base_url)
-    return parsed.hostname or base_url.replace("https://", "").replace("http://", "").split("/")[0]
+    return (
+        parsed.hostname
+        or base_url.replace("https://", "").replace("http://", "").split("/")[0]
+    )
 
 
 def get_device_client_id(provider: str, base_url: str) -> str | None:
@@ -115,11 +121,19 @@ def get_device_client_id(provider: str, base_url: str) -> str | None:
         str | None: Public OAuth client ID, or None when not configured.
     """
     if provider == "github":
-        return os.getenv("ANALYZE_GIT_REPO_LOC_GITHUB_CLIENT_ID") or GITHUB_DEVICE_CLIENT_ID or None
+        return (
+            os.getenv("ANALYZE_GIT_REPO_LOC_GITHUB_CLIENT_ID")
+            or GITHUB_DEVICE_CLIENT_ID
+            or None
+        )
     if provider == "gitlab":
         hostname = _hostname_from_base_url(provider, base_url)
         if hostname == "gitlab.com":
-            return os.getenv("ANALYZE_GIT_REPO_LOC_GITLAB_CLIENT_ID") or GITLAB_DOTCOM_DEVICE_CLIENT_ID or None
+            return (
+                os.getenv("ANALYZE_GIT_REPO_LOC_GITLAB_CLIENT_ID")
+                or GITLAB_DOTCOM_DEVICE_CLIENT_ID
+                or None
+            )
         return None
     raise DeviceCodeLoginError(f"Unsupported provider '{provider}'.")
 
@@ -128,7 +142,7 @@ def build_auth_method_statuses(
     *,
     provider: str,
     base_url: str,
-    env: Mapping[str, str] = os.environ,
+    env: Mapping[str, str] | None = None,
     command_exists: Callable[[str], bool] | None = None,
     cli_token_getter: Callable[[str, str], str | None] = get_cli_token,
     device_client_id_getter: Callable[[str, str], str | None] = get_device_client_id,
@@ -147,22 +161,26 @@ def build_auth_method_statuses(
     Returns:
         list[AuthMethodStatus]: Ordered method statuses.
     """
-    command_exists = command_exists or (lambda command: shutil.which(command) is not None)
+    env = os.environ if env is None else env
+    command_exists = command_exists or (
+        lambda command: shutil.which(command) is not None
+    )
     env_var = _env_var_for_provider(provider)
     env_token = env.get(env_var)
     command = _command_for_provider(provider)
-    cli_token = cli_token_getter(provider, base_url) if command_exists(command) else None
+    cli_token = (
+        cli_token_getter(provider, base_url) if command_exists(command) else None
+    )
     client_id = device_client_id_getter(provider, base_url)
     hostname = _hostname_from_base_url(provider, base_url)
     self_hosted_gitlab = provider == "gitlab" and hostname != "gitlab.com"
     device_available = bool(client_id) or self_hosted_gitlab
-    device_detail = (
-        "available"
-        if client_id
-        else "OAuth client_id will be entered for this run"
-        if self_hosted_gitlab
-        else "OAuth client_id is not configured"
-    )
+    if client_id:
+        device_detail = "available"
+    elif self_hosted_gitlab:
+        device_detail = "OAuth client_id will be entered for this run"
+    else:
+        device_detail = "OAuth client_id is not configured"
     return [
         AuthMethodStatus(
             method="env_token",
@@ -175,7 +193,9 @@ def build_auth_method_statuses(
             method="cli",
             label=f"{command} CLI login",
             available=bool(cli_token),
-            detail="logged in" if cli_token else f"{command} is missing or not logged in",
+            detail=(
+                "logged in" if cli_token else f"{command} is missing or not logged in"
+            ),
             token=cli_token,
         ),
         AuthMethodStatus(
@@ -247,12 +267,9 @@ def resolve_auth_choice(
 
 def _prompt_choice(provider: str, statuses: list[AuthMethodStatus]) -> AuthMethodStatus:
     try:
-        from prompt_toolkit import prompt
+        from prompt_toolkit import prompt  # pyright: ignore[reportMissingImports]
     except ImportError as ex:
-        raise RuntimeError(
-            "prompt_toolkit is required for interactive runs. "
-            "Install dependencies with `uv sync --active`."
-        ) from ex
+        raise RuntimeError(PROMPT_TOOLKIT_REQUIRED_MESSAGE) from ex
 
     print()
     print(tr("auth.provider_title", provider=_provider_label(provider)))
@@ -280,23 +297,19 @@ def _prompt_choice(provider: str, statuses: list[AuthMethodStatus]) -> AuthMetho
 
 def _prompt_one_time_token(provider: str) -> str:
     try:
-        from prompt_toolkit import prompt
+        from prompt_toolkit import prompt  # pyright: ignore[reportMissingImports]
     except ImportError as ex:
-        raise RuntimeError(
-            "prompt_toolkit is required for interactive runs. "
-            "Install dependencies with `uv sync --active`."
-        ) from ex
-    return prompt(f"Paste {_provider_label(provider)} token: ", is_password=True).strip()
+        raise RuntimeError(PROMPT_TOOLKIT_REQUIRED_MESSAGE) from ex
+    return prompt(
+        f"Paste {_provider_label(provider)} token: ", is_password=True
+    ).strip()
 
 
 def _prompt_gitlab_device_client_id() -> str:
     try:
-        from prompt_toolkit import prompt
+        from prompt_toolkit import prompt  # pyright: ignore[reportMissingImports]
     except ImportError as ex:
-        raise RuntimeError(
-            "prompt_toolkit is required for interactive runs. "
-            "Install dependencies with `uv sync --active`."
-        ) from ex
+        raise RuntimeError(PROMPT_TOOLKIT_REQUIRED_MESSAGE) from ex
     return prompt(tr("auth.gitlab_client_id_prompt")).strip()
 
 
@@ -346,8 +359,16 @@ def run_tui_auth_selection(
     tokens: dict[str, str] = {}
     labels: dict[str, str] = {}
     provider_configs = [
-        ("github", settings.providers.github.enabled, settings.providers.github.api_base_url),
-        ("gitlab", settings.providers.gitlab.enabled, settings.providers.gitlab.base_url),
+        (
+            "github",
+            settings.providers.github.enabled,
+            settings.providers.github.api_base_url,
+        ),
+        (
+            "gitlab",
+            settings.providers.gitlab.enabled,
+            settings.providers.gitlab.base_url,
+        ),
     ]
     for provider, enabled, base_url in provider_configs:
         if not enabled:

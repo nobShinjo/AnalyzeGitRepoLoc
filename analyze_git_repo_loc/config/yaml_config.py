@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Callable
 from urllib.parse import urlparse
 
-import yaml
+import yaml  # pyright: ignore[reportMissingModuleSource]
 
 from analyze_git_repo_loc.remote.remote_auth import build_host_provider_env_var
 from analyze_git_repo_loc.remote.remote_repos import RemoteRepoManager
@@ -68,25 +68,37 @@ def load_yaml_config(
     if not isinstance(settings, dict):
         raise ValueError("YAML config 'settings' must be a mapping.")
 
-    repositories = data.get("repositories")
+    repositories = _normalize_yaml_repositories(
+        data.get("repositories"),
+        require_repositories=require_repositories,
+    )
+    return settings, repositories
+
+
+def _normalize_yaml_repositories(
+    repositories: object,
+    *,
+    require_repositories: bool,
+) -> list[dict]:
+    """Normalize and validate repository entries from YAML config."""
     if repositories is None and not require_repositories:
-        repositories = []
-    if not isinstance(repositories, list) or not repositories:
-        if not require_repositories and repositories == []:
-            return settings, []
+        return []
+    if not isinstance(repositories, list):
         raise ValueError("YAML config 'repositories' must be a non-empty list.")
+    if not repositories:
+        if not require_repositories:
+            return []
+        raise ValueError("YAML config 'repositories' must be a non-empty list.")
+
     normalized_repositories: list[dict] = []
     for entry in repositories:
-        repository = entry
-        if isinstance(repository, str):
-            repository = {"path": repository}
+        repository = {"path": entry} if isinstance(entry, str) else entry
         if not isinstance(repository, dict):
             raise ValueError("YAML config repository entry must be a mapping.")
         if not repository.get("path"):
             raise ValueError("YAML config repository entry requires 'path'.")
         normalized_repositories.append(repository)
-
-    return settings, normalized_repositories
+    return normalized_repositories
 
 
 def _pick_value(args: argparse.Namespace, settings: dict, key: str):

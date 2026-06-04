@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+# pylint: disable=missing-function-docstring
+
 import tempfile
 import unittest
 from pathlib import Path

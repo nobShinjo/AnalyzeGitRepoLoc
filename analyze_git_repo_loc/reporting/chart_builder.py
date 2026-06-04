@@ -20,7 +20,7 @@ Usage example:
 """
 
 from enum import Enum
-from typing import Self
+from typing import Self, cast
 
 import pandas as pd
 import plotly.express as px
@@ -145,12 +145,18 @@ class ChartBuilder:
         layouts or other specific settings required for the final visualization. After calling
         this method, additional configurations can be applied on the `_fig` attribute.
         """
-        self._fig: go.Figure = make_subplots(
+        self._fig = make_subplots(
             rows=1,
             cols=1,
             specs=[[{"secondary_y": True}]],
         )
         return self
+
+    def _require_fig(self) -> go.Figure:
+        """Return the current figure or raise when it has not been created yet."""
+        if self._fig is None:
+            raise ValueError("Figure has not been created yet.")
+        return self._fig
 
     def create_trend_trace(self, xaxis_column: str) -> Self:
         """
@@ -195,12 +201,9 @@ class ChartBuilder:
             y=self._trend_data.columns[1:],
             line_shape=None,
         )
-        fig_lang_traces = []
-        for trace in range(len(fig_lang["data"])):
-            fig_lang_traces.append(fig_lang["data"][trace])
-
-        for traces in fig_lang_traces:
-            self._fig.add_trace(traces, row=1, col=1)
+        figure = self._require_fig()
+        for trace in cast(tuple[go.Scatter, ...], fig_lang.data):
+            figure.add_trace(trace, row=1, col=1)
 
         return self
 
@@ -241,12 +244,12 @@ class ChartBuilder:
         fig_sum = px.line(
             data_frame=self._summary_data, x=xaxis_column, y="SUM", markers=True
         )
-        for trace in fig_sum["data"]:
-            # trace["showlegend"] = False  # NOSONAR
-            trace["name"] = "SUM"
-            trace["marker"] = {"size": 8, "color": "#636EFA"}
-            trace["line"] = {"width": 2, "color": "#636EFA"}
-            self._fig.add_trace(trace, row=1, col=1, secondary_y=False)
+        figure = self._require_fig()
+        for trace in cast(tuple[go.Scatter, ...], fig_sum.data):
+            trace.name = "SUM"
+            trace.update(marker={"size": 8, "color": "#636EFA"})
+            trace.update(line={"width": 2, "color": "#636EFA"})
+            figure.add_trace(trace, row=1, col=1, secondary_y=False)
 
         return self
 
@@ -269,12 +272,12 @@ class ChartBuilder:
         fig_diff = px.line(
             data_frame=self._summary_data, x=xaxis_column, y="Diff", markers=True
         )
-        for trace in fig_diff["data"]:
-            # trace["showlegend"] = False # NOSONAR
-            trace["name"] = "Diff"
-            trace["marker"] = {"size": 8, "color": "#EF553B"}
-            trace["line"] = {"width": 2, "color": "#EF553B"}
-            self._fig.add_trace(trace, row=1, col=1, secondary_y=True)
+        figure = self._require_fig()
+        for trace in cast(tuple[go.Scatter, ...], fig_diff.data):
+            trace.name = "Diff"
+            trace.update(marker={"size": 8, "color": "#EF553B"})
+            trace.update(line={"width": 2, "color": "#EF553B"})
+            figure.add_trace(trace, row=1, col=1, secondary_y=True)
         return self
 
     # added, deleted の棒グラフを追加するメソッド
@@ -301,18 +304,19 @@ class ChartBuilder:
             barmode="relative",
         )
 
-        # Add the bar traces to the figure
-        for trace in fig_bar["data"]:
-            # trace["showlegend"] = False # NOSONAR
-            self._fig.add_trace(trace, row=1, col=1, secondary_y=True)
-
-        # Update the color of the bar traces
-        added_trace, deleted_trace = self._fig.data[-2], self._fig.data[-1]
-        added_trace.marker.color = "rgba(0,204,150,0.6)"
-        deleted_trace.marker.color = "rgba(239,85,59,0.6)"
-        for trace in [added_trace, deleted_trace]:
-            trace.marker.line.width = 1
-            trace.marker.line.color = "rgba(0,0,0,0)"
+        figure = self._require_fig()
+        for color, trace in zip(
+            ("rgba(0,204,150,0.6)", "rgba(239,85,59,0.6)"),
+            cast(tuple[go.Bar, ...], fig_bar.data),
+            strict=False,
+        ):
+            trace.update(
+                marker={
+                    "color": color,
+                    "line": {"width": 1, "color": "rgba(0,0,0,0)"},
+                }
+            )
+            figure.add_trace(trace, row=1, col=1, secondary_y=True)
 
         return self
 
@@ -344,12 +348,9 @@ class ChartBuilder:
             barmode="relative",
         )
 
-        # Add the bar traces to the figure
-        if self._fig is None:
-            self._fig = fig_author
-        else:
-            for trace in fig_author.data:
-                self._fig.add_trace(trace)
+        figure = self._require_fig()
+        for trace in cast(tuple[go.Bar, ...], fig_author.data):
+            figure.add_trace(trace)
 
         return self
 
@@ -368,7 +369,8 @@ class ChartBuilder:
         Returns:
             Self: The instance itself, enabling method chaining.
         """
-        self._fig.update_xaxes(
+        figure = self._require_fig()
+        figure.update_xaxes(
             showline=True,
             linewidth=1,
             linecolor="grey",
@@ -383,7 +385,7 @@ class ChartBuilder:
             tickformat="%b-%Y",
             automargin=True,
         )
-        self._fig.update_yaxes(
+        figure.update_yaxes(
             secondary_y=False,
             showline=True,
             linewidth=1,
@@ -401,7 +403,7 @@ class ChartBuilder:
             spikethickness=1,
             spikemode="toaxis+across",
         )
-        self._fig.update_yaxes(
+        figure.update_yaxes(
             secondary_y=True,
             showline=True,
             linewidth=1,
@@ -421,7 +423,7 @@ class ChartBuilder:
             overlaying="y",
             side="right",
         )
-        self._fig.update_layout(
+        figure.update_layout(
             font_family="Open Sans",
             plot_bgcolor="white",
             title={
@@ -450,7 +452,8 @@ class ChartBuilder:
         Returns:
             Self: The instance itself, enabling method chaining.
         """
-        self._fig.update_xaxes(
+        figure = self._require_fig()
+        figure.update_xaxes(
             showline=True,
             linewidth=1,
             linecolor="grey",
@@ -463,7 +466,7 @@ class ChartBuilder:
             tickfont_size=14,
             automargin=True,
         )
-        self._fig.update_yaxes(
+        figure.update_yaxes(
             showline=True,
             linewidth=1,
             linecolor="grey",
@@ -483,7 +486,7 @@ class ChartBuilder:
             categoryorder="total ascending",
             automargin=True,
         )
-        self._fig.update_layout(
+        figure.update_layout(
             font_family="Open Sans",
             plot_bgcolor="white",
             title={
@@ -514,6 +517,7 @@ class ChartBuilder:
                 return self.update_fig_trend(title)
             case ChartStrategy.AUTHOR_CONTRIBUTION:
                 return self.update_fig_author_contribution(title)
+        raise ValueError("The strategy for updating the chart is not set.")
 
     def _get_xaxis_values(self, x_axis_interval: str) -> list[object]:
         """
@@ -559,8 +563,9 @@ class ChartBuilder:
         )
         tickvals = select_tick_values(self._get_xaxis_values(x_axis_interval))
 
-        self._fig.update_xaxes(tickformat=tickformat)
-        self._fig.update_layout(
+        figure = self._require_fig()
+        figure.update_xaxes(tickformat=tickformat)
+        figure.update_layout(
             xaxis={
                 "dtick": dtick,
                 "tickmode": "array",
@@ -571,9 +576,9 @@ class ChartBuilder:
 
     def build(
         self,
-        trend_data: pd.DataFrame,
+        trend_data: pd.DataFrame | None,
         summary_data: pd.DataFrame,
-        interval: str,
+        interval: str | None,
         title: str,
     ) -> go.Figure:
         """
@@ -585,11 +590,12 @@ class ChartBuilder:
         returning it.
 
         Parameters:
-            trend_data (pd.DataFrame): A pandas DataFrame containing the data to be used for
-                                       trend trace creation.
+            trend_data (pd.DataFrame | None): Data for trend trace creation when the
+                selected strategy requires it.
             summary_data (pd.DataFrame): A pandas DataFrame containing the data to be used for
                                      summary trace creation.
-            interval (str): The interval to use for formatting the x-axis ticks.
+            interval (str | None): Interval for formatting the x-axis ticks when the
+                selected strategy requires it.
             title (str): The title to be displayed in the chart title.
 
         Returns:
@@ -602,11 +608,15 @@ class ChartBuilder:
         if self._strategy is None:
             raise ValueError("The strategy for building the chart is not set.")
 
-        self.set_trend_data(trend_data)
         self.set_summary_data(summary_data)
         # Choose the strategy for building the chart
         match self._strategy:
             case ChartStrategy.TREND:
+                if trend_data is None or interval is None:
+                    raise ValueError(
+                        "Trend charts require trend_data and interval."
+                    )
+                self.set_trend_data(trend_data)
                 return self.build_trend_chart(interval, title)
             case ChartStrategy.AUTHOR_CONTRIBUTION:
                 return self.build_author_contribution_chart(title)
@@ -637,7 +647,7 @@ class ChartBuilder:
         self.create_bar_trace(interval)
         self.update_fig(title)
         self.update_xaxis_tickformat(interval)
-        return self._fig
+        return self._require_fig()
 
     def build_author_contribution_chart(
         self,
@@ -663,7 +673,7 @@ class ChartBuilder:
         self.create_fig()
         self.create_author_contribution_trace()
         self.update_fig(title)
-        return self._fig
+        return self._require_fig()
 
     def show(self) -> None:
         """
@@ -673,4 +683,4 @@ class ChartBuilder:
         `build` method. It uses the internal figure instance (`_fig`) to render
         the chart using Plotly's default rendering engine.
         """
-        self._fig.show()
+        self._require_fig().show()

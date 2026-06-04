@@ -336,8 +336,7 @@ class RepositorySelectorState:
             checked = "x" if index in self.selected_indexes else " "
             branch = self.selected_branch_for(ref)
             lines.append(
-                f"{cursor} [{checked}] {ref.provider:<6} {ref.full_name} "
-                f"({branch})"
+                f"{cursor} [{checked}] {ref.provider:<6} {ref.full_name} ({branch})"
             )
         return "\n".join(lines)
 
@@ -347,29 +346,8 @@ class RepositorySelectorState:
         lines = ["Branches" + (" *" if self.active_pane == "branches" else "")]
         if current is None:
             lines.append("No repository selected for branch display.")
-        else:
-            lines.append(f"Branches: {current.full_name}")
-            lines.append(self.branch_status_for(current))
-            branches = self.visible_branches
-            if not branches:
-                lines.append("No branches match the current search.")
-            else:
-                branch_start = max(
-                    0,
-                    min(
-                        self.branch_cursor - height // 2,
-                        max(0, len(branches) - height),
-                    ),
-                )
-                branch_end = min(len(branches), branch_start + height)
-                selected_branch = self.selected_branch_for(current)
-                for branch_position, branch in enumerate(
-                    branches[branch_start:branch_end],
-                    start=branch_start,
-                ):
-                    cursor = ">" if branch_position == self.branch_cursor else " "
-                    checked = "x" if branch == selected_branch else " "
-                    lines.append(f"{cursor} [{checked}] {branch}")
+            return "\n".join(lines)
+        lines.extend(self._render_branch_rows(current, height=height))
         return "\n".join(lines)
 
     def render_footer(self) -> str:
@@ -378,7 +356,10 @@ class RepositorySelectorState:
             help_lines = [
                 "Search: type filter | ctrl-l clear",
                 "Move: up/down line | pgup/pgdown page | tab/right branches",
-                "Action: space select repo | ctrl-a select visible | ctrl-u unselect visible | enter confirm | esc/ctrl-c cancel",
+                (
+                    "Action: space select repo | ctrl-a select visible | "
+                    "ctrl-u unselect visible | enter confirm | esc/ctrl-c cancel"
+                ),
             ]
         else:
             help_lines = [
@@ -387,6 +368,42 @@ class RepositorySelectorState:
                 "Action: space select branch | enter confirm | esc/ctrl-c cancel",
             ]
         return "\n".join(help_lines)
+
+    def _render_branch_rows(
+        self,
+        current: RemoteRepositoryRef,
+        *,
+        height: int,
+    ) -> list[str]:
+        rows = [
+            f"Branches: {current.full_name}",
+            self.branch_status_for(current),
+        ]
+        branches = self.visible_branches
+        if not branches:
+            rows.append("No branches match the current search.")
+            return rows
+        branch_start, branch_end = self._branch_window(height, len(branches))
+        selected_branch = self.selected_branch_for(current)
+        for branch_position, branch in enumerate(
+            branches[branch_start:branch_end],
+            start=branch_start,
+        ):
+            cursor = ">" if branch_position == self.branch_cursor else " "
+            checked = "x" if branch == selected_branch else " "
+            rows.append(f"{cursor} [{checked}] {branch}")
+        return rows
+
+    def _branch_window(self, height: int, branch_count: int) -> tuple[int, int]:
+        branch_start = max(
+            0,
+            min(
+                self.branch_cursor - height // 2,
+                max(0, branch_count - height),
+            ),
+        )
+        branch_end = min(branch_count, branch_start + height)
+        return branch_start, branch_end
 
     def _clamp_cursor(self) -> None:
         if self.active_pane == "branches":
@@ -411,7 +428,7 @@ class RepositorySelectorState:
             return fallback
         try:
             branches = self.branch_loader(ref)
-        except Exception as ex:
+        except Exception as ex:  # pylint: disable=broad-exception-caught
             self.branch_errors[ref.full_name] = str(ex)
             self.branch_cache[ref.full_name] = fallback
             return fallback
@@ -458,13 +475,30 @@ def run_repository_selector(
         RuntimeError: If prompt_toolkit is not installed.
     """
     try:
-        from prompt_toolkit.application import Application
-        from prompt_toolkit.key_binding import KeyBindings
-        from prompt_toolkit.layout import HSplit, Layout, VSplit, Window
-        from prompt_toolkit.layout.containers import DynamicContainer
-        from prompt_toolkit.layout.dimension import Dimension
-        from prompt_toolkit.layout.controls import FormattedTextControl
-        from prompt_toolkit.widgets import TextArea
+        from prompt_toolkit.application import (
+            Application,
+        )  # pyright: ignore[reportMissingImports]
+        from prompt_toolkit.key_binding import (
+            KeyBindings,
+        )  # pyright: ignore[reportMissingImports]
+        from prompt_toolkit.layout import (  # pyright: ignore[reportMissingImports]
+            HSplit,
+            Layout,
+            VSplit,
+            Window,
+        )
+        from prompt_toolkit.layout.containers import (
+            DynamicContainer,
+        )  # pyright: ignore[reportMissingImports]
+        from prompt_toolkit.layout.controls import (
+            FormattedTextControl,
+        )  # pyright: ignore[reportMissingImports]
+        from prompt_toolkit.layout.dimension import (
+            Dimension,
+        )  # pyright: ignore[reportMissingImports]
+        from prompt_toolkit.widgets import (
+            TextArea,
+        )  # pyright: ignore[reportMissingImports]
     except ImportError as ex:
         raise RuntimeError(
             "prompt_toolkit is required for interactive runs. "
@@ -478,10 +512,10 @@ def run_repository_selector(
         multiline=False,
     )
     search_field.buffer.on_text_changed += lambda buffer: state.set_query(buffer.text)
-    header_control = FormattedTextControl(lambda: state.render_header())
-    repository_control = FormattedTextControl(lambda: state.render_repositories())
-    branch_control = FormattedTextControl(lambda: state.render_branches())
-    footer_control = FormattedTextControl(lambda: state.render_footer())
+    header_control = FormattedTextControl(state.render_header)
+    repository_control = FormattedTextControl(state.render_repositories)
+    branch_control = FormattedTextControl(state.render_branches)
+    footer_control = FormattedTextControl(state.render_footer)
     kb = KeyBindings()
     app: Application | None = None
 
@@ -537,6 +571,9 @@ def run_repository_selector(
             ]
         )
 
+    # prompt_toolkit handlers are registered immediately via decorators.
+    # Reusing "_" keeps this callback block compact, so scope the pylint suppression here.
+    # pylint: disable=function-redefined
     @kb.add("up")
     def _(_: object) -> None:
         state.move_up()
@@ -594,6 +631,8 @@ def run_repository_selector(
         state.cancel()
         if app is not None:
             app.exit()
+
+    # pylint: enable=function-redefined
 
     app = Application(
         layout=Layout(

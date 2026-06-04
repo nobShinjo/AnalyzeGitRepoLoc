@@ -1,17 +1,24 @@
 from __future__ import annotations
 
+# pylint: disable=missing-function-docstring,protected-access
+
 import argparse
 import sys
 import tempfile
 import unittest
 from io import StringIO
 from pathlib import Path
+from typing import cast
 from unittest.mock import ANY, MagicMock, Mock, patch
 
 import pandas as pd
 
 from analyze_git_repo_loc import utils
-from analyze_git_repo_loc.analysis.git_repo_loc_analyzer import GitRepoLOCAnalyzer
+from analyze_git_repo_loc.analysis.analysis_runner import _SingleRepositoryAnalysisRequest
+from analyze_git_repo_loc.analysis.git_repo_loc_analyzer import (
+    GitRepoLOCAnalyzer,
+    GitRepoLOCAnalyzerOptions,
+)
 from analyze_git_repo_loc.i18n import tr
 
 
@@ -30,13 +37,15 @@ class RepositoryWarningTests(unittest.TestCase):
                     branch_name="main",
                     cache_dir=Path(tmp_dir) / "cache",
                     output_dir=Path(tmp_dir) / "out",
-                    exclude_dirs=["node_modules"],
+                    options=GitRepoLOCAnalyzerOptions(
+                        exclude_dirs=["node_modules"],
+                    ),
                     show_progress=False,
                 )
 
         self.assertEqual(stderr.getvalue(), "")
         self.assertEqual(
-            analyzer._warnings,
+            analyzer.get_warnings(),
             ["excluded path does not exist: node_modules"],
         )
 
@@ -44,7 +53,9 @@ class RepositoryWarningTests(unittest.TestCase):
         loc_data = pd.DataFrame({"repository": ["alpha"]})
         analyzer = Mock()
         analyzer.get_commit_analysis.return_value = loc_data
-        analyzer._warnings = ["excluded path does not exist: .venv"]
+        analyzer.get_warnings.return_value = [
+            "excluded path does not exist: .venv"
+        ]
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             repo_path = Path(tmp_dir) / "alpha"
@@ -83,7 +94,7 @@ class RepositoryWarningTests(unittest.TestCase):
         loc_data = pd.DataFrame({"repository": ["alpha"]})
         analyzer = Mock()
         analyzer.get_commit_analysis.return_value = loc_data
-        analyzer._warnings = []
+        analyzer.get_warnings.return_value = []
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             repo_path = Path(tmp_dir) / "alpha"
@@ -118,9 +129,54 @@ class RepositoryWarningTests(unittest.TestCase):
         self.assertEqual(repository_name, "alpha")
         self.assertEqual(exclude_summary["repository"], "alpha")
         self.assertEqual(exclude_summary["mode"], "auto")
-        self.assertIn("Python Project", exclude_summary["templates"])
-        self.assertIn(".venv", exclude_summary["template_paths"])
-        self.assertIn("manual-cache", exclude_summary["excluded_paths"])
+        self.assertIn("Python Project", cast(list[str], exclude_summary["templates"]))
+        self.assertIn(".venv", cast(list[str], exclude_summary["template_paths"]))
+        self.assertIn(
+            "manual-cache",
+            cast(list[str], exclude_summary["excluded_paths"]),
+        )
+
+    def test_single_repository_accepts_request_object(self) -> None:
+        loc_data = pd.DataFrame({"repository": ["alpha"]})
+        analyzer = Mock()
+        analyzer.get_commit_analysis.return_value = loc_data
+        analyzer.get_warnings.return_value = []
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            repo_path = Path(tmp_dir) / "alpha"
+            repo_path.mkdir()
+            request = _SingleRepositoryAnalysisRequest(
+                index=0,
+                repo_path=repo_path,
+                branch_name="main",
+                exclude_dirs=None,
+                include_subpath=None,
+                exclude_template_mode="auto",
+                exclude_template_names=None,
+                exclude_template_files=None,
+                output_dir=Path(tmp_dir) / "out",
+                since=None,
+                until=None,
+                authors=None,
+                languages=None,
+                clear_cache=False,
+                show_progress=False,
+            )
+            with patch.object(utils, "_resolve_analysis_repo_path", return_value=repo_path):
+                with patch.object(utils, "_create_analyzer", return_value=analyzer):
+                    (
+                        index,
+                        repository_name,
+                        returned_loc_data,
+                        warnings,
+                        exclude_summary,
+                    ) = utils._analyze_single_repository(request)
+
+        self.assertEqual(index, 0)
+        self.assertEqual(repository_name, "alpha")
+        self.assertEqual(returned_loc_data.to_dict("list"), loc_data.to_dict("list"))
+        self.assertEqual(warnings, [])
+        self.assertEqual(exclude_summary["repository"], "alpha")
 
     def test_template_exclude_dir_does_not_emit_missing_path_warning(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -132,12 +188,14 @@ class RepositoryWarningTests(unittest.TestCase):
                 branch_name="main",
                 cache_dir=Path(tmp_dir) / "cache",
                 output_dir=Path(tmp_dir) / "out",
-                exclude_dirs=[".venv"],
-                exclude_warning_dirs=[],
+                options=GitRepoLOCAnalyzerOptions(
+                    exclude_dirs=[".venv"],
+                    exclude_warning_dirs=[],
+                ),
                 show_progress=False,
             )
 
-        self.assertEqual(analyzer._warnings, [])
+        self.assertEqual(analyzer.get_warnings(), [])
 
     def test_missing_exclude_path_warnings_are_omitted_from_summary(self) -> None:
         stderr = StringIO()
@@ -417,8 +475,9 @@ class RepositoryProgressTests(unittest.TestCase):
                 exclude_summaries=[],
             )
 
-        self.assertFalse(analyze.call_args.kwargs["show_progress"])
-        self.assertIs(analyze.call_args.kwargs["progress_queue"], progress_queue)
+        request = analyze.call_args.args[0]
+        self.assertFalse(request.show_progress)
+        self.assertIs(request.progress_queue, progress_queue)
         self.assertEqual(results[0].to_dict("list"), loc_data.to_dict("list"))
         progress.update.assert_called_once_with(1)
 

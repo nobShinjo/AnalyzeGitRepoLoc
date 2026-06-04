@@ -22,7 +22,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any
 
-import pandas as pd
+import pandas as pd  # pyright: ignore[reportMissingImports]
 
 
 @dataclass(frozen=True)
@@ -32,6 +32,7 @@ class _TickRule:
     dtick: str
 
     def as_payload(self) -> dict[str, int | str | None]:
+        """Return this tick rule as a JSON-serializable mapping."""
         return {
             "max_span": self.max_span,
             "tickformat": self.tickformat,
@@ -47,23 +48,25 @@ _INTERVAL_ALIASES = {
     "month": "monthly",
     "monthly": "monthly",
 }
+_SHORT_DAY_TICKFORMAT = "%b %d"
+_MONTH_YEAR_TICKFORMAT = "%b %Y"
 
 _TICK_RULES = {
     "daily": (
-        _TickRule(14, "%b %d", "D1"),
-        _TickRule(45, "%b %d", "D7"),
-        _TickRule(120, "%b %d", "D14"),
-        _TickRule(370, "%b %Y", "M1"),
-        _TickRule(None, "%b %Y", "M3"),
+        _TickRule(14, _SHORT_DAY_TICKFORMAT, "D1"),
+        _TickRule(45, _SHORT_DAY_TICKFORMAT, "D7"),
+        _TickRule(120, _SHORT_DAY_TICKFORMAT, "D14"),
+        _TickRule(370, _MONTH_YEAR_TICKFORMAT, "M1"),
+        _TickRule(None, _MONTH_YEAR_TICKFORMAT, "M3"),
     ),
     "weekly": (
-        _TickRule(26, "%b %d", "W1"),
-        _TickRule(104, "%b %Y", "M1"),
-        _TickRule(None, "%b %Y", "M3"),
+        _TickRule(26, _SHORT_DAY_TICKFORMAT, "W1"),
+        _TickRule(104, _MONTH_YEAR_TICKFORMAT, "M1"),
+        _TickRule(None, _MONTH_YEAR_TICKFORMAT, "M3"),
     ),
     "monthly": (
-        _TickRule(24, "%b %Y", "M1"),
-        _TickRule(72, "%b %Y", "M3"),
+        _TickRule(24, _MONTH_YEAR_TICKFORMAT, "M1"),
+        _TickRule(72, _MONTH_YEAR_TICKFORMAT, "M3"),
         _TickRule(None, "%Y", "M6"),
     ),
 }
@@ -110,7 +113,7 @@ def resolve_xaxis_tick_config(
     for rule in rules:
         if rule.max_span is None or effective_span <= rule.max_span:
             return rule.tickformat, rule.dtick
-    return "%b %Y", "M1"
+    return _MONTH_YEAR_TICKFORMAT, "M1"
 
 
 def select_tick_values(

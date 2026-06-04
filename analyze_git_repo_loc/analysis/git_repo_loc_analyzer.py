@@ -13,7 +13,7 @@ Functions:
         Checks if a branch exists in the given Git repository.
     is_comment_or_empty_line(line: str, language: str) -> bool:
         Checks if a line is a comment or an empty line.
-    load_cache() -> pd.DataFrame:
+    load_cache() -> pd.DataFrame | None:
         Loads the cached commit data from the cache directory.
     get_commit_analysis(
         progress_callback: Callable[[str, int], None] | None = None
@@ -34,9 +34,10 @@ import json
 import os
 import sys
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Union
+from typing import Any, Union
 from urllib.parse import urlparse
 
 import pandas as pd
@@ -47,6 +48,20 @@ from tqdm import tqdm
 from analyze_git_repo_loc.i18n import tr
 from analyze_git_repo_loc.language_comment import LanguageComment
 from analyze_git_repo_loc.language_extensions import LanguageExtensions
+
+
+@dataclass(frozen=True)
+class GitRepoLOCAnalyzerOptions:
+    """Optional analysis settings for ``GitRepoLOCAnalyzer``."""
+
+    since: datetime | None = None
+    to: datetime | None = None
+    from_tag: str | None = None
+    to_tag: str | None = None
+    authors: list[str] | None = None
+    languages: list[str] | None = None
+    exclude_dirs: list[str] | None = None
+    exclude_warning_dirs: list[str] | None = None
 
 
 class GitRepoLOCAnalyzer:
@@ -60,14 +75,7 @@ class GitRepoLOCAnalyzer:
         branch_name: str,
         cache_dir: Path,
         output_dir: Path,
-        since: datetime = None,
-        to: datetime = None,
-        from_tag: str = None,
-        to_tag: str = None,
-        authors: list[str] = None,
-        languages: list[str] = None,
-        exclude_dirs: list[str] = None,
-        exclude_warning_dirs: list[str] | None = None,
+        options: GitRepoLOCAnalyzerOptions | None = None,
         repo_ref: Union[Path, str, None] = None,
         show_progress: bool = True,
     ):
@@ -79,15 +87,10 @@ class GitRepoLOCAnalyzer:
             branch_name (str): The name of the branch to analyze.
             cache_dir (Path): The directory where intermediate results can be cached.
             output_dir (Path): The directory where final outputs will be saved.
-            since (datetime): The start date for filtering commits.
-            to (datetime): The end date for filtering commits.
-            from_tag (str): The start tag for filtering commits.
-            to_tag (str): The end tag for filtering commits.
-            authors (list[str]): A list of author names to filter commits.
-            languages (list[str]): A list of languages to filter commits.
-            exclude_dirs (list[str]): A list of directories to exclude from analysis.
-            exclude_warning_dirs (list[str] | None): Excluded directories that should emit missing-path warnings.
-            repo_ref (Union[Path, str, None]): Original repository path or URL for cache identity.
+            options (GitRepoLOCAnalyzerOptions | None):
+                Optional analysis filters and exclude settings.
+            repo_ref (Union[Path, str, None]):
+                Original repository path or URL for cache identity.
             show_progress (bool): Whether to show progress bars during analysis.
 
         Raises:
@@ -100,34 +103,46 @@ class GitRepoLOCAnalyzer:
         """ Branch name to analyze """
         self._repo_ref = repo_ref if repo_ref is not None else repo_path
         """ Repository path or URL used for cache identity """
+        options = options or GitRepoLOCAnalyzerOptions()
 
         # Make output directory.
-        self._cache_path = self.make_output_dir(cache_dir / repo_path.name).resolve()
+        repository_name = self.get_repository_name(repo_path)
+        self._cache_path = self.make_output_dir(cache_dir / repository_name).resolve()
         """ Path to cache directory """
-        self._output_path = self.make_output_dir(output_dir / repo_path.name).resolve()
+        self._output_path = self.make_output_dir(output_dir / repository_name).resolve()
         """ Path to output directory """
 
         # pydriller options
-        self._since = since
+        self._since = options.since
         """ Start date for filtering commits """
-        self._to = to
+        self._to = options.to
         """ End date for filtering commits """
-        self._from_tag = from_tag
+        self._from_tag = options.from_tag
         """ Start tag for filtering commits """
-        self._to_tag = to_tag
+        self._to_tag = options.to_tag
         """ End tag for filtering commits """
-        self._authors = authors
+        self._authors = options.authors
         """ List of author names to filter commits """
-        self._languages = languages
+        self._languages = options.languages
         """ List of languages to filter commits """
-        self._language_extensions = LanguageExtensions.get_extensions(languages) or None
+        self._language_extensions = (
+            LanguageExtensions.get_extensions(options.languages)
+            if options.languages
+            else None
+        )
         """ Language extensions to filter commits """
         self._warnings: list[str] = []
         """Non-fatal analysis warnings collected for the caller."""
-        self._exclude_dirs = [Path(repo_path).resolve() / d for d in exclude_dirs or []]
+        self._exclude_dirs = [
+            Path(repo_path).resolve() / d for d in options.exclude_dirs or []
+        ]
         """ List of directories to exclude from analysis """
 
-        warning_dirs = exclude_dirs if exclude_warning_dirs is None else exclude_warning_dirs
+        warning_dirs = (
+            options.exclude_dirs
+            if options.exclude_warning_dirs is None
+            else options.exclude_warning_dirs
+        )
         for raw_exclude_dir in warning_dirs or []:
             exclude_dir = Path(repo_path).resolve() / raw_exclude_dir
             if not exclude_dir.exists():
@@ -211,7 +226,7 @@ class GitRepoLOCAnalyzer:
         try:
             repo = Repo(repo_path)
             return branch_name in repo.heads
-        except (GitCommandError, AttributeError):
+        except GitCommandError, AttributeError:
             return False
 
     @classmethod
@@ -234,7 +249,7 @@ class GitRepoLOCAnalyzer:
             stripped_line.startswith(syntax) for syntax in comment_syntax
         )
 
-    def load_cache(self) -> pd.DataFrame:
+    def load_cache(self) -> pd.DataFrame | None:
         """
         Load the cached commit data from the cache directory.
 
@@ -242,13 +257,13 @@ class GitRepoLOCAnalyzer:
         at the specified cache path. If the file does not exist, it does nothing.
 
         Returns:
-            pd.DataFrame: The cached commit data, if available, otherwise an empty DataFrame.
+            pd.DataFrame | None: The cached commit data when available, otherwise ``None``.
         """
         if not self._is_cache_metadata_compatible(self._cache_metadata):
             return None
         try:
             return pd.read_pickle(self._cache_path / "commit_data.pkl")
-        except (FileNotFoundError, pd.errors.EmptyDataError):
+        except FileNotFoundError, pd.errors.EmptyDataError:
             print("No cache file found. it does nothing, and continue.")
             return None
 
@@ -270,7 +285,7 @@ class GitRepoLOCAnalyzer:
             only_modifications_with_file_types=self._language_extensions,
             only_no_merge=True,
             histogram_diff=True,
-            num_workers=os.cpu_count(),
+            num_workers=os.cpu_count() or 1,
         )
 
     def _count_commits_for_scan(self) -> int | None:
@@ -291,13 +306,10 @@ class GitRepoLOCAnalyzer:
                     root = Path(worktree).resolve()
                     if candidate != root and root in candidate.parents:
                         pathspec = str(candidate.relative_to(root))
-                except (OSError, ValueError):
+                except OSError, ValueError:
                     pathspec = None
 
-            kwargs: dict[str, object] = {
-                "rev": self._branch_name,
-                "no_merges": True,
-            }
+            kwargs: dict[str, str] = {}
             if self._since is not None:
                 kwargs["since"] = self._since.isoformat()
             if self._to is not None:
@@ -307,8 +319,15 @@ class GitRepoLOCAnalyzer:
             if pathspec:
                 kwargs["paths"] = pathspec
 
-            return sum(1 for _ in repo.iter_commits(**kwargs))
-        except (GitCommandError, OSError, TypeError, ValueError):
+            return sum(
+                1
+                for _ in repo.iter_commits(
+                    self._branch_name,
+                    no_merges=True,
+                    **kwargs,
+                )
+            )
+        except GitCommandError, OSError, TypeError, ValueError:
             return None
 
     def _get_commits(
@@ -332,7 +351,7 @@ class GitRepoLOCAnalyzer:
         if progress_callback is not None and scan_total is not None:
             try:
                 progress_callback("scan_total", scan_total)
-            except (AttributeError, EOFError, OSError, TypeError, ValueError):
+            except AttributeError, EOFError, OSError, TypeError, ValueError:
                 pass
         for commit in tqdm(
             repository.traverse_commits(),
@@ -345,7 +364,7 @@ class GitRepoLOCAnalyzer:
             if progress_callback is not None:
                 try:
                     progress_callback("scan_advance", 1)
-                except (AttributeError, EOFError, OSError, TypeError, ValueError):
+                except AttributeError, EOFError, OSError, TypeError, ValueError:
                     continue
         return commits
 
@@ -418,7 +437,7 @@ class GitRepoLOCAnalyzer:
         commit_data_list.extend(cached_rows)
         return True
 
-    def _should_skip_modification(self, mod: object, language: str) -> bool:
+    def _should_skip_modification(self, mod: Any, language: str) -> bool:
         """
         Determine whether a file modification should be skipped.
 
@@ -458,7 +477,7 @@ class GitRepoLOCAnalyzer:
         def safe_progress(kind: str, value: int) -> None:
             try:
                 progress_callback(kind, value)
-            except (AttributeError, EOFError, OSError, TypeError, ValueError):
+            except AttributeError, EOFError, OSError, TypeError, ValueError:
                 # Ignore callback errors to avoid breaking analysis.
                 return
 
@@ -475,7 +494,7 @@ class GitRepoLOCAnalyzer:
 
     def _append_commit_rows(
         self,
-        commit: object,
+        commit: Any,
         repository_name: str,
         cache_lookup: dict[str, list[dict]] | None,
         commit_data_list: list[dict],
@@ -630,6 +649,10 @@ class GitRepoLOCAnalyzer:
 
         self._commit_data.to_pickle(self._cache_path / "commit_data.pkl")
         self._write_cache_metadata()
+
+    def get_warnings(self) -> list[str]:
+        """Return non-fatal analysis warnings collected for this repository."""
+        return list(self._warnings)
 
     @classmethod
     def get_repository_name(cls, repo_path: Union[Path, str]) -> str:
@@ -836,7 +859,7 @@ class GitRepoLOCAnalyzer:
         try:
             with open(metadata_path, "r", encoding="utf-8") as file:
                 return json.load(file)
-        except (json.JSONDecodeError, OSError):
+        except json.JSONDecodeError, OSError:
             return None
 
     def _is_cache_metadata_compatible(self, metadata: dict | None) -> bool:

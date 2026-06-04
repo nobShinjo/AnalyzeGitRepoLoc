@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+# pylint: disable=missing-function-docstring
+
 import unittest
 import tempfile
 from argparse import ArgumentParser

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+# pylint: disable=missing-function-docstring
+
 import tempfile
 import unittest
 from pathlib import Path
@@ -202,6 +204,7 @@ class RemoteAuthServiceTests(unittest.TestCase):
             capture_output=True,
             text=True,
             timeout=15,
+            check=False,
         )
 
     def test_github_cli_token_is_used_when_env_token_is_missing(self) -> None:
@@ -230,6 +233,7 @@ class RemoteAuthServiceTests(unittest.TestCase):
             capture_output=True,
             text=True,
             timeout=15,
+            check=False,
         )
 
     def test_gitlab_cli_token_is_used_when_env_token_is_missing(self) -> None:

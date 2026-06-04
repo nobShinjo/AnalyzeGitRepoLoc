@@ -50,7 +50,6 @@ from analyze_git_repo_loc.reporting.markdown_summary import generate_markdown_su
 from analyze_git_repo_loc.remote.remote_catalog import (
     RemoteCatalogError,
 )
-from analyze_git_repo_loc.interactive.tui_selector import TuiSelectionCancelled
 from analyze_git_repo_loc.interactive.tui_wizard import run_tui_wizard
 from analyze_git_repo_loc.utils import (
     analyze_git_repositories,
@@ -117,7 +116,7 @@ class _ReportProgressTracker:
 
 def _print_start(console: ColoredConsolePrinter, parser: argparse.ArgumentParser) -> None:
     console.print_h1(f"# Start {parser.prog}.")
-    print(Style.DIM + f"- {parser.description}", end=os.linesep + os.linesep)
+    print(f"{Style.DIM}- {parser.description}", end=os.linesep + os.linesep)
 
 
 def _apply_interactive_repository_selection(args: argparse.Namespace) -> None:
@@ -132,7 +131,7 @@ def _apply_interactive_repository_selection(args: argparse.Namespace) -> None:
     try:
         config_data = load_yaml_data(args.config)
         run_tui_wizard(args, config_data)
-    except (RemoteCatalogError, RuntimeError, TuiSelectionCancelled, ValueError) as ex:
+    except (RemoteCatalogError, RuntimeError, ValueError) as ex:
         print(str(ex), file=sys.stderr)
         sys.exit(1)
 
@@ -467,7 +466,7 @@ def main() -> None:
     _print_output_summary(console, output_dir, output_root)
 
     console.print_h1("\n# LOC Analyze")
-    print(Cursor.UP() + Cursor.FORWARD(50) + Fore.GREEN + tr("run.finish"))
+    print(f"{Cursor.UP()}{Cursor.FORWARD(50)}{Fore.GREEN}{tr('run.finish')}")
 
 
 def save_analysis_data(
@@ -568,11 +567,11 @@ def generate_trend_chart(
 def save_chart_data(
     output_prefix: str,
     output_path: Path,
-    trend_data: pd.DataFrame = None,
-    summary_data: pd.DataFrame = None,
-    trend_chart: go.Figure = None,
-    contribution_chart: go.Figure = None,
-):
+    trend_data: pd.DataFrame | None = None,
+    summary_data: pd.DataFrame | None = None,
+    trend_chart: go.Figure | None = None,
+    contribution_chart: go.Figure | None = None,
+) -> None:
     """
     Save the trend data and chart.
 
@@ -666,6 +665,7 @@ def generate_all_repositories_trend_chart(
         )
     except ValueError as ex:
         handle_exception(ex)
+        return
 
     # Show the chart
     if not no_plot_show:
@@ -716,13 +716,14 @@ def generate_author_contribution_chart(
     chart_builder.set_strategy(ChartStrategy.AUTHOR_CONTRIBUTION)
     try:
         author_contribution_chart = chart_builder.build(
-            trend_data=None,
+            trend_data=pd.DataFrame(),
             summary_data=author_contribution_data,
-            interval=None,
+            interval="",
             title="Author contribution by repository - All repositories",
         )
     except ValueError as ex:
         handle_exception(ex)
+        return
 
     # Show the chart
     if not no_plot_show:

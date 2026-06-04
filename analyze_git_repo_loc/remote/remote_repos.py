@@ -19,6 +19,7 @@ import hashlib
 import os
 import shutil
 from pathlib import Path
+from typing import Callable
 from urllib.parse import urlparse
 
 from git import GitCommandError, InvalidGitRepositoryError, NoSuchPathError, Repo
@@ -67,7 +68,7 @@ class RemoteRepoManager:
             repo = Repo(repo_path)
             self._ensure_origin_matches(repo, repo_url)
             self._fetch_with_auth(repo, repo_url)
-        except (InvalidGitRepositoryError, NoSuchPathError):
+        except InvalidGitRepositoryError, NoSuchPathError:
             if repo_path.exists():
                 self._remove_cache_path(repo_path)
             repo_path.parent.mkdir(parents=True, exist_ok=True)
@@ -90,6 +91,7 @@ class RemoteRepoManager:
         Returns:
             tuple[str, str] | None: Normalized identity for comparison.
         """
+
         def normalize_path(value: str) -> str:
             normalized = value.lstrip("/").rstrip("/")
             if normalized.endswith(".git"):
@@ -211,12 +213,16 @@ class RemoteRepoManager:
         identity_hash = hashlib.sha1(identity_text.encode("utf-8")).hexdigest()[:12]
         return cache_dir / "remote-repos" / f"{repo_name}-{identity_hash}"
 
+    def get_remote_cache_path(self, cache_dir: Path, repo_url: str) -> Path:
+        """Return the cache directory path for a remote repository clone."""
+        return self._get_remote_cache_path(cache_dir, repo_url)
+
     def _remove_cache_path(self, repo_path: Path) -> None:
         shutil.rmtree(repo_path, onexc=self._handle_remove_error)
 
     def _handle_remove_error(
         self,
-        function: object,
+        function: Callable[[str], object],
         path: str,
         excinfo: BaseException,
     ) -> None:

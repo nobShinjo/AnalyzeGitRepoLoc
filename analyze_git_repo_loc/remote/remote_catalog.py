@@ -29,7 +29,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Callable
 from urllib.parse import quote, urlencode, urljoin
 from urllib.request import Request, urlopen
 
@@ -219,6 +219,61 @@ def _github_headers(token: str) -> dict[str, str]:
     }
 
 
+def _collect_paginated_refs(
+    *,
+    fetch_page: Callable[[int], object],
+    normalize_item: Callable[[dict[str, Any]], RemoteRepositoryRef | None],
+    invalid_payload_message: str,
+) -> list[RemoteRepositoryRef]:
+    """Collect repository references from a paginated provider API."""
+    refs: list[RemoteRepositoryRef] = []
+    page = 1
+    while True:
+        payload = fetch_page(page)
+        if not isinstance(payload, list):
+            raise RemoteCatalogError(invalid_payload_message)
+        refs.extend(_normalized_refs_from_payload(payload, normalize_item))
+        if len(payload) < 100:
+            return refs
+        page += 1
+
+
+def _normalized_refs_from_payload(
+    payload: list[object],
+    normalize_item: Callable[[dict[str, Any]], RemoteRepositoryRef | None],
+) -> list[RemoteRepositoryRef]:
+    """Normalize repository items from one provider response page."""
+    refs: list[RemoteRepositoryRef] = []
+    for item in payload:
+        if not isinstance(item, dict):
+            continue
+        ref = normalize_item(item)
+        if ref is not None:
+            refs.append(ref)
+    return refs
+
+
+def _normalize_github_repository(
+    item: dict[str, Any],
+    *,
+    api_base_url: str,
+) -> RemoteRepositoryRef | None:
+    clone_url = item.get("clone_url") or ""
+    full_name = item.get("full_name") or item.get("name") or ""
+    if not clone_url or not full_name:
+        return None
+    return RemoteRepositoryRef(
+        provider="github",
+        name=item.get("name") or full_name.rsplit("/", 1)[-1],
+        full_name=full_name,
+        clone_url=clone_url,
+        ssh_url=item.get("ssh_url") or "",
+        web_url=item.get("html_url") or "",
+        default_branch=item.get("default_branch") or "main",
+        provider_base_url=api_base_url,
+    )
+
+
 def fetch_github_repositories(
     *,
     api_base_url: str,
@@ -234,9 +289,7 @@ def fetch_github_repositories(
     Returns:
         list[RemoteRepositoryRef]: Normalized repository refs.
     """
-    refs: list[RemoteRepositoryRef] = []
-    page = 1
-    while True:
+    def fetch_page(page: int) -> object:
         query = urlencode(
             {
                 "per_page": 100,
@@ -246,32 +299,16 @@ def fetch_github_repositories(
             }
         )
         url = f"{api_base_url.rstrip('/')}/user/repos?{query}"
-        payload = _request_json(url, _github_headers(token))
-        if not isinstance(payload, list):
-            raise RemoteCatalogError("GitHub API response must be a list.")
-        for item in payload:
-            if not isinstance(item, dict):
-                continue
-            clone_url = item.get("clone_url") or ""
-            full_name = item.get("full_name") or item.get("name") or ""
-            if not clone_url or not full_name:
-                continue
-            refs.append(
-                RemoteRepositoryRef(
-                    provider="github",
-                    name=item.get("name") or full_name.rsplit("/", 1)[-1],
-                    full_name=full_name,
-                    clone_url=clone_url,
-                    ssh_url=item.get("ssh_url") or "",
-                    web_url=item.get("html_url") or "",
-                    default_branch=item.get("default_branch") or "main",
-                    provider_base_url=api_base_url,
-                )
-            )
-        if len(payload) < 100:
-            break
-        page += 1
-    return refs
+        return _request_json(url, _github_headers(token))
+
+    return _collect_paginated_refs(
+        fetch_page=fetch_page,
+        normalize_item=lambda item: _normalize_github_repository(
+            item,
+            api_base_url=api_base_url,
+        ),
+        invalid_payload_message="GitHub API response must be a list.",
+    )
 
 
 def fetch_github_branches(
@@ -312,6 +349,27 @@ def _gitlab_headers(token: str) -> dict[str, str]:
     }
 
 
+def _normalize_gitlab_repository(
+    item: dict[str, Any],
+    *,
+    base_url: str,
+) -> RemoteRepositoryRef | None:
+    clone_url = item.get("http_url_to_repo") or ""
+    full_name = item.get("path_with_namespace") or item.get("name") or ""
+    if not clone_url or not full_name:
+        return None
+    return RemoteRepositoryRef(
+        provider="gitlab",
+        name=item.get("name") or full_name.rsplit("/", 1)[-1],
+        full_name=full_name,
+        clone_url=clone_url,
+        ssh_url=item.get("ssh_url_to_repo") or "",
+        web_url=item.get("web_url") or "",
+        default_branch=item.get("default_branch") or "main",
+        provider_base_url=base_url,
+    )
+
+
 def fetch_gitlab_repositories(
     *,
     base_url: str,
@@ -327,9 +385,7 @@ def fetch_gitlab_repositories(
     Returns:
         list[RemoteRepositoryRef]: Normalized repository refs.
     """
-    refs: list[RemoteRepositoryRef] = []
-    page = 1
-    while True:
+    def fetch_page(page: int) -> object:
         query = urlencode(
             {
                 "membership": "true",
@@ -341,32 +397,16 @@ def fetch_gitlab_repositories(
             }
         )
         url = urljoin(f"{base_url.rstrip('/')}/", f"api/v4/projects?{query}")
-        payload = _request_json(url, _gitlab_headers(token))
-        if not isinstance(payload, list):
-            raise RemoteCatalogError("GitLab API response must be a list.")
-        for item in payload:
-            if not isinstance(item, dict):
-                continue
-            clone_url = item.get("http_url_to_repo") or ""
-            full_name = item.get("path_with_namespace") or item.get("name") or ""
-            if not clone_url or not full_name:
-                continue
-            refs.append(
-                RemoteRepositoryRef(
-                    provider="gitlab",
-                    name=item.get("name") or full_name.rsplit("/", 1)[-1],
-                    full_name=full_name,
-                    clone_url=clone_url,
-                    ssh_url=item.get("ssh_url_to_repo") or "",
-                    web_url=item.get("web_url") or "",
-                    default_branch=item.get("default_branch") or "main",
-                    provider_base_url=base_url,
-                )
-            )
-        if len(payload) < 100:
-            break
-        page += 1
-    return refs
+        return _request_json(url, _gitlab_headers(token))
+
+    return _collect_paginated_refs(
+        fetch_page=fetch_page,
+        normalize_item=lambda item: _normalize_gitlab_repository(
+            item,
+            base_url=base_url,
+        ),
+        invalid_payload_message="GitLab API response must be a list.",
+    )
 
 
 def fetch_gitlab_branches(
@@ -451,8 +491,6 @@ def fetch_remote_repositories(
                     token=token,
                 )
             )
-    except RemoteCatalogError:
-        raise
     except OSError as ex:
         raise RemoteCatalogError(f"Failed to fetch remote repositories: {ex}") from ex
     except json.JSONDecodeError as ex:

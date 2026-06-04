@@ -126,12 +126,17 @@ def render_init_config_yaml(config_data: dict[str, Any]) -> str:
     Returns:
         str: Rendered YAML ending with a newline.
     """
-    return yaml.safe_dump(
+    rendered = yaml.safe_dump(
         config_data,
         allow_unicode=False,
         default_flow_style=False,
         sort_keys=False,
     )
+    if isinstance(rendered, bytes):
+        return rendered.decode("utf-8")
+    if rendered is None:
+        raise TypeError("yaml.safe_dump returned no YAML text.")
+    return rendered
 
 
 def resolve_init_config_path(
