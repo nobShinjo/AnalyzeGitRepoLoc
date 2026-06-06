@@ -12,6 +12,32 @@
 
 ### Security
 
+## [3.1.0] - 2026-06-07
+
+### Added
+
+- Add metadata regression tests to pin the `3.1.0` release version and secure
+  dependency floors.
+- Add analysis helper warning tests to keep pandas 3 compatibility covered.
+
+### Changed
+
+- Raise runtime dependency floors for `GitPython`, `pandas`, `plotly`,
+  `PyDriller`, `PyYAML`, `pip-licenses`, `tqdm`, and `pytest`.
+- Regenerate `uv.lock` for the `3.1.0` dependency set.
+
+### Fixed
+
+- Remove deprecated pandas `infer_objects(copy=False)` calls so report helpers
+  stay warning-free on pandas 3.
+
+### Removed
+
+### Security
+
+- Update `GitPython` to `3.1.50` to move the lockfile onto the patched release
+  line for the 2026 advisory affecting older versions.
+
 ## [3.0.0] - 2026-06-06
 
 ### Added
