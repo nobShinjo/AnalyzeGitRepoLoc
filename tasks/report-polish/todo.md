@@ -9,4 +9,4 @@
 - [x] Run focused tests.
 - [x] Run full tests.
 - [x] Run browser smoke verification.
-- [ ] Commit changes.
+- [x] Commit changes.

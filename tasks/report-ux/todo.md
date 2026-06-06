@@ -8,4 +8,4 @@
 - [x] Run focused tests.
 - [x] Run full test suite.
 - [x] Run Browser smoke verification.
-- [ ] Commit implementation.
+- [x] Commit implementation.
