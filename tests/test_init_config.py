@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-# pylint: disable=missing-function-docstring,protected-access
+# pylint: disable=missing-function-docstring
 
 import argparse
 import sys
@@ -550,7 +550,7 @@ class InitWizardStateTests(unittest.TestCase):
                 tr(
                     "init.field.overwrite",
                     path=config_path,
-                    suffix=controller._bool_suffix(controller.state.overwrite_existing),
+                    suffix="Y/n",
                 ),
                 controller.render(),
             )
@@ -581,6 +581,8 @@ class InitWizardRuntimeTests(unittest.TestCase):
 
     def test_register_refresh_handler_omits_filter_when_not_provided(self) -> None:
         class FakeKeyBindings:
+            """Capture key-binding registrations for runtime helper tests."""
+
             def __init__(self) -> None:
                 self.calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
 

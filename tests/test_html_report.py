@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-# pylint: disable=missing-function-docstring,protected-access
+# pylint: disable=missing-function-docstring
 
 import tempfile
 import unittest
@@ -128,6 +128,7 @@ class HtmlReportUxTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             with patch.object(main_module, "tqdm", return_value=progress_context):
                 with patch.object(main_module, "generate_html_report") as report:
+                    # pylint: disable-next=protected-access
                     main_module._generate_report(
                         output_dir=Path(tmp_dir),
                         output_root=Path(tmp_dir),
@@ -191,6 +192,7 @@ class HtmlReportUxTests(unittest.TestCase):
                             ):
                                 with patch.object(main_module, "_save_analysis_outputs"):
                                     with patch.object(main_module, "_generate_charts"):
+                                        # pylint: disable-next=protected-access
                                         with patch.object(
                                             main_module, "_generate_report"
                                         ) as report:
@@ -345,7 +347,7 @@ class HtmlReportUxTests(unittest.TestCase):
                 {
                     "Month": "2026-01-01",
                     "Repository": "alpha-service-with-a-very-long-name",
-                    "Author": "Nob Shinjo",
+                    "Author": "Example Author",
                     "NLOC_Added": 120,
                     "NLOC_Deleted": 20,
                     "NLOC": 100,
@@ -368,7 +370,7 @@ class HtmlReportUxTests(unittest.TestCase):
                 {
                     "Month": "2026-01-01",
                     "Repository": "alpha-service-with-a-very-long-name",
-                    "Author": "Nob Shinjo",
+                    "Author": "Example Author",
                     "Language": "Python",
                     "NLOC_Added": 120,
                     "NLOC_Deleted": 20,

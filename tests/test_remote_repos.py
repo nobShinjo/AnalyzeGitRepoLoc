@@ -14,6 +14,17 @@ from analyze_git_repo_loc.remote.remote_auth import RemoteAuthService
 from analyze_git_repo_loc.remote.remote_auth import build_host_token_env_var
 from analyze_git_repo_loc.remote.remote_repos import RemoteRepoManager
 
+GITHUB_ANALYZER_URL = "https://github.com/acme/AnalyzeGitRepoLoc.git"
+GITHUB_ANALYZER_URL_NO_DOT_GIT = "https://github.com/acme/AnalyzeGitRepoLoc"
+GITHUB_PRIVATE_REPO_URL = "https://github.com/acme/private.git"
+SELF_HOSTED_GITHUB_PRIVATE_REPO_URL = "https://git.example.com/team/private.git"
+SELF_HOSTED_GITHUB_ACME_REPO_URL = "https://git.example.com/acme/private.git"
+GITLAB_PRIVATE_REPO_URL = "https://gitlab.com/acme/private.git"
+
+
+def _https_auth_url(username: str, token: str, host: str, path: str) -> str:
+    return f"https://{username}:{token}@{host}/{path}"
+
 
 class RemoteRepoManagerCacheTests(unittest.TestCase):
     """Remote repository cache path and cleanup tests."""
@@ -22,23 +33,24 @@ class RemoteRepoManagerCacheTests(unittest.TestCase):
         manager = RemoteRepoManager()
         repo = Mock()
         repo.remotes = Mock()
-        repo.remotes.origin.url = "https://github.com/acme/AnalyzeGitRepoLoc.git"
+        repo.remotes.origin.url = GITHUB_ANALYZER_URL
         repo.working_tree_dir = "cache/repo"
 
+        # pylint: disable-next=protected-access
         manager._ensure_origin_matches(
             repo,
-            "https://github.com/acme/AnalyzeGitRepoLoc",
+            GITHUB_ANALYZER_URL_NO_DOT_GIT,
         )
 
     def test_cache_path_uses_remote_identity_to_avoid_name_collisions(self) -> None:
         manager = RemoteRepoManager()
         cache_dir = Path("out") / ".cache"
 
-        first = manager._get_remote_cache_path(
+        first = manager.get_remote_cache_path(
             cache_dir,
-            "https://github.com/acme/AnalyzeGitRepoLoc.git",
+            GITHUB_ANALYZER_URL,
         )
-        second = manager._get_remote_cache_path(
+        second = manager.get_remote_cache_path(
             cache_dir,
             "https://github.com/other/AnalyzeGitRepoLoc.git",
         )
@@ -53,6 +65,7 @@ class RemoteRepoManagerCacheTests(unittest.TestCase):
         retry = Mock()
 
         with patch("os.chmod") as chmod:
+            # pylint: disable-next=protected-access
             manager._handle_remove_error(retry, failed_path, PermissionError("denied"))
 
         chmod.assert_called_once_with(failed_path, 0o700)
@@ -65,13 +78,18 @@ class RemoteRepoManagerCacheTests(unittest.TestCase):
             path.mkdir()
 
             with patch("shutil.rmtree") as rmtree:
+                # pylint: disable-next=protected-access
                 manager._remove_cache_path(path)
 
-        rmtree.assert_called_once_with(path, onexc=manager._handle_remove_error)
+        rmtree.assert_called_once()
+        self.assertEqual(rmtree.call_args.args, (path,))
+        onexc = rmtree.call_args.kwargs["onexc"]
+        self.assertIs(getattr(onexc, "__self__", None), manager)
+        self.assertEqual(getattr(onexc, "__name__", ""), "_handle_remove_error")
 
     def test_clone_uses_noninteractive_git_auth_env(self) -> None:
         auth = Mock()
-        auth.build_auth_candidates.return_value = ["https://github.com/acme/private.git"]
+        auth.build_auth_candidates.return_value = [GITHUB_PRIVATE_REPO_URL]
         auth.git_env.return_value = {
             "GIT_TERMINAL_PROMPT": "0",
             "GCM_INTERACTIVE": "never",
@@ -84,14 +102,15 @@ class RemoteRepoManagerCacheTests(unittest.TestCase):
             "analyze_git_repo_loc.remote.remote_repos.Repo.clone_from",
             return_value=repo,
         ) as clone:
+            # pylint: disable-next=protected-access
             result = manager._clone_with_auth(
-                "https://github.com/acme/private.git",
+                GITHUB_PRIVATE_REPO_URL,
                 Path("cache/private"),
             )
 
         self.assertIs(result, repo)
         clone.assert_called_once_with(
-            "https://github.com/acme/private.git",
+            GITHUB_PRIVATE_REPO_URL,
             Path("cache/private"),
             env={
                 "GIT_TERMINAL_PROMPT": "0",
@@ -101,7 +120,7 @@ class RemoteRepoManagerCacheTests(unittest.TestCase):
 
     def test_fetch_uses_noninteractive_git_auth_env(self) -> None:
         auth = Mock()
-        auth.build_auth_candidates.return_value = ["https://github.com/acme/private.git"]
+        auth.build_auth_candidates.return_value = [GITHUB_PRIVATE_REPO_URL]
         auth.git_env.return_value = {
             "GIT_TERMINAL_PROMPT": "0",
             "GCM_INTERACTIVE": "never",
@@ -109,9 +128,10 @@ class RemoteRepoManagerCacheTests(unittest.TestCase):
         manager = RemoteRepoManager(auth)
         repo = Mock()
         origin = repo.remotes.origin
-        origin.url = "https://github.com/acme/private.git"
+        origin.url = GITHUB_PRIVATE_REPO_URL
 
-        manager._fetch_with_auth(repo, "https://github.com/acme/private.git")
+        # pylint: disable-next=protected-access
+        manager._fetch_with_auth(repo, GITHUB_PRIVATE_REPO_URL)
 
         repo.git.fetch.assert_called_once_with(
             "--all",
@@ -132,12 +152,17 @@ class RemoteAuthServiceTests(unittest.TestCase):
 
         with patch.dict("os.environ", {env_name: "host-token"}, clear=True):
             candidates = auth.build_auth_candidates(
-                "https://git.example.com/team/private.git"
+                SELF_HOSTED_GITHUB_PRIVATE_REPO_URL
             )
 
         self.assertEqual(
             candidates[0],
-            "https://oauth2:host-token@git.example.com/team/private.git",
+            _https_auth_url(
+                "oauth2",
+                "host-token",
+                "git.example.com",
+                "team/private.git",
+            ),
         )
 
     def test_host_specific_token_uses_github_username_with_provider_hint(self) -> None:
@@ -151,12 +176,17 @@ class RemoteAuthServiceTests(unittest.TestCase):
             clear=True,
         ):
             candidates = auth.build_auth_candidates(
-                "https://git.example.com/team/private.git"
+                SELF_HOSTED_GITHUB_PRIVATE_REPO_URL
             )
 
         self.assertEqual(
             candidates[0],
-            "https://x-access-token:host-token@git.example.com/team/private.git",
+            _https_auth_url(
+                "x-access-token",
+                "host-token",
+                "git.example.com",
+                "team/private.git",
+            ),
         )
 
     def test_github_token_fallback_uses_provider_hint_for_self_hosted_github(self) -> None:
@@ -169,12 +199,17 @@ class RemoteAuthServiceTests(unittest.TestCase):
             clear=True,
         ):
             candidates = auth.build_auth_candidates(
-                "https://git.example.com/team/private.git"
+                SELF_HOSTED_GITHUB_PRIVATE_REPO_URL
             )
 
         self.assertEqual(
             candidates[0],
-            "https://x-access-token:gh-token@git.example.com/team/private.git",
+            _https_auth_url(
+                "x-access-token",
+                "gh-token",
+                "git.example.com",
+                "team/private.git",
+            ),
         )
 
     def test_github_cli_token_uses_provider_hint_for_self_hosted_github(self) -> None:
@@ -192,12 +227,17 @@ class RemoteAuthServiceTests(unittest.TestCase):
                     runner,
                 ):
                     candidates = auth.build_auth_candidates(
-                        "https://git.example.com/acme/private.git"
+                        SELF_HOSTED_GITHUB_ACME_REPO_URL
                     )
 
         self.assertEqual(
             candidates[0],
-            "https://x-access-token:gh-token@git.example.com/acme/private.git",
+            _https_auth_url(
+                "x-access-token",
+                "gh-token",
+                "git.example.com",
+                "acme/private.git",
+            ),
         )
         runner.assert_called_once_with(
             ["gh", "auth", "token", "--hostname", "git.example.com"],
@@ -221,12 +261,17 @@ class RemoteAuthServiceTests(unittest.TestCase):
                     runner,
                 ):
                     candidates = auth.build_auth_candidates(
-                        "https://github.com/acme/private.git"
+                        GITHUB_PRIVATE_REPO_URL
                     )
 
         self.assertEqual(
             candidates[0],
-            "https://x-access-token:gh-token@github.com/acme/private.git",
+            _https_auth_url(
+                "x-access-token",
+                "gh-token",
+                "github.com",
+                "acme/private.git",
+            ),
         )
         runner.assert_called_once_with(
             ["gh", "auth", "token", "--hostname", "github.com"],
@@ -255,12 +300,17 @@ class RemoteAuthServiceTests(unittest.TestCase):
                     runner,
                 ):
                     candidates = auth.build_auth_candidates(
-                        "https://gitlab.com/acme/private.git"
+                        GITLAB_PRIVATE_REPO_URL
                     )
 
         self.assertEqual(
             candidates[0],
-            "https://oauth2:glpat-token@gitlab.com/acme/private.git",
+            _https_auth_url(
+                "oauth2",
+                "glpat-token",
+                "gitlab.com",
+                "acme/private.git",
+            ),
         )
 
     def test_git_commands_disable_interactive_credential_prompts(self) -> None:

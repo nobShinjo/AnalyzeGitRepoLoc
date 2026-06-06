@@ -84,7 +84,7 @@ def test_manual_mode_ignores_detected_template_paths(tmp_path: Path) -> None:
     )
 
     assert recommendation.paths == ["manual-only"]
-    assert recommendation.template_paths == []
+    assert not recommendation.template_paths
 
 
 def test_off_mode_disables_all_excludes(tmp_path: Path) -> None:
@@ -96,7 +96,7 @@ def test_off_mode_disables_all_excludes(tmp_path: Path) -> None:
         mode="off",
     )
 
-    assert recommendation.paths == []
+    assert not recommendation.paths
     assert recommendation.manual_paths == ["vendor"]
 
 

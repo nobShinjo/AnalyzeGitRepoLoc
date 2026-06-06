@@ -1,6 +1,8 @@
+"""Tests for repository progress reporting and warning aggregation helpers."""
+
 from __future__ import annotations
 
-# pylint: disable=missing-function-docstring,protected-access
+# pylint: disable=missing-function-docstring
 
 import argparse
 import sys
@@ -8,7 +10,7 @@ import tempfile
 import unittest
 from io import StringIO
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 from unittest.mock import ANY, MagicMock, Mock, patch
 
 import pandas as pd
@@ -20,6 +22,17 @@ from analyze_git_repo_loc.analysis.git_repo_loc_analyzer import (
     GitRepoLOCAnalyzerOptions,
 )
 from analyze_git_repo_loc.i18n import tr
+from analyze_git_repo_loc.repo_progress import (
+    REPO_EVENT_ADVANCE,
+    REPO_EVENT_FINISH,
+    REPO_EVENT_SCAN_ADVANCE,
+    REPO_EVENT_SCAN_TOTAL,
+    REPO_EVENT_TOTAL,
+    REPO_PROGRESS_BAR_FORMAT,
+    apply_repo_progress_event,
+    format_repo_progress_description,
+    truncate_repo_label,
+)
 
 
 class RepositoryWarningTests(unittest.TestCase):
@@ -68,7 +81,9 @@ class RepositoryWarningTests(unittest.TestCase):
                         _,
                         warnings,
                         exclude_summary,
-                    ) = utils._analyze_single_repository(
+                    ) = (
+                        # pylint: disable-next=protected-access
+                        utils._analyze_single_repository(
                         index=0,
                         repo_path=repo_path,
                         branch_name="main",
@@ -84,7 +99,7 @@ class RepositoryWarningTests(unittest.TestCase):
                         languages=None,
                         clear_cache=False,
                         show_progress=False,
-                    )
+                    ))
 
         self.assertEqual(repository_name, "alpha")
         self.assertEqual(warnings, ["excluded path does not exist: .venv"])
@@ -108,7 +123,9 @@ class RepositoryWarningTests(unittest.TestCase):
                         _,
                         _,
                         exclude_summary,
-                    ) = utils._analyze_single_repository(
+                    ) = (
+                        # pylint: disable-next=protected-access
+                        utils._analyze_single_repository(
                         index=0,
                         repo_path=repo_path,
                         branch_name="main",
@@ -124,7 +141,7 @@ class RepositoryWarningTests(unittest.TestCase):
                         languages=None,
                         clear_cache=False,
                         show_progress=False,
-                    )
+                    ))
 
         self.assertEqual(repository_name, "alpha")
         self.assertEqual(exclude_summary["repository"], "alpha")
@@ -170,7 +187,10 @@ class RepositoryWarningTests(unittest.TestCase):
                         returned_loc_data,
                         warnings,
                         exclude_summary,
-                    ) = utils._analyze_single_repository(request)
+                    ) = (
+                        # pylint: disable-next=protected-access
+                        cast(Any, utils._analyze_single_repository)(request)
+                    )
 
         self.assertEqual(index, 0)
         self.assertEqual(repository_name, "alpha")
@@ -201,6 +221,7 @@ class RepositoryWarningTests(unittest.TestCase):
         stderr = StringIO()
 
         with patch.object(sys, "stderr", stderr):
+            # pylint: disable-next=protected-access
             utils._print_repository_warnings(
                 [
                     "SoFiRA: excluded path does not exist: node_modules",
@@ -214,6 +235,7 @@ class RepositoryWarningTests(unittest.TestCase):
         stderr = StringIO()
 
         with patch.object(sys, "stderr", stderr):
+            # pylint: disable-next=protected-access
             utils._print_repository_warnings(["SoFiRA: unexpected warning"])
 
         self.assertEqual(
@@ -225,6 +247,7 @@ class RepositoryWarningTests(unittest.TestCase):
         stdout = StringIO()
 
         with patch.object(sys, "stdout", stdout):
+            # pylint: disable-next=protected-access
             utils._print_repository_exclude_summaries(
                 [
                     {
@@ -267,6 +290,7 @@ class RepositoryProgressTests(unittest.TestCase):
         progress.pos = 0
 
         with patch.object(utils, "tqdm") as tqdm_mock:
+            # pylint: disable-next=protected-access
             utils._build_repo_progress_bars(
                 [(Path("alpha"), "main", [], None)],
                 progress=progress,
@@ -275,27 +299,27 @@ class RepositoryProgressTests(unittest.TestCase):
 
         tqdm_mock.assert_called_once_with(
             total=None,
-            desc=utils._format_repo_progress_description(
+            desc=format_repo_progress_description(
                 "alpha", tr("progress.repo.status.queued")
             ),
             position=1,
             leave=True,
             unit="commit",
-            bar_format=utils._REPO_PROGRESS_BAR_FORMAT,
+            bar_format=REPO_PROGRESS_BAR_FORMAT,
         )
 
     def test_repo_child_progress_truncates_long_labels_with_ascii_ellipsis(
         self,
     ) -> None:
         long_name = "alpha-service-with-a-very-long-repository-name"
-        label = utils._truncate_repo_label(long_name, 32)
+        label = truncate_repo_label(long_name, 32)
 
         self.assertEqual(label, "alpha-service-with-a-very-lon...")
         self.assertEqual(len(label), 32)
 
     def test_repo_child_progress_descriptions_keep_fixed_width(self) -> None:
         descriptions = [
-            utils._format_repo_progress_description("alpha", status)
+            format_repo_progress_description("alpha", status)
             for status in (
                 tr("progress.repo.status.queued"),
                 tr("progress.repo.status.getting_commits"),
@@ -310,134 +334,134 @@ class RepositoryProgressTests(unittest.TestCase):
     def test_repo_child_progress_count_format_uses_fixed_width(self) -> None:
         self.assertIn(
             "{n_fmt:>5}/{total_fmt:>5}",
-            utils._REPO_PROGRESS_BAR_FORMAT,
+            REPO_PROGRESS_BAR_FORMAT,
         )
 
     def test_repo_child_progress_tracks_commit_scan_before_analysis(self) -> None:
-        bar = Mock()
-        bar.n = 0
-        bar.total = None
+        progress_bar = Mock()
+        progress_bar.n = 0
+        progress_bar.total = None
 
         self.assertTrue(
-            utils._apply_repo_progress_event(
-                kind=utils._REPO_EVENT_SCAN_ADVANCE,
-                bar=bar,
+            apply_repo_progress_event(
+                kind=REPO_EVENT_SCAN_ADVANCE,
+                bar=progress_bar,
                 label="alpha",
                 value=7,
             )
         )
 
-        self.assertIsNone(bar.total)
-        bar.update.assert_called_once_with(7)
+        self.assertIsNone(progress_bar.total)
+        progress_bar.update.assert_called_once_with(7)
 
     def test_repo_child_progress_uses_commit_scan_total(self) -> None:
-        bar = Mock()
-        bar.n = 0
-        bar.total = None
+        progress_bar = Mock()
+        progress_bar.n = 0
+        progress_bar.total = None
 
         self.assertTrue(
-            utils._apply_repo_progress_event(
-                kind=utils._REPO_EVENT_SCAN_TOTAL,
-                bar=bar,
+            apply_repo_progress_event(
+                kind=REPO_EVENT_SCAN_TOTAL,
+                bar=progress_bar,
                 label="alpha",
                 value=300,
             )
         )
 
-        self.assertEqual(bar.total, 300)
-        self.assertEqual(bar.n, 0)
-        bar.set_description_str.assert_called_once_with(
-            utils._format_repo_progress_description(
+        self.assertEqual(progress_bar.total, 300)
+        self.assertEqual(progress_bar.n, 0)
+        progress_bar.set_description_str.assert_called_once_with(
+            format_repo_progress_description(
                 "alpha", tr("progress.repo.status.getting_commits")
             )
         )
-        bar.refresh.assert_called_once()
+        progress_bar.refresh.assert_called_once()
 
     def test_repo_child_progress_switches_to_analysis_total(self) -> None:
-        bar = Mock()
-        bar.n = 21
-        bar.total = None
+        progress_bar = Mock()
+        progress_bar.n = 21
+        progress_bar.total = None
 
         self.assertTrue(
-            utils._apply_repo_progress_event(
-                kind=utils._REPO_EVENT_TOTAL,
-                bar=bar,
+            apply_repo_progress_event(
+                kind=REPO_EVENT_TOTAL,
+                bar=progress_bar,
                 label="alpha",
                 value=12,
             )
         )
 
-        self.assertEqual(bar.total, 12)
-        self.assertEqual(bar.n, 0)
-        bar.set_description_str.assert_called_once_with(
-            utils._format_repo_progress_description(
+        self.assertEqual(progress_bar.total, 12)
+        self.assertEqual(progress_bar.n, 0)
+        progress_bar.set_description_str.assert_called_once_with(
+            format_repo_progress_description(
                 "alpha", tr("progress.repo.status.analyzing_commits")
             )
         )
-        bar.refresh.assert_called_once()
+        progress_bar.refresh.assert_called_once()
 
     def test_repo_child_progress_uses_commit_total_and_advance_events(self) -> None:
-        bar = Mock()
-        bar.n = 0
-        bar.total = None
+        progress_bar = Mock()
+        progress_bar.n = 0
+        progress_bar.total = None
 
         self.assertTrue(
-            utils._apply_repo_progress_event(
-                kind=utils._REPO_EVENT_TOTAL,
-                bar=bar,
+            apply_repo_progress_event(
+                kind=REPO_EVENT_TOTAL,
+                bar=progress_bar,
                 label="alpha",
                 value=12,
             )
         )
-        utils._apply_repo_progress_event(
-            kind=utils._REPO_EVENT_ADVANCE,
-            bar=bar,
+        apply_repo_progress_event(
+            kind=REPO_EVENT_ADVANCE,
+            bar=progress_bar,
             label="alpha",
             value=3,
         )
 
-        self.assertEqual(bar.total, 12)
-        self.assertEqual(bar.n, 0)
-        bar.update.assert_called_once_with(3)
+        self.assertEqual(progress_bar.total, 12)
+        self.assertEqual(progress_bar.n, 0)
+        progress_bar.update.assert_called_once_with(3)
 
     def test_repo_child_progress_shows_zero_target_commits_on_finish(self) -> None:
-        bar = Mock()
-        bar.n = 0
-        bar.total = 0
+        progress_bar = Mock()
+        progress_bar.n = 0
+        progress_bar.total = 0
 
         self.assertTrue(
-            utils._apply_repo_progress_event(
-                kind=utils._REPO_EVENT_FINISH,
-                bar=bar,
+            apply_repo_progress_event(
+                kind=REPO_EVENT_FINISH,
+                bar=progress_bar,
                 label="alpha",
                 value=0,
             )
         )
 
-        bar.update.assert_not_called()
-        bar.set_description_str.assert_called_once_with(
-            utils._format_repo_progress_description(
+        progress_bar.update.assert_not_called()
+        progress_bar.set_description_str.assert_called_once_with(
+            format_repo_progress_description(
                 "alpha", tr("progress.repo.status.done")
             )
         )
 
     def test_repo_child_progress_finishes_at_total(self) -> None:
-        bar = Mock()
-        bar.n = 7
-        bar.total = 12
+        progress_bar = Mock()
+        progress_bar.n = 7
+        progress_bar.total = 12
 
         self.assertTrue(
-            utils._apply_repo_progress_event(
-                kind=utils._REPO_EVENT_FINISH,
-                bar=bar,
+            apply_repo_progress_event(
+                kind=REPO_EVENT_FINISH,
+                bar=progress_bar,
                 label="alpha",
                 value=0,
             )
         )
 
-        bar.update.assert_called_once_with(5)
-        bar.set_description_str.assert_called_once_with(
-            utils._format_repo_progress_description(
+        progress_bar.update.assert_called_once_with(5)
+        progress_bar.set_description_str.assert_called_once_with(
+            format_repo_progress_description(
                 "alpha", tr("progress.repo.status.done")
             )
         )
@@ -465,6 +489,7 @@ class RepositoryProgressTests(unittest.TestCase):
             "_analyze_single_repository",
             return_value=(0, "alpha", loc_data, [], {}),
         ) as analyze:
+            # pylint: disable-next=protected-access
             utils._analyze_repositories_sequential(
                 args=args,
                 repo_entries=[(Path("alpha"), "main", [], None)],
@@ -489,6 +514,7 @@ class RepositoryProgressTests(unittest.TestCase):
         with patch(
             "analyze_git_repo_loc.analysis.analysis_runner._analyze_repositories_sequential"
         ) as impl:
+            # pylint: disable-next=protected-access
             utils._analyze_repositories_sequential(
                 args=args,
                 repo_entries=[],
@@ -509,6 +535,7 @@ class RepositoryProgressTests(unittest.TestCase):
         with patch(
             "analyze_git_repo_loc.analysis.analysis_runner._analyze_repositories_parallel"
         ) as impl:
+            # pylint: disable-next=protected-access
             utils._analyze_repositories_parallel(
                 args=args,
                 repo_entries=[],

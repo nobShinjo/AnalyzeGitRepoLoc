@@ -22,6 +22,12 @@ from analyze_git_repo_loc.interactive.tui_auth import AuthMethodStatus
 from analyze_git_repo_loc.remote.remote_catalog import RemoteRepositoryRef
 
 
+def _dump_yaml_text(data: object) -> str:
+    rendered = yaml.safe_dump(data)
+    assert isinstance(rendered, str)
+    return rendered
+
+
 class DoctorDiagnosticsTests(unittest.TestCase):
     """Configuration doctor behavior tests."""
 
@@ -42,7 +48,7 @@ class DoctorDiagnosticsTests(unittest.TestCase):
             repo.mkdir()
             config = root / "config.yml"
             config.write_text(
-                yaml.safe_dump(
+                _dump_yaml_text(
                     {
                         "settings": {"interval": "weekly", "output": "reports"},
                         "repositories": [{"path": str(repo)}],
@@ -60,7 +66,7 @@ class DoctorDiagnosticsTests(unittest.TestCase):
             root = Path(tmp)
             config = root / "config.yml"
             config.write_text(
-                yaml.safe_dump({"repositories": [{"path": "missing"}]}),
+                _dump_yaml_text({"repositories": [{"path": "missing"}]}),
                 encoding="utf-8",
             )
 
@@ -76,7 +82,7 @@ class DoctorDiagnosticsTests(unittest.TestCase):
             root = Path(tmp)
             config = root / "config.yml"
             config.write_text(
-                yaml.safe_dump({"repositories": [{"path": "/srv/mirror.git"}]}),
+                _dump_yaml_text({"repositories": [{"path": "/srv/mirror.git"}]}),
                 encoding="utf-8",
             )
 
@@ -99,7 +105,11 @@ class DoctorDiagnosticsTests(unittest.TestCase):
 
         self.assertTrue(
             any(
-                tr("doctor.error.secret_key", language="en", path="interactive.providers.github.token")
+                tr(
+                    "doctor.error.secret_key",
+                    language="en",
+                    path="interactive.providers.github.token",
+                )
                 == issue.message
                 for issue in result.errors
             )
@@ -438,7 +448,10 @@ class DoctorDiagnosticsTests(unittest.TestCase):
                 result = run_data_diagnostics(config, remote=True)
 
         self.assertTrue(
-            any(tr("doctor.error.interval", language="en") == issue.message for issue in result.errors)
+            any(
+                tr("doctor.error.interval", language="en") == issue.message
+                for issue in result.errors
+            )
         )
         self.assertTrue(
             any(
@@ -500,7 +513,10 @@ class DoctorDiagnosticsTests(unittest.TestCase):
                 result = run_data_diagnostics(config, remote=True)
 
         self.assertTrue(
-            any(tr("doctor.error.clone_protocol", language="en") == issue.message for issue in result.errors)
+            any(
+                tr("doctor.error.clone_protocol", language="en") == issue.message
+                for issue in result.errors
+            )
         )
         self.assertTrue(
             any(

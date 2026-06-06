@@ -55,6 +55,7 @@ class CommitProgressTests(unittest.TestCase):
                 "analyze_git_repo_loc.analysis.git_repo_loc_analyzer.tqdm",
                 side_effect=lambda iterable, **_kwargs: iterable,
             ) as tqdm_mock:
+                # pylint: disable-next=protected-access
                 result = analyzer._get_commits(repository, progress_callback=callback)
 
         self.assertEqual(result, commits)
@@ -79,6 +80,7 @@ class CommitProgressTests(unittest.TestCase):
             "analyze_git_repo_loc.analysis.git_repo_loc_analyzer.tqdm",
             side_effect=lambda iterable, **_kwargs: iterable,
         ):
+            # pylint: disable-next=protected-access
             result = analyzer._get_commits(repository, progress_callback=callback)
 
         self.assertEqual(result, commits)
@@ -87,6 +89,8 @@ class CommitProgressTests(unittest.TestCase):
 
     def test_analysis_progress_is_emitted_before_each_commit_is_processed(self) -> None:
         class Commit:
+            """Minimal commit double used to track emitted progress order."""
+
             def __init__(self, commit_hash: str) -> None:
                 self.hash = commit_hash
 
@@ -143,6 +147,7 @@ class CommitProgressTests(unittest.TestCase):
     def test_analysis_progress_tracker_emits_each_commit(self) -> None:
         events: list[tuple[str, int]] = []
 
+        # pylint: disable-next=protected-access
         record, flush = GitRepoLOCAnalyzer._create_progress_tracker(
             lambda kind, value: events.append((kind, value)),
             total_commits=250,
