@@ -291,18 +291,23 @@ python -m analyze_git_repo_loc --help
 ```
 
 ```text
-usage: analyze_git_repo_loc [-h] {init,run} ...
+usage: analyze_git_repo_loc [-h] [-L {auto,en,jp}] {init,doctor,run} ...
 
 Analyze Git repositories and visualize code LOC.
 
 positional arguments:
   {init,doctor,run}
-    init          Create an initial YAML configuration file interactively.
-    doctor        Validate YAML configuration before running analysis.
-    run           Run analysis from a YAML configuration file, optionally interactively.
+    init                Create an initial YAML configuration file
+                        interactively.
+    doctor              Validate YAML configuration before running analysis.
+    run                 Run analysis from a YAML configuration file,
+                        optionally interactively.
 
 options:
-  -h, --help      show this help message and exit
+  -h, --help            show this help message and exit
+  -L, --display-language {auto,en,jp}
+                        Display language for this run (auto, en, or jp;
+                        default: auto).
 ```
 
 ## Author
@@ -312,7 +317,7 @@ Nob Shinjo (<https://github.com/nobShinjo>)
 ## Licenses
 
 - [LICENSE](./LICENSE)
-- [3rd Party LicenSes](./3rdPartyLicenses.md)
+- [3rd Party Licenses](./3rdPartyLicenses.md)
 
 ## Languages
 
