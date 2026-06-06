@@ -48,7 +48,7 @@ def prepare_trend_data(
         return trend_data
     sorted_columns = (
         trend_data.iloc[-1, 1:]
-        .infer_objects(copy=False)
+        .infer_objects()
         .sort_values(ascending=False)
         .index.tolist()
     )
@@ -99,7 +99,7 @@ def prepare_author_contribution_data(data: pd.DataFrame) -> pd.DataFrame:
         return summary_data.reset_index()
     sorted_columns = (
         summary_data.iloc[-1]
-        .infer_objects(copy=False)
+        .infer_objects()
         .sort_values(ascending=False)
         .index.tolist()
     )
