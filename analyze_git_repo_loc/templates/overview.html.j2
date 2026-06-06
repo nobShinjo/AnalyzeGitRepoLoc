@@ -1,31 +1,68 @@
 <div class="tab-pane active" id="overview">
+  <div class="metric-grid">
+    {% for item in overview.meta_items %}
+    <div class="metric-card">
+      <div class="metric-label">{{ item.label }}</div>
+      <div class="metric-value">{{ item.value }}</div>
+    </div>
+    {% endfor %}
+  </div>
   <div class="row mb-3">
     <div class="col-12">
-      <div class="card">
-        <div class="card-header">Run Overview</div>
+      <div class="card repository-list-card">
+        <div class="card-header">Repository list</div>
         <div class="card-body">
-          <ul class="meta-list">
-            {% for item in overview.meta_items %}
-            <li>{{ item.label }}: {{ item.value }}</li>
+          {% if overview.repositories %}
+          <ul class="repository-list">
+            {% for repository in overview.repositories %}
+            <li>{{ repository }}</li>
             {% endfor %}
           </ul>
+          {% else %}
+          <p class="text-muted mb-0">No repositories.</p>
+          {% endif %}
         </div>
       </div>
     </div>
   </div>
   <div class="row row-cols-1 row-cols-lg-2 g-3 mb-3">
     <div class="col">
-      <div class="card">
+      <div class="card table-panel">
         <div class="card-header">Repositories (Top 10)</div>
         <div class="card-body">
-          <div id="overview-repo-table"></div>
+          <div id="overview-repo-table" class="report-table" data-report-table="true">
+            <div class="report-placeholder">Waiting for tab render.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col">
+      <div class="card table-panel">
+        <div class="card-header">Languages (Top 10)</div>
+        <div class="card-body">
+          <div id="overview-language-table" class="report-table" data-report-table="true">
+            <div class="report-placeholder">Waiting for tab render.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="row row-cols-1 row-cols-lg-2 g-3 mb-3">
+    <div class="col">
+      <div class="card table-panel">
+        <div class="card-header">Authors (Top 10)</div>
+        <div class="card-body">
+          <div id="overview-author-table" class="report-table" data-report-table="true">
+            <div class="report-placeholder">Waiting for tab render.</div>
+          </div>
         </div>
       </div>
     </div>
     <div class="col">
       <div class="card tag-card" data-filter-tab="overview" data-filter-group="repository">
         <div class="card-header">
-          Repository Tags
+          <span>Repository Tags</span>
+          <span class="tag-count" data-tag-count>0 tags</span>
           <div class="card-actions">
             <button class="btn btn-sm btn-ghost-secondary" type="button" data-tag-clear>Clear filters</button>
           </div>
@@ -39,27 +76,10 @@
   </div>
   <div class="row row-cols-1 row-cols-lg-2 g-3 mb-3">
     <div class="col">
-      <div class="card">
-        <div class="card-header">Languages (Top 10)</div>
-        <div class="card-body">
-          <div id="overview-language-table"></div>
-        </div>
-      </div>
-    </div>
-    <div class="col">
-      <div class="card">
-        <div class="card-header">Authors (Top 10)</div>
-        <div class="card-body">
-          <div id="overview-author-table"></div>
-        </div>
-      </div>
-    </div>
-  </div>
-  <div class="row row-cols-1 row-cols-lg-2 g-3 mb-3">
-    <div class="col">
       <div class="card tag-card" data-filter-tab="overview" data-filter-group="language">
         <div class="card-header">
-          Language Tags
+          <span>Language Tags</span>
+          <span class="tag-count" data-tag-count>0 tags</span>
           <div class="card-actions">
             <button class="btn btn-sm btn-ghost-secondary" type="button" data-tag-clear>Clear filters</button>
           </div>
@@ -73,7 +93,8 @@
     <div class="col">
       <div class="card tag-card" data-filter-tab="overview" data-filter-group="author">
         <div class="card-header">
-          Author Tags
+          <span>Author Tags</span>
+          <span class="tag-count" data-tag-count>0 tags</span>
           <div class="card-actions">
             <button class="btn btn-sm btn-ghost-secondary" type="button" data-tag-clear>Clear filters</button>
           </div>
@@ -87,20 +108,20 @@
   </div>
   <div class="row mb-3">
     <div class="col-12">
-      <div class="card">
+      <div class="card chart-panel">
         <div class="card-header">Repository Trend</div>
         <div class="card-body">
-          <div id="overview-repo-trend-chart"></div>
+          <div id="overview-repo-trend-chart" data-report-chart="true"></div>
         </div>
       </div>
     </div>
   </div>
   <div class="row">
     <div class="col-12">
-      <div class="card">
+      <div class="card chart-panel">
         <div class="card-header">Author Contribution</div>
         <div class="card-body">
-          <div id="overview-author-contrib-chart"></div>
+          <div id="overview-author-contrib-chart" data-report-chart="true"></div>
         </div>
       </div>
     </div>

@@ -32,15 +32,25 @@ import plotly.graph_objects as go
 from colorama import Cursor, Fore, Style
 from tqdm import tqdm
 
-from analyze_git_repo_loc.analysis_helpers import (
+from analyze_git_repo_loc.analysis.analysis_helpers import (
     prepare_author_contribution_data,
     prepare_summary_data,
     prepare_trend_data,
 )
-from analyze_git_repo_loc.chart_builder import ChartBuilder, ChartStrategy
+from analyze_git_repo_loc.reporting.chart_builder import ChartBuilder, ChartStrategy
 from analyze_git_repo_loc.colored_console_printer import ColoredConsolePrinter
-from analyze_git_repo_loc.html_report import ProgressEvent, generate_html_report
-from analyze_git_repo_loc.markdown_summary import generate_markdown_summary
+from analyze_git_repo_loc.doctor import format_diagnostic_report, run_config_diagnostics
+from analyze_git_repo_loc.reporting.html_report import (
+    ProgressEvent,
+    generate_html_report,
+)
+from analyze_git_repo_loc.i18n import tr
+from analyze_git_repo_loc.config.init_wizard import run_init_config_wizard
+from analyze_git_repo_loc.reporting.markdown_summary import generate_markdown_summary
+from analyze_git_repo_loc.remote.remote_catalog import (
+    RemoteCatalogError,
+)
+from analyze_git_repo_loc.interactive.tui_wizard import run_tui_wizard
 from analyze_git_repo_loc.utils import (
     analyze_git_repositories,
     analyze_trends,
@@ -49,6 +59,7 @@ from analyze_git_repo_loc.utils import (
     parse_arguments,
     save_repository_branch_info,
 )
+from analyze_git_repo_loc.config.yaml_config import load_yaml_data
 
 
 class _ReportProgressTracker:
@@ -105,7 +116,24 @@ class _ReportProgressTracker:
 
 def _print_start(console: ColoredConsolePrinter, parser: argparse.ArgumentParser) -> None:
     console.print_h1(f"# Start {parser.prog}.")
-    print(Style.DIM + f"- {parser.description}", end=os.linesep + os.linesep)
+    print(f"{Style.DIM}- {parser.description}", end=os.linesep + os.linesep)
+
+
+def _apply_interactive_repository_selection(args: argparse.Namespace) -> None:
+    """
+    Run interactive repository selection and update args.repo_paths.
+
+    Args:
+        args (argparse.Namespace): Parsed CLI arguments.
+    """
+    if not getattr(args, "interactive", False):
+        return
+    try:
+        config_data = load_yaml_data(args.config)
+        run_tui_wizard(args, config_data)
+    except (RemoteCatalogError, RuntimeError, ValueError) as ex:
+        print(str(ex), file=sys.stderr)
+        sys.exit(1)
 
 
 def _prepare_loc_data(
@@ -157,8 +185,8 @@ def _build_analysis_data(
     author_analysis = pd.DataFrame()
     repository_trend_analysis = pd.DataFrame()
 
-    console.print_h1("\n# Forming dataframe type data.")
-    for loc_data in tqdm(loc_data_repositories, desc="Processing loc data"):
+    console.print_h1(f"\n# {tr('run.section.forming_dataframe')}")
+    for loc_data in tqdm(loc_data_repositories, desc=tr("progress.forming_data")):
         repository_name = _prepare_loc_data(
             loc_data,
             time_interval=time_interval,
@@ -227,7 +255,7 @@ def _generate_charts(
     author_analysis: pd.DataFrame,
     repository_trend_analysis: pd.DataFrame,
 ) -> None:
-    with tqdm(total=5, desc="Charts: Language trend") as progress_bar:
+    with tqdm(total=5, desc=tr("progress.charts.language_trend")) as progress_bar:
         generate_trend_chart(
             data=language_analysis,
             category_column="Language",
@@ -237,7 +265,7 @@ def _generate_charts(
         )
         progress_bar.update(1)
 
-        progress_bar.set_description_str("Charts: Author trend")
+        progress_bar.set_description_str(tr("progress.charts.author_trend"))
         generate_trend_chart(
             data=author_analysis,
             category_column="Author",
@@ -247,7 +275,7 @@ def _generate_charts(
         )
         progress_bar.update(1)
 
-        progress_bar.set_description_str("Charts: Repository trend")
+        progress_bar.set_description_str(tr("progress.charts.repository_trend"))
         generate_all_repositories_trend_chart(
             data=repository_trend_analysis,
             time_interval=time_interval,
@@ -257,7 +285,7 @@ def _generate_charts(
         )
         progress_bar.update(1)
 
-        progress_bar.set_description_str("Charts: Author contribution")
+        progress_bar.set_description_str(tr("progress.charts.author_contribution"))
         generate_author_contribution_chart(
             data=author_analysis,
             output_path=output_dir,
@@ -265,7 +293,7 @@ def _generate_charts(
         )
         progress_bar.update(1)
 
-        progress_bar.set_description_str("Charts: Author aggregate")
+        progress_bar.set_description_str(tr("progress.charts.author_aggregate"))
         generate_all_repositories_trend_chart(
             data=repository_trend_analysis,
             time_interval=time_interval,
@@ -285,8 +313,9 @@ def _generate_report(
     language_analysis: pd.DataFrame,
     author_analysis: pd.DataFrame,
     repository_trend_analysis: pd.DataFrame,
+    exclude_metadata: list[dict[str, object]] | None = None,
 ) -> None:
-    with tqdm(desc="Generating HTML report") as progress_bar:
+    with tqdm(desc=tr("progress.html_report")) as progress_bar:
         report_progress = _ReportProgressTracker(progress_bar)
         try:
             generate_html_report(
@@ -301,6 +330,7 @@ def _generate_report(
                     if loc_data_repositories
                     else pd.DataFrame()
                 ),
+                exclude_metadata=exclude_metadata,
                 progress_callback=report_progress,
             )
         except OSError as ex:
@@ -314,6 +344,48 @@ def _maybe_open_report(*, output_dir: Path, args: argparse.Namespace, repo_count
             webbrowser.open(report_path.resolve().as_uri())
 
 
+def _format_output_summary(
+    output_dir: Path, output_root: Path | None = None
+) -> list[str]:
+    """
+    Format the final artifact summary for a completed analysis run.
+
+    Args:
+        output_dir (Path): Timestamped output directory for the run.
+        output_root (Path | None): Root output directory for charts and cache.
+
+    Returns:
+        list[str]: Human-readable artifact summary lines.
+    """
+    resolved_output_root = output_root or output_dir.parent
+    return [
+        tr("output.report", path=output_dir / "report.html"),
+        tr("output.summary", path=output_dir / "summary.md"),
+        tr("output.data", path=output_dir / "*.csv"),
+        tr("output.run_data", path=output_dir),
+        tr("output.repository_charts", path=resolved_output_root),
+        tr("output.cache", path=resolved_output_root / ".cache"),
+    ]
+
+
+def _print_output_summary(
+    console: ColoredConsolePrinter, output_dir: Path, output_root: Path
+) -> None:
+    """
+    Print generated artifact paths for a completed analysis run.
+
+    Args:
+        console (ColoredConsolePrinter): Console printer for colored output.
+        output_dir (Path): Timestamped output directory for the run.
+        output_root (Path): Root output directory for charts and cache.
+    """
+    lines = _format_output_summary(output_dir, output_root)
+    for line in lines:
+        label, _, value = line.partition(": ")
+        console.print_colored(f"{label}: ", color=Fore.CYAN, bright=True, end="")
+        print(value)
+
+
 def main() -> None:
     """
     Main function to execute the program.
@@ -321,12 +393,20 @@ def main() -> None:
     # Parsing command line arguments
     parser = argparse.ArgumentParser(
         prog="analyze_git_repo_loc",
-        description="Analyze Git repositories and visualize code LOC.",
+        description=tr("cli.description"),
     )
     args = parse_arguments(parser)
+    if args.command == "init":
+        run_init_config_wizard(default_path=args.config)
+        return
+    if args.command == "doctor":
+        result = run_config_diagnostics(args.config, remote=args.remote)
+        print(format_diagnostic_report(result))
+        sys.exit(result.exit_code(strict=args.strict))
 
     # Initialize ColoredConsolePrinter
     console = ColoredConsolePrinter()
+    _apply_interactive_repository_selection(args)
 
     # Output program name and description.
     _print_start(console, parser)
@@ -347,7 +427,7 @@ def main() -> None:
     )
 
     # Save the analyzed data
-    console.print_h1("\n# Save the analyzed data.")
+    console.print_h1(f"\n# {tr('run.section.save_data')}")
     output_dir = output_root / datetime.now().strftime("%Y%m%d%H%M%S")
     _save_analysis_outputs(
         output_dir=output_dir,
@@ -359,7 +439,7 @@ def main() -> None:
     )
 
     # Generate charts
-    console.print_h1("\n# Generate charts.")
+    console.print_h1(f"\n# {tr('run.section.generate_charts')}")
     _generate_charts(
         output_root=output_root,
         output_dir=output_dir,
@@ -370,7 +450,7 @@ def main() -> None:
         repository_trend_analysis=repository_trend_analysis,
     )
 
-    console.print_h1("\n# Generate HTML report.")
+    console.print_h1(f"\n# {tr('run.section.generate_html_report')}")
     _generate_report(
         output_dir=output_dir,
         output_root=output_root,
@@ -379,12 +459,14 @@ def main() -> None:
         language_analysis=language_analysis,
         author_analysis=author_analysis,
         repository_trend_analysis=repository_trend_analysis,
+        exclude_metadata=getattr(args, "exclude_metadata", None),
     )
 
     _maybe_open_report(output_dir=output_dir, args=args, repo_count=repo_count)
+    _print_output_summary(console, output_dir, output_root)
 
     console.print_h1("\n# LOC Analyze")
-    print(Cursor.UP() + Cursor.FORWARD(50) + Fore.GREEN + "FINISH")
+    print(f"{Cursor.UP()}{Cursor.FORWARD(50)}{Fore.GREEN}{tr('run.finish')}")
 
 
 def save_analysis_data(
@@ -404,7 +486,7 @@ def save_analysis_data(
         handle_exception(ex)
 
     # dictからname key, data valueを取り出して、name.csvとして保存
-    for name, data in tqdm(data_list.items(), desc="Saving analyzed data"):
+    for name, data in tqdm(data_list.items(), desc=tr("progress.saving_data")):
         data.to_csv(output_dir / f"{name}.csv", index=False)
 
 
@@ -436,7 +518,7 @@ def generate_trend_chart(
     # Generate trend chart for each repository
     unique_repositories = data["Repository"].unique()
     for repository in tqdm(
-        unique_repositories, desc="Generating trend chart", leave=False
+        unique_repositories, desc=tr("progress.trend_chart"), leave=False
     ):
         loc_data = data[data["Repository"] == repository]
         branch_name = next(iter(loc_data["Branch"].unique()), "Unknown")
@@ -485,11 +567,11 @@ def generate_trend_chart(
 def save_chart_data(
     output_prefix: str,
     output_path: Path,
-    trend_data: pd.DataFrame = None,
-    summary_data: pd.DataFrame = None,
-    trend_chart: go.Figure = None,
-    contribution_chart: go.Figure = None,
-):
+    trend_data: pd.DataFrame | None = None,
+    summary_data: pd.DataFrame | None = None,
+    trend_chart: go.Figure | None = None,
+    contribution_chart: go.Figure | None = None,
+) -> None:
     """
     Save the trend data and chart.
 
@@ -583,6 +665,7 @@ def generate_all_repositories_trend_chart(
         )
     except ValueError as ex:
         handle_exception(ex)
+        return
 
     # Show the chart
     if not no_plot_show:
@@ -633,13 +716,14 @@ def generate_author_contribution_chart(
     chart_builder.set_strategy(ChartStrategy.AUTHOR_CONTRIBUTION)
     try:
         author_contribution_chart = chart_builder.build(
-            trend_data=None,
+            trend_data=pd.DataFrame(),
             summary_data=author_contribution_data,
-            interval=None,
+            interval="",
             title="Author contribution by repository - All repositories",
         )
     except ValueError as ex:
         handle_exception(ex)
+        return
 
     # Show the chart
     if not no_plot_show:

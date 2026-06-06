@@ -8,7 +8,14 @@
   <script src="{{ assets_dir }}/plotly.min.js"></script>
   <style>
     :root {
-      --report-navbar-height: 3.5rem;
+      --report-navbar-height: 2.25rem;
+      --report-bg: #f6f8fb;
+      --report-surface: #ffffff;
+      --report-border: #d9e0ea;
+      --report-ink: #172033;
+      --report-muted: #667085;
+      --report-accent: #2563eb;
+      --report-accent-soft: #e8f0ff;
     }
     html,
     body {
@@ -16,18 +23,60 @@
     }
     body {
       overflow: hidden;
+      background: var(--report-bg);
+      color: var(--report-ink);
     }
     .page {
       height: 100%;
+    }
+    .navbar {
+      min-height: var(--report-navbar-height);
+      display: flex;
+      align-items: center;
+      padding: 0 0.75rem;
+      border-bottom: 1px solid var(--report-border);
+      background: #ffffff;
+    }
+    .navbar-brand {
+      min-height: 0;
+      font-weight: 650;
+      font-size: 0.9rem;
+      letter-spacing: 0;
+      color: var(--report-ink);
     }
     .report-layout {
       display: flex;
       flex-direction: column;
       height: calc(100vh - var(--report-navbar-height));
       min-height: 0;
+      max-width: 1480px;
+      padding-left: 1rem;
+      padding-right: 1rem;
     }
     .report-header {
       flex: 0 0 auto;
+    }
+    .report-hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 0.75rem;
+      align-items: end;
+      padding: 0.5rem 0 0.45rem;
+    }
+    .report-hero .page-title {
+      margin: 0;
+      font-size: 1.25rem;
+      line-height: 1.1;
+      letter-spacing: 0;
+    }
+    .report-hero .text-muted,
+    .report-generated {
+      color: var(--report-muted);
+      font-size: 0.78rem;
+    }
+    .report-generated {
+      text-align: right;
+      white-space: nowrap;
     }
     .report-tabs {
       display: flex;
@@ -36,47 +85,165 @@
       min-height: 0;
     }
     .report-tabs .nav-tabs {
+      display: flex;
+      flex-wrap: nowrap;
       flex: 0 0 auto;
-      background: #fff;
+      gap: 0.25rem;
+      overflow-x: auto;
+      overflow-y: hidden;
+      padding: 0.25rem 0.25rem 0;
+      border-bottom: 1px solid var(--report-border);
+      background: var(--report-bg);
       z-index: 2;
+    }
+    .report-tabs .nav-tabs li {
+      flex: 0 0 auto;
+    }
+    .report-tabs .nav-link {
+      max-width: 18rem;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      border: 1px solid transparent;
+      border-bottom: 0;
+      border-radius: 0.45rem 0.45rem 0 0;
+      color: #415064;
+    }
+    .report-tabs .nav-link.active {
+      color: var(--report-accent);
+      border-color: var(--report-border);
+      background: var(--report-surface);
+      font-weight: 650;
     }
     .report-content {
       flex: 1 1 auto;
       overflow-y: auto;
       min-height: 0;
-      padding-top: 1rem;
+      padding-top: 1.25rem;
       padding-bottom: 1rem;
     }
     .report-content .row > [class*="col-"] {
       min-width: 0;
     }
+    .tab-pane {
+      display: none;
+    }
+    .tab-pane.active {
+      display: block;
+    }
+    .metric-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 0.75rem;
+      margin-bottom: 1rem;
+    }
+    .metric-card {
+      min-width: 0;
+      padding: 0.7rem 0.85rem;
+      border: 1px solid var(--report-border);
+      border-radius: 0.5rem;
+      background: var(--report-surface);
+    }
+    .metric-label {
+      margin-bottom: 0.35rem;
+      color: var(--report-muted);
+      font-size: 0.78rem;
+      font-weight: 650;
+      text-transform: uppercase;
+      letter-spacing: 0;
+    }
+    .metric-value {
+      overflow-wrap: anywhere;
+      font-size: 1.05rem;
+      font-weight: 700;
+      line-height: 1.25;
+    }
+    .report-content .card {
+      border: 1px solid var(--report-border);
+      border-radius: 0.5rem;
+      box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+    }
+    .report-content .card-header {
+      min-height: 2.5rem;
+      gap: 0.75rem;
+      border-bottom-color: var(--report-border);
+      font-weight: 650;
+    }
+    .table-panel .card-body,
+    .chart-panel .card-body,
+    .tag-card .card-body {
+      min-width: 0;
+    }
     .report-content .table {
       table-layout: fixed;
+      margin-bottom: 0;
     }
     .report-content .table th,
     .report-content .table td {
-      word-break: break-word;
+      overflow-wrap: anywhere;
+      word-break: normal;
+      vertical-align: middle;
+    }
+    .report-content .exclude-path-cell,
+    .report-content .exclude-path-list,
+    .report-content .exclude-path-list li,
+    .report-content .exclude-path-list code {
+      text-align: left;
+    }
+    .report-table {
+      min-height: 12rem;
+    }
+    .chart-panel [data-report-chart] {
+      min-height: 24rem;
+    }
+    .report-placeholder {
+      display: flex;
+      align-items: center;
+      min-height: inherit;
+      color: var(--report-muted);
+      font-size: 0.9rem;
     }
     .tag-list {
       display: flex;
       flex-wrap: wrap;
       gap: 0.35rem;
-      max-height: none;
+      max-height: 14rem;
       overflow-y: auto;
       padding-right: 0.25rem;
+    }
+    .repository-list {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+      gap: 0.35rem 1rem;
+      margin: 0;
+      padding-left: 1.1rem;
+    }
+    .repository-list li {
+      overflow-wrap: anywhere;
+      padding-right: 0.5rem;
+    }
+    .tag-count {
+      color: var(--report-muted);
+      font-size: 0.75rem;
+      font-weight: 500;
     }
     .tag-item {
       display: inline-flex;
       align-items: center;
       gap: 0.35rem;
+      max-width: 100%;
       font-size: 0.75rem;
       cursor: pointer;
       user-select: none;
       padding: 0.25rem 0.5rem;
-      border: 1px solid #dfe3e8;
+      border: 1px solid var(--report-border);
       border-radius: 999px;
-      background: #fff;
-      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+      background: var(--report-surface);
+    }
+    .tag-text {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
     .tag-item.is-inactive {
       opacity: 0.45;
@@ -98,6 +265,31 @@
       background: #f3f4f6;
       border-top: 2px solid #d5dae0;
     }
+    @media (max-width: 991.98px) {
+      .report-hero {
+        grid-template-columns: 1fr;
+        align-items: start;
+      }
+      .report-generated {
+        text-align: left;
+        white-space: normal;
+      }
+      .metric-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+    @media (max-width: 575.98px) {
+      .report-layout {
+        padding-left: 0.75rem;
+        padding-right: 0.75rem;
+      }
+      .metric-grid {
+        grid-template-columns: 1fr;
+      }
+      .chart-panel [data-report-chart] {
+        min-height: 20rem;
+      }
+    }
   </style>
 </head>
 <body>
@@ -105,10 +297,13 @@
     <div class="navbar">
       <div class="navbar-brand">Analyze Git Repo LOC</div>
     </div>
-    <main class="container report-layout">
-      <div class="page-header report-header">
-        <h1 class="page-title">LOC Analysis Report</h1>
-        <div class="text-muted">Generated at {{ generated_at }}</div>
+    <main class="container report-layout" data-report-shell="true">
+      <div class="page-header report-header report-hero">
+        <div>
+          <h1 class="page-title">LOC Analysis Report</h1>
+          <div class="text-muted">Repository activity dashboard</div>
+        </div>
+        <div class="report-generated">Generated at {{ generated_at }}</div>
       </div>
       <div class="report-tabs" data-tab-container="true">
         <ul class="nav-tabs">
@@ -140,6 +335,11 @@
       const repoTabs = Array.isArray(reportData.repo_tabs) ? reportData.repo_tabs : [];
       const noDataMessage = '<p class="text-muted">No data available.</p>';
       const tabStates = new Map();
+      const renderedTabs = new Set();
+      const renderedChartTabs = new Set();
+      const chartRenderQueue = [];
+      let chartRenderScheduled = false;
+      const tickPolicy = reportData.tick_policy || { aliases: {}, rules: {} };
 
       const escapeHtml = (value) =>
         String(value)
@@ -320,6 +520,10 @@
         const items = groupState.items.filter((item) =>
           item.value.toLowerCase().includes(term)
         );
+        const count = groupState.container.querySelector("[data-tag-count]");
+        if (count) {
+          count.textContent = `${items.length} of ${groupState.items.length} tags`;
+        }
         if (!items.length) {
           const empty = document.createElement("span");
           empty.className = "text-muted small";
@@ -342,6 +546,16 @@
             tag.appendChild(createTagAction("x", "disable", "Disable"));
           }
           list.appendChild(tag);
+        });
+      };
+
+      const renderTagsForTab = (tabId) => {
+        const state = tabStates.get(tabId);
+        if (!state) {
+          return;
+        }
+        Object.keys(state.groups || {}).forEach((group) => {
+          renderTagGroup(tabId, group);
         });
       };
 
@@ -371,6 +585,9 @@
         }
         renderTagGroup(tabId, group);
         renderTablesForTab(tabId);
+        if (renderedTabs.has(tabId)) {
+          scheduleResize(tabId);
+        }
       };
 
       const setupTabFilters = () => {
@@ -413,12 +630,14 @@
               );
               renderTagGroup(tabId, group);
               renderTablesForTab(tabId);
+              if (renderedTabs.has(tabId)) {
+                scheduleResize(tabId);
+              }
             });
           }
           container.addEventListener("click", (event) => {
             handleTagClick(event, tabId, group);
           });
-          renderTagGroup(tabId, group);
         });
       };
 
@@ -443,18 +662,83 @@
         return applyFilters(state.baseRows, filters);
       };
 
-      const getTickConfig = (intervalLabel) => {
+      const normalizeIntervalLabel = (intervalLabel) => {
         const label = String(intervalLabel || "").toLowerCase();
-        if (label === "month") {
-          return { tickformat: "%b %Y", dtick: "M1" };
+        return tickPolicy.aliases?.[label] || label;
+      };
+
+      const getIntervalSpan = (intervalLabel, intervalValues) => {
+        const label = normalizeIntervalLabel(intervalLabel);
+        const values = Array.isArray(intervalValues) ? intervalValues : [];
+        const dates = values
+          .map((value) => new Date(value))
+          .filter((date) => !Number.isNaN(date.getTime()))
+          .sort((a, b) => a - b);
+        if (!dates.length) {
+          return values.length;
         }
-        if (label === "week") {
-          return { tickformat: "%b %d, %Y", dtick: "W1" };
+        const first = dates[0];
+        const last = dates[dates.length - 1];
+        if (label === "monthly") {
+          return (
+            (last.getUTCFullYear() - first.getUTCFullYear()) * 12 +
+            last.getUTCMonth() -
+            first.getUTCMonth() +
+            1
+          );
         }
-        if (label === "date") {
-          return { tickformat: "%b %d, %Y", dtick: "D1" };
+        const daySpan =
+          Math.floor(Math.max(0, last.getTime() - first.getTime()) / 86400000) + 1;
+        if (label === "weekly") {
+          return Math.floor((daySpan - 1) / 7) + 1;
         }
-        return { tickformat: "%b %d, %Y", dtick: "M1" };
+        return daySpan;
+      };
+
+      const getTickValues = (intervalValues) => {
+        const values = Array.isArray(intervalValues) ? intervalValues : [];
+        const maxLabels = Number(tickPolicy.max_tick_labels) || 10;
+        if (values.length <= maxLabels) {
+          return values;
+        }
+        if (maxLabels <= 1) {
+          return [values[0]];
+        }
+        const lastIndex = values.length - 1;
+        const step = lastIndex / (maxLabels - 1);
+        const indexes = Array.from({ length: maxLabels }, (_, index) =>
+          Math.round(index * step)
+        );
+        indexes[0] = 0;
+        indexes[indexes.length - 1] = lastIndex;
+        const seenIndexes = new Set();
+        return indexes
+          .filter((index) => {
+            if (seenIndexes.has(index)) {
+              return false;
+            }
+            seenIndexes.add(index);
+            return true;
+          })
+          .map((index) => values[index]);
+      };
+
+      const getTickConfig = (intervalLabel, intervalValues) => {
+        const label = normalizeIntervalLabel(intervalLabel);
+        const values = Array.isArray(intervalValues) ? intervalValues : [];
+        const span = Math.max(getIntervalSpan(label, values), values.length);
+        const rules = tickPolicy.rules?.[label] || [];
+        const matchedRule = rules.find(
+          (rule) => rule.max_span === null || span <= rule.max_span
+        );
+        if (matchedRule) {
+          return {
+            tickformat: matchedRule.tickformat,
+            dtick: matchedRule.dtick,
+            tickvals: getTickValues(values),
+          };
+        }
+        return { tickformat: "%b %Y", dtick: "M1", tickvals: getTickValues(values) };
       };
 
       const renderNoData = (container) => {
@@ -473,9 +757,9 @@
         }
         if (!traces.length || !window.Plotly) {
           renderNoData(container);
-          return;
+          return Promise.resolve();
         }
-        Plotly.react(container, traces, layout, { responsive: true });
+        return Plotly.react(container, traces, layout, { responsive: true });
       };
 
       const getTabLinks = () =>
@@ -516,15 +800,35 @@
         window.setTimeout(() => resizeChartsInTab(tabId), 0);
       };
 
+      const activateTab = (tabId) => {
+        const tabPane = document.getElementById(tabId);
+        if (!tabPane) {
+          return;
+        }
+        getTabLinks().forEach((item) => {
+          const target =
+            item.getAttribute("data-tab-target") ||
+            item.getAttribute("href");
+          item.classList.toggle("active", target === `#${tabId}`);
+        });
+        document.querySelectorAll(".tab-pane").forEach((pane) => {
+          pane.classList.toggle("active", pane.id === tabId);
+        });
+        ensureTabRendered(tabId);
+        scheduleResize(tabId);
+      };
+
       const attachTabResizeHandlers = () => {
         const links = getTabLinks();
         links.forEach((link) => {
-          link.addEventListener("click", () => {
+          link.addEventListener("click", (event) => {
+            event.preventDefault();
             const target =
               link.getAttribute("data-tab-target") ||
               link.getAttribute("href");
             if (target) {
-              scheduleResize(target.replace("#", ""));
+              const tabId = target.replace("#", "");
+              activateTab(tabId);
             }
           });
         });
@@ -533,11 +837,11 @@
       const buildTrendChart = (containerId, dataRows, categoryKey, title) => {
         const container = document.getElementById(containerId);
         if (!container) {
-          return;
+          return Promise.resolve();
         }
         if (!dataRows.length) {
           renderNoData(container);
-          return;
+          return Promise.resolve();
         }
         const intervalValues = uniqueSorted(
           dataRows.map((row) => row.interval)
@@ -545,7 +849,7 @@
         intervalValues.sort((a, b) => new Date(a) - new Date(b));
         if (!intervalValues.length) {
           renderNoData(container);
-          return;
+          return Promise.resolve();
         }
         const intervalIndex = new Map(
           intervalValues.map((value, index) => [value, index])
@@ -625,7 +929,7 @@
           name: "Deleted",
           marker: { color: "rgba(239,85,59,0.6)" },
         });
-        const tickConfig = getTickConfig(reportData.time_interval);
+        const tickConfig = getTickConfig(reportData.time_interval, intervalValues);
         const layout = {
           title: { text: title, x: 0.5, xanchor: "center", font: { size: 20 } },
           font: { family: "Open Sans" },
@@ -653,17 +957,21 @@
         if (tickConfig.dtick) {
           layout.xaxis.dtick = tickConfig.dtick;
         }
-        renderPlot(container, traces, layout);
+        if (tickConfig.tickvals?.length) {
+          layout.xaxis.tickmode = "array";
+          layout.xaxis.tickvals = tickConfig.tickvals;
+        }
+        return renderPlot(container, traces, layout);
       };
 
       const buildAuthorContributionChart = (containerId, dataRows, title) => {
         const container = document.getElementById(containerId);
         if (!container) {
-          return;
+          return Promise.resolve();
         }
         if (!dataRows.length) {
           renderNoData(container);
-          return;
+          return Promise.resolve();
         }
         const authors = new Map();
         const repositories = uniqueSorted(
@@ -685,7 +993,7 @@
           .sort((a, b) => b.total - a.total);
         if (!authorList.length) {
           renderNoData(container);
-          return;
+          return Promise.resolve();
         }
         const authorNames = authorList.map((entry) => entry.name);
         const traces = repositories.map((repo) => ({
@@ -717,31 +1025,31 @@
           },
           legend: { font: { size: 12 } },
         };
-        renderPlot(container, traces, layout);
+        return renderPlot(container, traces, layout);
       };
 
-      const renderOverviewCharts = (dataRows) => {
-        buildTrendChart(
+      const renderOverviewCharts = async (dataRows) => {
+        await buildTrendChart(
           "overview-repo-trend-chart",
           dataRows,
           "repository",
           "NLOC trend by repository"
         );
-        buildAuthorContributionChart(
+        await buildAuthorContributionChart(
           "overview-author-contrib-chart",
           dataRows,
           "Author contribution by repository"
         );
       };
 
-      const renderRepoTabCharts = (tab, dataRows) => {
-        buildTrendChart(
+      const renderRepoTabCharts = async (tab, dataRows) => {
+        await buildTrendChart(
           `repo-${tab.id}-language-chart`,
           dataRows,
           "language",
           `NLOC trend by language - ${tab.name}`
         );
-        buildTrendChart(
+        await buildTrendChart(
           `repo-${tab.id}-author-chart`,
           dataRows,
           "author",
@@ -878,31 +1186,103 @@
         }
       };
 
-      const renderAllTables = () => {
-        renderOverviewTables(getFilteredRowsForTab("overview"));
-        repoTabs.forEach((tab) => {
-          renderRepoTab(tab, getFilteredRowsForTab(tab.id));
-        });
+      const renderChartsForTab = async (tabId) => {
+        if (tabId === "overview") {
+          const overviewState = tabStates.get("overview");
+          if (overviewState) {
+            await renderOverviewCharts(overviewState.baseRows);
+          }
+          return;
+        }
+        const tab = repoTabs.find((item) => item.id === tabId);
+        const state = tabStates.get(tabId);
+        if (tab && state) {
+          await renderRepoTabCharts(tab, state.baseRows);
+        }
       };
 
-      const renderAllCharts = () => {
-        const overviewState = tabStates.get("overview");
-        if (overviewState) {
-          renderOverviewCharts(overviewState.baseRows);
-        }
-        repoTabs.forEach((tab) => {
-          const state = tabStates.get(tab.id);
-          if (state) {
-            renderRepoTabCharts(tab, state.baseRows);
+      const drainChartRenderQueue = () => {
+        chartRenderScheduled = false;
+        const tabId = chartRenderQueue.shift();
+        if (!tabId || renderedChartTabs.has(tabId)) {
+          if (chartRenderQueue.length) {
+            queueChartDrain();
           }
-        });
+          return;
+        }
+        const tabPane = document.getElementById(tabId);
+        if (tabPane) {
+          tabPane.dataset.reportChartsRendered = "pending";
+        }
+        renderChartsForTab(tabId)
+          .then(() => {
+            renderedChartTabs.add(tabId);
+            if (tabPane) {
+              tabPane.dataset.reportChartsRendered = "true";
+            }
+          })
+          .catch(() => {
+            if (tabPane) {
+              tabPane.dataset.reportChartsRendered = "error";
+            }
+          })
+          .finally(() => {
+            scheduleResize(tabId);
+            if (chartRenderQueue.length) {
+              queueChartDrain();
+            }
+          });
+      };
+
+      const queueChartDrain = () => {
+        if (chartRenderScheduled) {
+          return;
+        }
+        chartRenderScheduled = true;
+        window.requestAnimationFrame(drainChartRenderQueue);
+      };
+
+      const queueChartRender = (tabId) => {
+        if (!tabId || renderedChartTabs.has(tabId)) {
+          return;
+        }
+        if (!chartRenderQueue.includes(tabId)) {
+          chartRenderQueue.push(tabId);
+        }
+        queueChartDrain();
+      };
+
+      const renderTab = (tabId) => {
+        renderTagsForTab(tabId);
+        renderTablesForTab(tabId);
+        queueChartRender(tabId);
+        renderedTabs.add(tabId);
+        const tabPane = document.getElementById(tabId);
+        if (tabPane) {
+          tabPane.dataset.reportRendered = "true";
+        }
+      };
+
+      const ensureTabRendered = (tabId) => {
+        if (!tabId) {
+          return;
+        }
+        if (!renderedTabs.has(tabId)) {
+          renderTab(tabId);
+          return;
+        }
+        renderTagsForTab(tabId);
+        scheduleResize(tabId);
+      };
+
+      const renderActiveTab = () => {
+        ensureTabRendered(getActiveTabId());
       };
 
       setupTabFilters();
-      renderAllCharts();
-      renderAllTables();
       attachTabResizeHandlers();
-      scheduleResize(getActiveTabId());
+      ensureTabRendered("overview");
+      renderActiveTab();
     })();
   </script>
 </body>

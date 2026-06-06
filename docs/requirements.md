@@ -11,24 +11,22 @@ Git リポジトリのコミット履歴から LOC（実質的なコード行数
 
 ## 機能要件
 
-- FR-01: `python -m analyze_git_repo_loc` で CLI を起動できること。
-- FR-02: `repo_paths` には次を受け付けること。
-  - カンマ区切りのリポジトリパス/URL リスト
-  - 1 行 1 リポジトリのテキストファイル
-- FR-03: 各リポジトリ指定は `repo_path#branch` 形式でブランチを指定でき、未指定の場合は `main` を使用すること。
+- FR-01: `python -m analyze_git_repo_loc {init,run}` で CLI を起動できること。
+- FR-02: リポジトリ指定は YAML 設定ファイルの `repositories` で定義できること。
+- FR-03: 各リポジトリ設定は `path` と任意の `branch` を指定でき、未指定の場合は `main` を使用すること。
 - FR-04: 解析対象は Git のコミット履歴（マージコミット除外）であり、以下の情報を抽出すること。
   - 日時、リポジトリ名、ブランチ、コミットハッシュ、作者、言語、追加行数、削除行数、差分（NLOC）
 - FR-05: LOC 解析は、対象言語の拡張子により言語を判定し、コメント行・空行を除外すること。
 - FR-06: フィルタリング機能を提供すること。
   - 期間（`--since`, `--until`）
   - 集計間隔（`daily`, `weekly`, `monthly`）
-  - 言語フィルタ（`--lang`）
-  - 作者フィルタ（`--author-name`）
-  - 除外ディレクトリ（`--exclude-dirs` または `repo_path#branch,exclude1,exclude2`）
+  - 言語フィルタ（YAML `settings.lang`）
+  - 作者フィルタ（YAML `settings.author_name`）
+  - 除外ディレクトリ（YAML `settings.exclude_dirs` または repository `exclude_dirs`）
 - FR-07: 解析結果は出力ディレクトリ（既定: `./out`）へ CSV で保存すること。
 - FR-08: 可視化用の Plotly HTML チャートを生成し、オプションで表示を抑止できること（`--no-plot-show`）。
 - FR-09: 複数リポジトリの同時解析に対応すること。
-- FR-10: 解析済みコミットはキャッシュを保存し、`--clear-cache` で削除できること。
+- FR-10: 解析済みコミットはキャッシュを保存し、YAML `settings.clear_cache` で削除できること。
 - FR-11: 進捗はコンソールに表示し、致命的エラーはメッセージを出して終了すること。
 
 ## 非機能要件
@@ -42,7 +40,7 @@ Git リポジトリのコミット履歴から LOC（実質的なコード行数
 
 ## 追加機能要件（案）
 
-- FR-12: YAML 設定ファイルから解析設定を読み込めること（CLI 引数で上書き可能）。
+- FR-12: YAML 設定ファイルから解析設定を読み込めること（`run` の最小 CLI 引数で一部上書き可能）。
 - FR-13: 単一 HTML レポートを生成し、タブ切り替えで全体概要と各リポジトリ詳細を閲覧できること。
 - FR-14: レポート内でインタラクティブなフィルタリング（言語/作者/リポジトリ）が可能であること。
 - FR-15: 期間差分比較を行い、対象期間と基準期間の差分表・差分チャートを出力できること。
@@ -63,28 +61,26 @@ Git リポジトリのコミット履歴から LOC（実質的なコード行数
 ### CLI
 
 ```bash
-python -m analyze_git_repo_loc [repo_paths] \
-  -o ./out \
+python -m analyze_git_repo_loc init [--config config.yml]
+python -m analyze_git_repo_loc run [--config config.yml] \
+  --interactive \
+  --output ./out \
   --since YYYY-MM-DD \
   --until YYYY-MM-DD \
   --interval {daily,weekly,monthly} \
-  --lang L1,L2,... \
-  --author-name A1,A2,... \
-  --exclude-dirs dir1,dir2 \
-  --clear-cache \
   --no-plot-show
 ```
 
 ### 引数仕様
 
-- `repo_paths`:
-  - カンマ区切り: `path1#branch,path2#branch`
-  - ファイル指定: 1 行 1 リポジトリ。各行は `repo_path#branch,exclude1,exclude2` 形式。
+- `init`: 初期 YAML 設定ファイルを作成する。
+- `run`: YAML 設定ファイルから非対話で解析する。
+- `-i` / `--interactive`: `run` の実行前に対話フローで条件を確認・補正する。
+- `--config`: YAML 設定ファイル（既定: `config.yml`）。
+- `--output`: `run` の出力先上書き。
 - `--since` / `--until`: ISO 形式の日付（`YYYY-MM-DD`）。
 - `--interval`: 集計単位（`daily` / `weekly` / `monthly`）。
-- `--lang`: 対象言語（`LANGUAGES.md` のキーに準拠）。
-- `--author-name`: 作者名フィルタ（複数可）。
-- `--exclude-dirs`: リポジトリ配下の相対パスで除外ディレクトリを指定。
+- `--no-plot-show`: チャートの自動表示を抑止する。
 
 ### 出力仕様
 

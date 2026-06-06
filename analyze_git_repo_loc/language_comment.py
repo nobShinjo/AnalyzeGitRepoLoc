@@ -81,7 +81,7 @@ class LanguageComment:
     """ comment_dict is a dictionary that contains the comment syntax for each language """
 
     @classmethod
-    def get_comment_syntax(cls, language: str) -> list[str]:
+    def get_comment_syntax(cls, language: str) -> list[str] | None:
         """
         get_comment_syntax method returns the comment syntax for the given language
 
@@ -89,6 +89,6 @@ class LanguageComment:
             language (str): language name
 
         Returns:
-            list[str]: comment syntax for the given language
+            list[str] | None: comment syntax for the given language
         """
         return cls.language_comment_syntax.get(language, None)

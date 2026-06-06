@@ -34,12 +34,14 @@ import plotly.io as pio
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from plotly.offline import get_plotlyjs
 
-from analyze_git_repo_loc.analysis_helpers import (
+from analyze_git_repo_loc.analysis.analysis_helpers import (
     prepare_author_contribution_data,
     prepare_summary_data,
     prepare_trend_data,
 )
-from analyze_git_repo_loc.chart_builder import ChartBuilder, ChartStrategy
+from analyze_git_repo_loc.i18n import tr
+from analyze_git_repo_loc.reporting.chart_builder import ChartBuilder, ChartStrategy
+from analyze_git_repo_loc.reporting.chart_ticks import build_client_tick_policy
 
 _ASSETS_DIR_NAME = "assets"
 _NO_DATA_MESSAGE = '<p class="text-muted">No data available.</p>'
@@ -84,6 +86,7 @@ class HtmlReportBuilder:
         author_analysis: pd.DataFrame,
         repository_trend_analysis: pd.DataFrame,
         detail_analysis: pd.DataFrame,
+        exclude_metadata: list[dict[str, object]] | None = None,
     ) -> None:
         """
         Initialize the report builder with analysis data.
@@ -95,9 +98,16 @@ class HtmlReportBuilder:
         self.author_analysis = author_analysis
         self.repository_trend_analysis = repository_trend_analysis
         self.detail_analysis = detail_analysis
+        self.exclude_metadata = exclude_metadata or []
+        self._exclude_metadata_by_repo = {
+            str(item.get("repository", "")): item for item in self.exclude_metadata
+        }
         self._repo_chart_dirs = self._resolve_repo_chart_dirs()
         self.repositories = list(self._repo_chart_dirs.keys())
-        self._template_dir = Path(__file__).resolve().parent / "templates"
+        package_dir = Path(__file__).resolve().parent
+        self._template_dir = package_dir / "templates"
+        if not self._template_dir.exists():
+            self._template_dir = package_dir.parent / "templates"
         self._template_env = Environment(
             loader=FileSystemLoader(self._template_dir),
             autoescape=select_autoescape(["html", "xml"]),
@@ -116,7 +126,9 @@ class HtmlReportBuilder:
         report_html = self._build_report_html(progress_callback=progress_callback)
         (self.output_dir / "report.html").write_text(report_html, encoding="utf-8")
         if progress_callback is not None:
-            progress_callback(ProgressEvent(label="Report file written", advance=1))
+            progress_callback(
+                ProgressEvent(label=tr("progress.report_file_written"), advance=1)
+            )
 
     def _ensure_assets(self) -> None:
         """
@@ -188,7 +200,9 @@ class HtmlReportBuilder:
         """
         if self.charts_root is None:
             return dict.fromkeys(repos, None)
-        mapping = {repo: self.charts_root / repo for repo in repos}
+        mapping: dict[str, Path | None] = {
+            repo: self.charts_root / repo for repo in repos
+        }
         if len(repos) == 1:
             only_repo = repos[0]
             default_dir = self.charts_root
@@ -214,10 +228,14 @@ class HtmlReportBuilder:
             filter_chunk_size=_FILTER_PROGRESS_CHUNK,
         )
         if progress_callback is not None:
-            progress_callback(ProgressEvent(label="Render template", advance=0))
+            progress_callback(
+                ProgressEvent(label=tr("progress.render_template"), advance=0)
+            )
         rendered = template.render(**context)
         if progress_callback is not None:
-            progress_callback(ProgressEvent(label="Render template", advance=1))
+            progress_callback(
+                ProgressEvent(label=tr("progress.render_template"), advance=1)
+            )
         return rendered
 
     def _build_template_context(
@@ -288,11 +306,12 @@ class HtmlReportBuilder:
             progress_callback=progress_callback,
             chunk_size=chunk_size,
         )
-        languages = sorted({row["language"] for row in rows})
-        authors = sorted({row["author"] for row in rows})
-        repositories = sorted({row["repository"] for row in rows})
+        languages = sorted({str(row["language"]) for row in rows})
+        authors = sorted({str(row["author"]) for row in rows})
+        repositories = sorted({str(row["repository"]) for row in rows})
         return {
             "time_interval": self.time_interval,
+            "tick_policy": build_client_tick_policy(),
             "rows": rows,
             "languages": languages,
             "authors": authors,
@@ -370,7 +389,13 @@ class HtmlReportBuilder:
             end = min(start + chunk_size, total_rows)
             chunk = detail_data.iloc[start:end].copy()
             chunk = self._transform_filter_rows(chunk, interval_col)
-            rows.extend(chunk.to_dict(orient="records"))
+            rows.extend(
+                {
+                    str(key): value
+                    for key, value in record.items()
+                }
+                for record in chunk.to_dict(orient="records")
+            )
             if progress_callback is not None:
                 progress_callback(
                     ProgressEvent(
@@ -441,15 +466,14 @@ class HtmlReportBuilder:
         """
         Build template context for the overview tab.
         """
-        repo_list = ", ".join(self.repositories) if self.repositories else "None"
         meta_items = [
             {"label": "Run directory", "value": self.output_dir.name},
             {"label": "Time interval", "value": self.time_interval},
             {"label": "Repositories analyzed", "value": len(self.repositories)},
-            {"label": "Repository list", "value": repo_list},
         ]
         return {
             "meta_items": meta_items,
+            "repositories": self.repositories,
             "totals_table": self._summarize_totals_table(
                 self.repository_trend_analysis
             ),
@@ -517,6 +541,7 @@ class HtmlReportBuilder:
                     "author_table": self._summarize_category_table(
                         repo_author, "Author"
                     ),
+                    "exclude_summary": self._exclude_metadata_by_repo.get(repo),
                     "language_chart": self._resolve_chart_html(
                         chart_dir=chart_dir,
                         filename=_LANGUAGE_CHART_FILENAME,
@@ -742,9 +767,11 @@ class HtmlReportBuilder:
         """
         Convert a value to int safely.
         """
+        if not isinstance(value, (int, float, str)):
+            return 0
         try:
             return int(value)
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             return 0
 
     @classmethod
@@ -782,6 +809,7 @@ def generate_html_report(
     repository_trend_analysis: pd.DataFrame,
     detail_analysis: pd.DataFrame,
     progress_callback: ProgressCallback | None = None,
+    exclude_metadata: list[dict[str, object]] | None = None,
 ) -> None:
     """
     Generate a single HTML report in the run output directory.
@@ -796,6 +824,8 @@ def generate_html_report(
         detail_analysis (pd.DataFrame): Detailed data used for report filters.
         progress_callback (ProgressCallback | None): Optional callback
             invoked after each report generation step.
+        exclude_metadata (list[dict[str, object]] | None): Optional per-repository
+            exclude template and path decisions to render in repository tabs.
     """
     builder = HtmlReportBuilder(
         output_dir=output_dir,
@@ -805,5 +835,6 @@ def generate_html_report(
         author_analysis=author_analysis,
         repository_trend_analysis=repository_trend_analysis,
         detail_analysis=detail_analysis,
+        exclude_metadata=exclude_metadata,
     )
     builder.generate(progress_callback=progress_callback)

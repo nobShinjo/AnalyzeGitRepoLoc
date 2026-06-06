@@ -1,5 +1,7 @@
 # AnalyzeGitRepoLOC
 
+[日本語 README](./README.ja.md)
+
 ## Overview
 
 Analyze Git repositories and visualize code LOC.
@@ -34,19 +36,20 @@ Analyze Git repositories and visualize code LOC.
 
 ### Command line
 
+The CLI is organized around two subcommands:
+
 ```shell
-python -m analyze_git_repo_loc [repo_paths] [options]
+python -m analyze_git_repo_loc init [--config config.yml]
+python -m analyze_git_repo_loc run [--config config.yml] [options]
+python -m analyze_git_repo_loc run -i [--config config.yml]
 ```
 
-`repo_paths` is a comma-separated list of Git repository paths or URLs.
+Use `init` to create a starter config, `doctor` to validate YAML before a run,
+`run -i` for the guided interactive workflow, and `run` for non-interactive
+batch analysis from YAML.
 
-Each repository entry supports an optional branch name using `#`:
-`/path/to/repo#branch-name` or `https://github.com/user/repo.git#branch-name`.
-If no branch is specified, `main` is used. When `--config` is provided,
-`repo_paths` can be omitted.
-
-Note: Per-repository exclude directories can be specified in the YAML config.
-`--exclude-dirs` applies to all repositories.
+Direct `repo_paths` arguments are no longer a command-line entry point. Define
+repositories in YAML, or select them with `run -i` and save the generated config.
 
 ### Remote authentication
 
@@ -60,76 +63,69 @@ Set one of the following environment variables before running the CLI:
 
 ### Examples
 
-#### Example : Monthly Analysis
+#### Example : Create an initial config
 
 ```shell
-python -m analyze_git_repo_loc /path/to/repo#main --interval monthly -o ./out
+python -m analyze_git_repo_loc init
 ```
 
-#### Example : Daily Analysis
+`init` interactively creates a minimal interactive-ready YAML config. The default
+output file is `config.yml`. If the file already exists, the CLI asks for
+another file name; entering the same existing path requires explicit overwrite
+confirmation.
+
+The generated config stores common non-secret defaults only. It does not save
+repositories, tokens, client IDs, or authentication choices. After creation,
+run:
 
 ```shell
-python -m analyze_git_repo_loc /path/to/repo#main --interval daily -o ./out
+python -m analyze_git_repo_loc run -i
 ```
 
-#### Example : Specify branch name
+#### Example : Guided interactive analysis
 
 ```shell
-python -m analyze_git_repo_loc /path/to/repo#develop --interval daily -o ./out
+python -m analyze_git_repo_loc run -i --config ./config.yml
 ```
 
-#### Example : Filter by date
+The interactive run lists repositories from enabled GitHub/GitLab providers, lets you
+search and select multiple repositories, then immediately runs the normal
+analysis pipeline with the selected repositories.
+
+When only one provider is configured and `GITHUB_TOKEN` / `GITLAB_TOKEN` or an
+existing `gh` / `glab` login is available, `run -i` starts at Quick Review.
+Press Enter to run, `e` to edit, `d` for details, `s` to save config then run,
+or `c` to cancel.
+
+#### Example : Validate configuration
 
 ```shell
-python -m analyze_git_repo_loc /path/to/repo#main --interval monthly -o ./out --since 2023-01-01 --until 2023-12-31
+python -m analyze_git_repo_loc doctor --config ./config.yml
 ```
 
-#### Example : Filter by Language
+`doctor` performs lightweight local checks for YAML structure, analysis settings,
+repository paths, output paths, and secret-like keys. Add `--remote` to verify
+configured GitHub/GitLab providers through their APIs, and `--strict` to treat
+warnings as failures.
+
+#### Example : Batch run from YAML
 
 ```shell
-python -m analyze_git_repo_loc /path/to/repo#main --interval monthly -o ./out --lang C#,Python,text,Markdown
+python -m analyze_git_repo_loc run --config ./config.yml
 ```
 
-#### Example : Filter by Author
+`run` reads repositories and stable analysis settings from YAML. A small set of
+runtime overrides remains available:
 
 ```shell
-python -m analyze_git_repo_loc /path/to/repo#main --interval monthly -o ./out --author-name "Alice,Bob"
-```
-
-#### Example : Exclude directory
-
-```shell
-python -m analyze_git_repo_loc /path/to/repo#main --interval monthly -o ./out --exclude-dirs dir1,dir2
-```
-
-#### Example : Multi repository (comma-separated)
-
-```shell
-python -m analyze_git_repo_loc /path/to/repo1#main,/path/to/repo2#develop --interval monthly -o ./out
-```
-
-#### Example : YAML config
-
-```shell
-python -m analyze_git_repo_loc --config ./config.yml
-```
-
-#### Example : Limit workers
-
-```shell
-python -m analyze_git_repo_loc /path/to/repo#main --interval monthly -o ./out --workers 4
-```
-
-#### Example : Clear old cache files
-
-```shell
-python -m analyze_git_repo_loc /path/to/repo#main --interval monthly -o ./out --clear-cache
+python -m analyze_git_repo_loc run --config ./config.yml --interval weekly --output ./reports --no-plot-show
 ```
 
 ### YAML configuration
 
-Use `--config` to load a YAML file. CLI arguments override `settings`, and
-`repo_paths` on the CLI takes precedence over `repositories`.
+Use YAML to define repositories and stable analysis settings. `run` supports
+only minimal CLI overrides: `--output`, `--since`, `--until`, `--interval`, and
+`--no-plot-show`.
 
 ```yaml
 settings:
@@ -145,6 +141,9 @@ settings:
   exclude_dirs:
     - docs
     - tests
+  exclude_template_mode: auto
+  exclude_template_names:
+    - python
   workers: 4
 
 repositories:
@@ -153,22 +152,84 @@ repositories:
     exclude_dirs:
       - tools
       - samples
+    exclude_template_mode: auto
   - path: https://github.com/user/repo2.git
     branch: develop
+
+interactive:
+  providers:
+    github:
+      enabled: true
+      api_base_url: https://api.github.com
+    gitlab:
+      enabled: false
+      base_url: https://gitlab.com
+  defaults:
+    clone_protocol: https
+  quick_defaults:
+    interval: monthly
+    cache_policy: use
+    no_plot_show: true
+    exclude_dirs:
+      - node_modules
+      - .venv
+    exclude_template_mode: auto
 ```
 
 Notes:
 
 - `repositories` entries may be a string (path/URL) or a mapping with `path`,
-  `branch`, and `exclude_dirs`. Branch defaults to `main`.
-- `lang`, `author_name`, and `exclude_dirs` accept a YAML list or a
+  `branch`, `exclude_dirs`, `include_subpath`, and exclude template settings.
+  Branch defaults to `main`.
+- `lang`, `author_name`, `exclude_dirs`, `exclude_template_names`, and
+  `exclude_template_files` accept a YAML list or a
   comma-separated string.
+- `exclude_template_mode` can be `auto`, `manual`, or `off`. `auto` detects
+  common project layouts and merges template excludes with manual
+  `exclude_dirs`; `manual` uses only `exclude_dirs`; `off` disables excludes.
+- Built-in exclude templates cover Python, .NET, Unity, Node.js, Java, Rust,
+  and Go projects. Add `settings.exclude_template_files` to load custom
+  template YAML files with `name`, `display_name`, `detect`, `exclude_dirs`,
+  and optional `priority`.
+- `init` can create a minimal starter config for interactive usage.
+- `run -i` uses `config.yml` by default and may use a YAML file without
+  `repositories`.
+- `run -i` runs a pre-analysis review. YAML values are loaded as
+  defaults, then the interactive flow confirms repository selection, branches, filters,
+  path rules, output, cache policy, and display behavior before analysis starts.
+- The interactive flow can ask which providers to use: GitHub, GitLab.com, and
+  self-hosted GitLab. If exactly one provider is configured, that provider is
+  selected automatically. The self-hosted GitLab URL can be entered at runtime.
+- `interactive.quick_defaults` stores non-secret defaults used by the Quick Review
+  screen. It never stores tokens, client IDs, or authentication choices.
+- In the interactive flow, global excludes, per-repository excludes, and
+  detected exclude templates are combined before analysis. Template-derived
+  paths are kept even when they do not currently exist, and missing-path
+  warnings are reserved for manual excludes.
+- Quick Review starts with a compact summary and uses terminal colors when
+  supported to distinguish headings, summary values, actions, and cache states.
+  Press `d` to show repository-level details and full execution conditions.
+- Interactive-selected repositories may include `include_subpath` when saving config;
+  the analysis run treats it as a repository-root-relative subpath.
+- Interactive authentication is selected at runtime. It offers environment tokens
+  (`GITHUB_TOKEN` / `GITLAB_TOKEN`), existing `gh` / `glab` CLI login tokens,
+  OAuth Device Code login when an application client ID is available, or a
+  one-time token entered for the current run.
+- Environment tokens and existing `gh` / `glab` logins are selected
+  automatically when they are the configured provider's available non-interactive
+  option. Device Code and one-time token authentication still require explicit
+  selection.
+- Interactive authentication details are not stored in YAML, files, or keyrings by this
+  application. Resolved tokens are mirrored only into the current process
+  environment for downstream clone compatibility.
+- `interactive.defaults.clone_protocol` accepts `https` or `ssh`.
 
 ### Output files
 
-The output root is `--output` (default: `./out`). Each run creates a timestamped
-directory (`YYYYMMDDHHMMSS`) with run-level outputs, and per-repository folders
-are created directly under the output root.
+The output root comes from `settings.output` in YAML, or from the `run --output`
+override. Each run creates a timestamped directory (`YYYYMMDDHHMMSS`) with
+run-level outputs, and per-repository folders are created directly under the
+output root.
 
 Run directory (timestamped) contents:
 
@@ -189,7 +250,7 @@ Per-repository directory (under the output root) contents:
   `author_summary_data.csv`, `author_chart.html`
 
 The `.cache` directory under the output root stores remote clones and can be
-cleared with `--clear-cache`.
+cleared with the YAML `settings.clear_cache` value.
 
 ### Stdout examples
 
@@ -230,34 +291,23 @@ python -m analyze_git_repo_loc --help
 ```
 
 ```text
-usage: analyze_git_repo_loc [-h] [--config CONFIG] [-o OUTPUT] [--since SINCE] [--until UNTIL] [--interval {daily,weekly,monthly}] [--lang LANG]
-                            [--author-name AUTHOR_NAME] [--exclude-dirs EXCLUDE_DIRS] [--workers WORKERS] [--clear-cache] [--no-plot-show]
-                            repo_paths
+usage: analyze_git_repo_loc [-h] [-L {auto,en,jp}] {init,doctor,run} ...
 
 Analyze Git repositories and visualize code LOC.
 
 positional arguments:
-  repo_paths            A comma-separated list of Git repository paths or URLs,
-                        optionally followed by a branch name separated with '#'. Examples: /path/to/repo1#branch-name
-                        orhttp://github.com/user/repo2.git#branch-name. If no branch is specified, 'main' will be used as the default.
-                        Use --config for multi-repository YAML inputs.
+  {init,doctor,run}
+    init                Create an initial YAML configuration file
+                        interactively.
+    doctor              Validate YAML configuration before running analysis.
+    run                 Run analysis from a YAML configuration file,
+                        optionally interactively.
 
 options:
   -h, --help            show this help message and exit
-  --config CONFIG       YAML configuration file path
-  -o, --output OUTPUT   Output path
-  --since SINCE         Start Date yyyy-mm-dd
-  --until UNTIL         End Date yyyy-mm-dd
-  --interval {daily,weekly,monthly}
-                        Interval (default: monthly)
-  --lang LANG           Count only the given space separated, case-insensitive languages L1,L2,L3, etc.
-  --author-name AUTHOR_NAME
-                        Author name or comma-separated list of author names to filter commits
-  --exclude-dirs EXCLUDE_DIRS
-                        Exclude directories from analysis, specified as comma-separated paths relative to the repository root.
-  --workers WORKERS     Maximum number of repositories to analyze concurrently (default: auto).
-  --clear-cache         If set, the cache will be cleared before executing the main function.
-  --no-plot-show        If set, the plots will not be shown.
+  -L, --display-language {auto,en,jp}
+                        Display language for this run (auto, en, or jp;
+                        default: auto).
 ```
 
 ## Author
@@ -267,7 +317,7 @@ Nob Shinjo (<https://github.com/nobShinjo>)
 ## Licenses
 
 - [LICENSE](./LICENSE)
-- [3rd Party LicenSes](./3rdPartyLicenses.md)
+- [3rd Party Licenses](./3rdPartyLicenses.md)
 
 ## Languages
 

@@ -1,0 +1,63 @@
+# Intentional doctor sample for validation and test demonstrations.
+# This file is expected to produce both ERROR and WARNING findings.
+settings:
+  output: missing-parent/out
+  interval: yearly
+  workers: 0
+  clear_cache: false
+  no_plot_show: false
+  exclude_template_mode: auto
+  exclude_template_files:
+    - missing-exclude-template.yml
+  exclude_template_names: &id001
+    - unity
+    - dotnet
+    - python
+    - node
+    - java
+    - rust
+    - go
+  since: "2026-12-31"
+  until: "2020-01-01"
+  lang: &id002
+    - C#
+    - Python
+    - Java
+    - JavaScript
+    - PowerShell
+    - Markdown
+    - TOML
+    - YAML
+    - JSON
+    - Dockerfile
+    - Bourne Shell
+repositories:
+  - path: https://github.com/example-org/example-missing-repo.git
+    branch: main
+    include_subpath: ../outside
+  - path: missing-local-repository
+    branch: main
+    exclude_dirs:
+      - C:/absolute/exclude
+  - branch: develop
+interactive:
+  providers:
+    github:
+      enabled: true
+      api_base_url: https://api.github.com
+      token: dummy-token-for-doctor-secret-key-detection
+    gitlab:
+      enabled: false
+      base_url: https://gitlab.com
+  defaults:
+    clone_protocol: ftp
+  quick_defaults:
+    output: out
+    interval: weekly
+    cache_policy: use
+    no_plot_show: false
+    exclude_template_mode: auto
+    exclude_template_names: *id001
+    since: "2020-01-01"
+    until: "2026-12-31"
+    lang: *id002

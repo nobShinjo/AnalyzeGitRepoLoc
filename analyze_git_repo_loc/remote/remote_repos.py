@@ -15,14 +15,17 @@ Overview:
 
 from __future__ import annotations
 
+import hashlib
+import os
 import shutil
 from pathlib import Path
+from typing import Callable
 from urllib.parse import urlparse
 
 from git import GitCommandError, InvalidGitRepositoryError, NoSuchPathError, Repo
 
-from analyze_git_repo_loc.git_repo_loc_analyzer import GitRepoLOCAnalyzer
-from analyze_git_repo_loc.remote_auth import RemoteAuthService
+from analyze_git_repo_loc.analysis.git_repo_loc_analyzer import GitRepoLOCAnalyzer
+from analyze_git_repo_loc.remote.remote_auth import RemoteAuthService
 
 
 class RemoteRepoManager:
@@ -65,9 +68,9 @@ class RemoteRepoManager:
             repo = Repo(repo_path)
             self._ensure_origin_matches(repo, repo_url)
             self._fetch_with_auth(repo, repo_url)
-        except (InvalidGitRepositoryError, NoSuchPathError):
+        except InvalidGitRepositoryError, NoSuchPathError:
             if repo_path.exists():
-                shutil.rmtree(repo_path)
+                self._remove_cache_path(repo_path)
             repo_path.parent.mkdir(parents=True, exist_ok=True)
             try:
                 repo = self._clone_with_auth(repo_url, repo_path)
@@ -88,15 +91,22 @@ class RemoteRepoManager:
         Returns:
             tuple[str, str] | None: Normalized identity for comparison.
         """
+
+        def normalize_path(value: str) -> str:
+            normalized = value.lstrip("/").rstrip("/")
+            if normalized.endswith(".git"):
+                normalized = normalized[:-4]
+            return normalized
+
         if repo_url.startswith("git@"):
             host_path = repo_url.split("@", 1)[-1]
             if ":" not in host_path:
                 return None
             host, path = host_path.split(":", 1)
-            return host.lower(), path.lstrip("/")
+            return host.lower(), normalize_path(path)
         parsed = urlparse(repo_url)
         if parsed.hostname and parsed.path:
-            return parsed.hostname.lower(), parsed.path.lstrip("/")
+            return parsed.hostname.lower(), normalize_path(parsed.path)
         return None
 
     def _ensure_origin_matches(self, repo: Repo, repo_url: str) -> None:
@@ -143,7 +153,7 @@ class RemoteRepoManager:
             try:
                 if origin.url != candidate:
                     origin.set_url(candidate)
-                repo.git.fetch("--all", "--prune")
+                repo.git.fetch("--all", "--prune", env=self._auth.git_env())
                 self._auth.log_auth_success(candidate)
                 return
             except GitCommandError as ex:
@@ -170,7 +180,7 @@ class RemoteRepoManager:
         last_error: GitCommandError | None = None
         for candidate in self._auth.build_auth_candidates(repo_url):
             try:
-                repo = Repo.clone_from(candidate, repo_path)
+                repo = Repo.clone_from(candidate, repo_path, env=self._auth.git_env())
                 sanitized_candidate = self._auth.strip_credentials(candidate)
                 if repo.remotes and repo.remotes.origin.url != sanitized_candidate:
                     repo.remotes.origin.set_url(sanitized_candidate)
@@ -179,7 +189,7 @@ class RemoteRepoManager:
             except GitCommandError as ex:
                 last_error = ex
                 if repo_path.exists():
-                    shutil.rmtree(repo_path)
+                    self._remove_cache_path(repo_path)
         if last_error is not None:
             if self._auth.is_auth_failure(last_error):
                 self._auth.raise_auth_failure(repo_url, last_error)
@@ -198,7 +208,28 @@ class RemoteRepoManager:
             Path: Path to the cached clone.
         """
         repo_name = GitRepoLOCAnalyzer.get_repository_name(repo_url)
-        return cache_dir / "remote-repos" / repo_name
+        identity = self._parse_repo_identity(repo_url)
+        identity_text = "/".join(identity) if identity is not None else repo_url
+        identity_hash = hashlib.sha1(identity_text.encode("utf-8")).hexdigest()[:12]
+        return cache_dir / "remote-repos" / f"{repo_name}-{identity_hash}"
+
+    def get_remote_cache_path(self, cache_dir: Path, repo_url: str) -> Path:
+        """Return the cache directory path for a remote repository clone."""
+        return self._get_remote_cache_path(cache_dir, repo_url)
+
+    def _remove_cache_path(self, repo_path: Path) -> None:
+        shutil.rmtree(repo_path, onexc=self._handle_remove_error)
+
+    def _handle_remove_error(
+        self,
+        function: Callable[[str], object],
+        path: str,
+        excinfo: BaseException,
+    ) -> None:
+        if not isinstance(excinfo, PermissionError):
+            raise excinfo
+        os.chmod(path, 0o700)
+        function(path)
 
     def _checkout_branch(self, repo: Repo, branch_name: str) -> None:
         """

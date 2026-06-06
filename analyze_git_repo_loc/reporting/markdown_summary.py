@@ -69,6 +69,8 @@ def _to_int(value: object) -> int:
     Returns:
         int: Converted integer value.
     """
+    if not isinstance(value, (int, float, str)):
+        return 0
     try:
         return int(value)
     except (TypeError, ValueError):
@@ -109,7 +111,7 @@ def _summarize_category(
         .sum()
         .reset_index()
     )
-    summary[category_column] = summary[category_column].fillna("Unknown")
+    summary.loc[:, category_column] = summary[category_column].fillna("Unknown")
     summary = summary.sort_values(by="NLOC", ascending=False).head(top_n)
     rows = [
         [

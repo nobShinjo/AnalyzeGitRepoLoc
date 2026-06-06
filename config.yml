@@ -1,0 +1,17 @@
+settings:
+  output: ./out
+  interval: monthly
+  no_plot_show: true
+
+tui:
+  providers:
+    github:
+      enabled: true
+      api_base_url: https://api.github.com
+
+    # gitlab:
+    #   enabled: true
+    #   base_url: https://gitlab.example.com
+  defaults:
+    clone_protocol: https
+

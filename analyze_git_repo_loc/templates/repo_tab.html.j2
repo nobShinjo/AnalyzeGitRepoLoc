@@ -1,28 +1,40 @@
 <div class="tab-pane" id="{{ repo_tab.id }}">
-  <div class="row">
-    <div class="col-12">
-      <div class="card">
-        <div class="card-header">Repository: {{ repo_tab.name }}</div>
-        <div class="card-body">
-          <span class="text-muted">Table filters apply only within this repository.</span>
-        </div>
-      </div>
+  <div class="metric-grid">
+    <div class="metric-card">
+      <div class="metric-label">Repository</div>
+      <div class="metric-value">{{ repo_tab.name }}</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">Scope</div>
+      <div class="metric-value">Repository tab</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">Filters</div>
+      <div class="metric-value">Language / Author</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">Rendering</div>
+      <div class="metric-value">On first open</div>
     </div>
   </div>
   <div class="row row-cols-1 row-cols-lg-2 g-3 mb-3">
     <div class="col">
-      <div class="card">
+      <div class="card table-panel">
         <div class="card-header">Languages (Top 10)</div>
         <div class="card-body">
-          <div id="repo-{{ repo_tab.id }}-language-table"></div>
+          <div id="repo-{{ repo_tab.id }}-language-table" class="report-table" data-report-table="true">
+            <div class="report-placeholder">Open this tab to render.</div>
+          </div>
         </div>
       </div>
     </div>
     <div class="col">
-      <div class="card">
+      <div class="card table-panel">
         <div class="card-header">Authors (Top 10)</div>
         <div class="card-body">
-          <div id="repo-{{ repo_tab.id }}-author-table"></div>
+          <div id="repo-{{ repo_tab.id }}-author-table" class="report-table" data-report-table="true">
+            <div class="report-placeholder">Open this tab to render.</div>
+          </div>
         </div>
       </div>
     </div>
@@ -31,7 +43,8 @@
     <div class="col">
       <div class="card tag-card" data-filter-tab="{{ repo_tab.id }}" data-filter-group="language">
         <div class="card-header">
-          Language Tags
+          <span>Language Tags</span>
+          <span class="tag-count" data-tag-count>0 tags</span>
           <div class="card-actions">
             <button class="btn btn-sm btn-ghost-secondary" type="button" data-tag-clear>Clear filters</button>
           </div>
@@ -45,7 +58,8 @@
     <div class="col">
       <div class="card tag-card" data-filter-tab="{{ repo_tab.id }}" data-filter-group="author">
         <div class="card-header">
-          Author Tags
+          <span>Author Tags</span>
+          <span class="tag-count" data-tag-count>0 tags</span>
           <div class="card-actions">
             <button class="btn btn-sm btn-ghost-secondary" type="button" data-tag-clear>Clear filters</button>
           </div>
@@ -59,20 +73,61 @@
   </div>
   <div class="row">
     <div class="col-12">
-      <div class="card">
+      <div class="card chart-panel">
         <div class="card-header">Language Trend</div>
         <div class="card-body">
-          <div id="repo-{{ repo_tab.id }}-language-chart"></div>
+          <div id="repo-{{ repo_tab.id }}-language-chart" data-report-chart="true"></div>
         </div>
       </div>
     </div>
   </div>
   <div class="row">
     <div class="col-12">
-      <div class="card">
+      <div class="card chart-panel">
         <div class="card-header">Author Trend</div>
         <div class="card-body">
-          <div id="repo-{{ repo_tab.id }}-author-chart"></div>
+          <div id="repo-{{ repo_tab.id }}-author-chart" data-report-chart="true"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="row">
+    <div class="col-12">
+      <div class="card table-panel">
+        <div class="card-header">Exclude Paths</div>
+        <div class="card-body">
+          {% if repo_tab.exclude_summary %}
+          <div class="table-responsive">
+            <table class="table">
+              <tbody>
+                <tr>
+                  <th>Mode</th>
+                  <td class="text-start">{{ repo_tab.exclude_summary.mode }}</td>
+                </tr>
+                <tr>
+                  <th>Templates</th>
+                  <td class="text-start">{{ repo_tab.exclude_summary.templates | join(", ") if repo_tab.exclude_summary.templates else "(none)" }}</td>
+                </tr>
+                <tr>
+                  <th>Excluded paths</th>
+                  <td class="exclude-path-cell text-start">
+                    {% if repo_tab.exclude_summary.excluded_paths %}
+                    <ul class="exclude-path-list list-unstyled text-start mb-0">
+                      {% for excluded_path in repo_tab.exclude_summary.excluded_paths %}
+                      <li><code>{{ excluded_path }}</code></li>
+                      {% endfor %}
+                    </ul>
+                    {% else %}
+                    (none)
+                    {% endif %}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          {% else %}
+          <p class="text-muted mb-0">No exclude template metadata recorded.</p>
+          {% endif %}
         </div>
       </div>
     </div>
