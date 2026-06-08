@@ -7,6 +7,7 @@ from __future__ import annotations
 import argparse
 from email.message import Message
 import os
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -671,7 +672,11 @@ class TuiAuthTests(unittest.TestCase):
         runner = Mock()
         runner.return_value = Mock(returncode=0, stdout="gh-token\n", stderr="")
 
-        token = get_cli_token("github", "https://api.github.com", runner=runner)
+        with patch(
+            "analyze_git_repo_loc.remote.remote_auth.shutil.which",
+            return_value="gh",
+        ):
+            token = get_cli_token("github", "https://api.github.com", runner=runner)
 
         self.assertEqual(token, "gh-token")
         runner.assert_called_once()
@@ -688,13 +693,58 @@ class TuiAuthTests(unittest.TestCase):
             stderr="",
         )
 
-        token = get_cli_token("gitlab", "https://gitlab.com", runner=runner)
+        with patch(
+            "analyze_git_repo_loc.remote.remote_auth.shutil.which",
+            return_value="glab",
+        ):
+            token = get_cli_token("gitlab", "https://gitlab.com", runner=runner)
 
         self.assertEqual(token, "glpat-token")
-        self.assertEqual(
-            runner.call_args.args[0],
+        runner.assert_called_once_with(
             ["glab", "auth", "status", "--hostname", "gitlab.com", "--show-token"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=15,
+            check=False,
         )
+
+    def test_get_cli_token_returns_none_when_cli_is_missing(self) -> None:
+        runner = Mock()
+
+        with patch(
+            "analyze_git_repo_loc.remote.remote_auth.shutil.which",
+            return_value=None,
+        ):
+            token = get_cli_token("gitlab", "https://gitlab.com", runner=runner)
+
+        self.assertIsNone(token)
+        runner.assert_not_called()
+
+    def test_get_cli_token_returns_none_for_utf8_decode_errors(self) -> None:
+        runner = Mock(
+            side_effect=UnicodeDecodeError("cp932", b"\x80", 0, 1, "invalid")
+        )
+
+        with patch(
+            "analyze_git_repo_loc.remote.remote_auth.shutil.which",
+            return_value="glab",
+        ):
+            token = get_cli_token("gitlab", "https://gitlab.com", runner=runner)
+
+        self.assertIsNone(token)
+
+    def test_get_cli_token_returns_none_for_subprocess_errors(self) -> None:
+        runner = Mock(side_effect=subprocess.SubprocessError("failed"))
+
+        with patch(
+            "analyze_git_repo_loc.remote.remote_auth.shutil.which",
+            return_value="gh",
+        ):
+            token = get_cli_token("github", "https://api.github.com", runner=runner)
+
+        self.assertIsNone(token)
 
     def test_run_tui_auth_selection_sets_host_specific_token(self) -> None:
         settings = load_tui_settings(

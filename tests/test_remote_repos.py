@@ -243,6 +243,8 @@ class RemoteAuthServiceTests(unittest.TestCase):
             ["gh", "auth", "token", "--hostname", "git.example.com"],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=15,
             check=False,
         )
@@ -277,9 +279,23 @@ class RemoteAuthServiceTests(unittest.TestCase):
             ["gh", "auth", "token", "--hostname", "github.com"],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=15,
             check=False,
         )
+
+    def test_github_cli_missing_falls_back_to_original_url(self) -> None:
+        auth = RemoteAuthService()
+
+        with patch.dict("os.environ", {}, clear=True):
+            with patch(
+                "analyze_git_repo_loc.remote.remote_auth.shutil.which",
+                return_value=None,
+            ):
+                candidates = auth.build_auth_candidates(GITHUB_PRIVATE_REPO_URL)
+
+        self.assertEqual(candidates, [GITHUB_PRIVATE_REPO_URL])
 
     def test_gitlab_cli_token_is_used_when_env_token_is_missing(self) -> None:
         auth = RemoteAuthService()
