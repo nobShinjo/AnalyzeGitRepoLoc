@@ -30,6 +30,7 @@ from analyze_git_repo_loc.interactive.tui_wizard import (
     normalize_final_action,
     render_final_review,
     selected_targets_to_settings,
+    save_wizard_config,
     wizard_state_to_config,
 )
 from analyze_git_repo_loc.remote.remote_catalog import (
@@ -156,6 +157,72 @@ class TuiWizardStateTests(unittest.TestCase):
         self.assertIn("branch_loader", selector.call_args.kwargs)
         branch.assert_not_called()
         self.assertEqual(result.repo_paths[0][1], "develop")
+
+    def test_run_tui_wizard_preselects_configured_repository_and_branch(self) -> None:
+        ref = RemoteRepositoryRef(
+            "github",
+            "alpha",
+            "org/alpha",
+            "https://github.com/org/alpha.git",
+            "",
+            "https://github.com/org/alpha",
+            "main",
+        )
+        args = argparse.Namespace(
+            output=Path("out"),
+            since=None,
+            until=None,
+            interval="monthly",
+            author_name=None,
+            lang=None,
+            exclude_dirs=None,
+            workers=1,
+            clear_cache=False,
+            no_plot_show=True,
+            config=Path("config.yml"),
+        )
+        config = {
+            "interactive": {"providers": {"github": {"enabled": True}}},
+            "repositories": [
+                {
+                    "path": "https://github.com/org/alpha.git",
+                    "branch": "release",
+                }
+            ],
+        }
+
+        with patch(
+            "analyze_git_repo_loc.interactive.tui_wizard.choose_auto_provider_targets",
+            return_value=[
+                ProviderTarget("github", "github", "GitHub", "https://api.github.com")
+            ],
+        ):
+            with patch(
+                "analyze_git_repo_loc.interactive.tui_wizard._authenticate_provider_targets",
+                return_value=({"github": "token"}, {"github": "env"}),
+            ):
+                with patch(
+                    "analyze_git_repo_loc.interactive.tui_wizard._fetch_repository_catalog",
+                    return_value=[ref],
+                ):
+                    with patch(
+                        "analyze_git_repo_loc.interactive.tui_wizard.run_repository_selector",
+                        return_value=RepositorySelectionResult(
+                            selected_refs=[ref],
+                            selected_branches={"org/alpha": "release"},
+                        ),
+                    ) as selector:
+                        with patch(
+                            "analyze_git_repo_loc.interactive.tui_wizard._run_wizard_steps",
+                            return_value="run",
+                        ):
+                            tui_wizard.run_tui_wizard(args, config)
+
+        self.assertEqual(selector.call_args.kwargs["initial_selected_refs"], [ref])
+        self.assertEqual(
+            selector.call_args.kwargs["initial_selected_branches"],
+            {"org/alpha": "release"},
+        )
 
     def test_run_tui_wizard_preserves_repository_overrides_from_config(self) -> None:
         ref = RemoteRepositoryRef(
@@ -729,6 +796,48 @@ class TuiWizardStateTests(unittest.TestCase):
         )
         self.assertNotIn("tui", exported)
         self.assertNotIn("auth_tokens", rendered)
+
+    def test_save_wizard_config_preserves_commented_repository_candidates(self) -> None:
+        ref = RemoteRepositoryRef(
+            "github",
+            "alpha",
+            "org/alpha",
+            "https://github.com/org/alpha.git",
+            "",
+            "https://github.com/org/alpha",
+            "main",
+        )
+        state = TuiWizardState(
+            provider_targets=[],
+            auth_tokens={},
+            repository_catalog=[ref],
+            selected_repositories=[SelectedRepositoryConfig(ref=ref, branch="main")],
+            output=Path("out"),
+        )
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            path = Path(tmp_dir) / "config.yml"
+            path.write_text(
+                "\n".join(
+                    [
+                        "settings:",
+                        "  output: old-out",
+                        "# repositories:",
+                        "#   - path: https://github.com/org/commented.git",
+                        "#     branch: develop",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            save_wizard_config(path, state)
+
+            rendered = path.read_text(encoding="utf-8")
+
+        self.assertIn("# repositories:", rendered)
+        self.assertIn("#   - path: https://github.com/org/commented.git", rendered)
+        self.assertIn("repositories:", rendered)
+        self.assertIn("path: https://github.com/org/alpha.git", rendered)
 
     def test_fetch_repository_catalog_wraps_provider_errors(self) -> None:
         target = ProviderTarget(

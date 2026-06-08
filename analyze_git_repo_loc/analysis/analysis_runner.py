@@ -68,6 +68,8 @@ def _resolve_analysis_repo_path(
     repo_path: Path | str,
     branch_name: str,
     cache_dir: Path,
+    *,
+    update_remote: bool = True,
 ) -> Path | str:
     """Resolve the analysis path for a repository, cloning if needed."""
     if isinstance(repo_path, str) and _REMOTE_REPO_MANAGER.is_git_url(repo_path):
@@ -75,6 +77,7 @@ def _resolve_analysis_repo_path(
             repo_url=repo_path,
             branch_name=branch_name,
             cache_dir=cache_dir,
+            update_remote=update_remote,
         )
     return repo_path
 
@@ -290,6 +293,7 @@ class _SingleRepositoryAnalysisRequest:
     languages: list[str] | None
     clear_cache: bool
     show_progress: bool
+    update_remote_cache: bool = True
     progress_queue: ProgressQueue | None = None
 
 
@@ -370,6 +374,7 @@ def _analyze_single_repository(
             repo_path=request.repo_path,
             branch_name=request.branch_name,
             cache_dir=request.output_dir / ".cache",
+            update_remote=request.update_remote_cache,
         )
         analysis_repo_path = deps.apply_include_subpath(
             analysis_repo_path,
@@ -510,6 +515,7 @@ def _analyze_repositories_sequential(
             languages=args.lang,
             clear_cache=args.clear_cache,
             show_progress=False,
+            update_remote_cache=getattr(args, "cache_policy", None) != "use",
             progress_queue=progress_queue,
         )
         try:
@@ -627,6 +633,7 @@ def _analyze_repositories_parallel(
                 languages=args.lang,
                 clear_cache=args.clear_cache,
                 show_progress=False,
+                update_remote_cache=getattr(args, "cache_policy", None) != "use",
                 progress_queue=progress_queue,
             )
             futures.append(

@@ -288,6 +288,37 @@ class GitRepoLOCAnalyzer:
             num_workers=os.cpu_count() or 1,
         )
 
+    def _current_head_hash(self) -> str | None:
+        """
+        Return the current branch HEAD hash without traversing commit history.
+
+        Returns:
+            str | None: HEAD commit hash when available, otherwise ``None``.
+        """
+        try:
+            repo = Repo(str(self._repo_path), search_parent_directories=True)
+            return repo.commit(self._branch_name).hexsha
+        except GitCommandError, OSError, TypeError, ValueError:
+            return None
+
+    def _get_fresh_cached_commit_data(self) -> pd.DataFrame | None:
+        """
+        Return cached commit data when metadata matches the current HEAD.
+
+        Returns:
+            pd.DataFrame | None: Cached data when the repository has not changed.
+        """
+        if self._cache_commit_data is None or not self._cache_metadata:
+            return None
+        cached_head = self._cache_metadata.get("last_commit_hash")
+        if not cached_head:
+            return None
+        current_head = self._current_head_hash()
+        if current_head != cached_head:
+            return None
+        self._latest_commit_hash = cached_head
+        return self._cache_commit_data.copy()
+
     def _count_commits_for_scan(self) -> int | None:
         """
         Count commits before PyDriller traversal when Git metadata is available.
@@ -563,6 +594,11 @@ class GitRepoLOCAnalyzer:
         Returns:
             pd.DataFrame: A DataFrame containing the analyzed commit data.
         """
+
+        fresh_cache = self._get_fresh_cached_commit_data()
+        if fresh_cache is not None:
+            self._commit_data = fresh_cache
+            return fresh_cache
 
         repository = self._build_repository()
 

@@ -954,7 +954,13 @@ def run_init_config_wizard(default_path: Path = DEFAULT_INIT_CONFIG_PATH) -> Pat
     config_path = controller.state.config_path
     config_path.parent.mkdir(parents=True, exist_ok=True)
     config_data = build_init_config_data(controller.state.to_options())
-    config_path.write_text(render_init_config_yaml(config_data), encoding="utf-8")
+    existing_text = (
+        config_path.read_text(encoding="utf-8") if config_path.exists() else None
+    )
+    config_path.write_text(
+        render_init_config_yaml(config_data, existing_text=existing_text),
+        encoding="utf-8",
+    )
     print(
         f"{Fore.GREEN}{Style.BRIGHT}"
         f"{tr('init.created_config', path=config_path)}"

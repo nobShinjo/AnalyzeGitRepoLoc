@@ -846,6 +846,28 @@ def load_repository_overrides(config_data: dict[str, Any]) -> dict[str, dict[str
     return overrides
 
 
+def _initial_repository_selection(
+    repository_catalog: list[RemoteRepositoryRef],
+    overrides: dict[str, dict[str, Any]],
+) -> tuple[list[RemoteRepositoryRef], dict[str, str]]:
+    """Return selector defaults derived from saved repository config."""
+    selected_refs: list[RemoteRepositoryRef] = []
+    selected_branches: dict[str, str] = {}
+    for ref in repository_catalog:
+        repository = SelectedRepositoryConfig(
+            ref=ref,
+            branch=ref.default_branch or "main",
+        )
+        override = _find_repository_override(repository, overrides)
+        if not override:
+            continue
+        selected_refs.append(ref)
+        branch = str(override.get("branch") or "").strip()
+        if branch:
+            selected_branches[ref.full_name] = branch
+    return selected_refs, selected_branches
+
+
 def _prompt_branch_selection(state: TuiWizardState) -> None:
     print()
     print(tr("tui.branch_selection"))
@@ -1265,9 +1287,15 @@ def run_tui_wizard(
         clone_protocol=settings.defaults.clone_protocol,
     )
     repository_catalog = _fetch_repository_catalog(provider_targets, auth_tokens)
+    initial_refs, initial_branches = _initial_repository_selection(
+        repository_catalog,
+        repository_overrides,
+    )
     selection_result = run_repository_selector(
         repository_catalog,
         branch_loader=_build_branch_loader(provider_targets, auth_tokens),
+        initial_selected_refs=initial_refs,
+        initial_selected_branches=initial_branches,
         return_result=True,
     )
     if isinstance(selection_result, RepositorySelectionResult):

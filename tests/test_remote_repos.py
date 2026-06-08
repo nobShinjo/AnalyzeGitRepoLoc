@@ -168,6 +168,29 @@ class RemoteRepoManagerCacheTests(unittest.TestCase):
             },
         )
 
+    def test_existing_cache_can_skip_fetch_for_use_policy(self) -> None:
+        manager = RemoteRepoManager()
+        repo = Mock()
+
+        with patch(
+            "analyze_git_repo_loc.remote.remote_repos.Repo",
+            return_value=repo,
+        ):
+            with patch.object(manager, "_ensure_origin_matches") as ensure:
+                with patch.object(manager, "_fetch_with_auth") as fetch:
+                    with patch.object(manager, "_checkout_branch") as checkout:
+                        result = manager.prepare_remote_repository(
+                            GITHUB_PRIVATE_REPO_URL,
+                            "main",
+                            Path("cache"),
+                            update_remote=False,
+                        )
+
+        self.assertTrue(str(result).startswith(str(Path("cache") / "remote-repos")))
+        ensure.assert_called_once_with(repo, GITHUB_PRIVATE_REPO_URL)
+        fetch.assert_not_called()
+        checkout.assert_called_once_with(repo, "main")
+
     def test_fetch_disk_space_error_is_user_facing(self) -> None:
         auth = Mock()
         auth.build_auth_candidates.return_value = [GITHUB_PRIVATE_REPO_URL]

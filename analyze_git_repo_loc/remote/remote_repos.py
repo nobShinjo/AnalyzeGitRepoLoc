@@ -52,7 +52,12 @@ class RemoteRepoManager:
         return value.startswith("git@") and ":" in value
 
     def prepare_remote_repository(
-        self, repo_url: str, branch_name: str, cache_dir: Path
+        self,
+        repo_url: str,
+        branch_name: str,
+        cache_dir: Path,
+        *,
+        update_remote: bool = True,
     ) -> Path:
         """
         Clone or update a remote repository in the local cache.
@@ -61,6 +66,7 @@ class RemoteRepoManager:
             repo_url (str): Remote repository URL.
             branch_name (str): Branch to check out.
             cache_dir (Path): Base cache directory for clones.
+            update_remote (bool): Whether to fetch updates for existing caches.
 
         Returns:
             Path: Local path to the cached clone.
@@ -69,7 +75,8 @@ class RemoteRepoManager:
         try:
             repo = Repo(repo_path)
             self._ensure_origin_matches(repo, repo_url)
-            self._fetch_with_auth(repo, repo_url)
+            if update_remote:
+                self._fetch_with_auth(repo, repo_url)
         except InvalidGitRepositoryError, NoSuchPathError:
             if repo_path.exists():
                 self._remove_cache_path(repo_path)

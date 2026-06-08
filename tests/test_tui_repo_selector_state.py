@@ -58,6 +58,36 @@ class RepositorySelectorStateTests(unittest.TestCase):
         self.assertEqual(state.visible_refs, [refs[1]])
         self.assertEqual(state.selected_refs, [refs[1]])
 
+    def test_initial_selected_refs_and_branches_are_honored(self) -> None:
+        refs = [
+            RemoteRepositoryRef(
+                "github",
+                "alpha",
+                "org/alpha",
+                "https://github.com/org/alpha.git",
+                "git@github.com:org/alpha.git",
+                "",
+                "main",
+            ),
+            RemoteRepositoryRef(
+                "gitlab",
+                "beta",
+                "team/beta",
+                "https://gitlab.com/team/beta.git",
+                "git@gitlab.com:team/beta.git",
+                "",
+                "main",
+            ),
+        ]
+        state = RepositorySelectorState(
+            refs,
+            initial_selected_refs=[refs[1]],
+            initial_selected_branches={"team/beta": "develop"},
+        )
+
+        self.assertEqual(state.selected_refs, [refs[1]])
+        self.assertEqual(state.selected_branch_for(refs[1]), "develop")
+
     def test_cancel_marks_state_cancelled(self) -> None:
         state = RepositorySelectorState(
             [

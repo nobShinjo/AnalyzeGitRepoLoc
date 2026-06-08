@@ -101,6 +101,38 @@ class InitConfigGenerationTests(unittest.TestCase):
         self.assertTrue(rendered.endswith("\n"))
         self.assertNotIn("repositories:", rendered)
 
+    def test_render_init_config_yaml_preserves_existing_repository_block(self) -> None:
+        config = build_init_config_data(
+            InitConfigOptions(
+                github_enabled=True,
+                gitlab_enabled=False,
+                output=Path("reports"),
+            )
+        )
+        existing_text = "\n".join(
+            [
+                "settings:",
+                "  output: old-out",
+                "repositories:",
+                "  - path: https://github.com/org/active.git",
+                "    branch: release",
+                "# repositories:",
+                "#   - path: https://github.com/org/commented.git",
+                "#     branch: develop",
+                "interactive:",
+                "  quick_defaults:",
+                "    cache_policy: update",
+            ]
+        ) + "\n"
+
+        rendered = render_init_config_yaml(config, existing_text=existing_text)
+
+        self.assertIn("repositories:", rendered)
+        self.assertIn("path: https://github.com/org/active.git", rendered)
+        self.assertIn("branch: release", rendered)
+        self.assertIn("# repositories:", rendered)
+        self.assertIn("#   - path: https://github.com/org/commented.git", rendered)
+
     def test_self_hosted_gitlab_config_uses_custom_base_url(self) -> None:
         config = build_init_config_data(
             InitConfigOptions(

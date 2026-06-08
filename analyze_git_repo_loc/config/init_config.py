@@ -29,6 +29,7 @@ from typing import Any, Callable
 
 import yaml
 
+from analyze_git_repo_loc.config.yaml_preservation import preserve_repository_blocks
 from analyze_git_repo_loc.i18n import tr
 
 PromptFunc = Callable[[str], str]
@@ -117,11 +118,16 @@ def build_init_config_data(options: InitConfigOptions) -> dict[str, Any]:
     }
 
 
-def render_init_config_yaml(config_data: dict[str, Any]) -> str:
+def render_init_config_yaml(
+    config_data: dict[str, Any],
+    *,
+    existing_text: str | None = None,
+) -> str:
     """Render config data as YAML text.
 
     Args:
         config_data (dict[str, Any]): YAML-ready config data.
+        existing_text (str | None): Existing YAML content to preserve selected blocks.
 
     Returns:
         str: Rendered YAML ending with a newline.
@@ -133,10 +139,15 @@ def render_init_config_yaml(config_data: dict[str, Any]) -> str:
         sort_keys=False,
     )
     if isinstance(rendered, bytes):
-        return rendered.decode("utf-8")
+        rendered_text = rendered.decode("utf-8")
+        return preserve_repository_blocks(
+            rendered_text,
+            existing_text,
+            preserve_active=True,
+        )
     if rendered is None:
         raise TypeError("yaml.safe_dump returned no YAML text.")
-    return rendered
+    return preserve_repository_blocks(rendered, existing_text, preserve_active=True)
 
 
 def resolve_init_config_path(
@@ -287,7 +298,13 @@ def run_init_config(
         )
     )
     config_path.parent.mkdir(parents=True, exist_ok=True)
-    config_path.write_text(render_init_config_yaml(config_data), encoding="utf-8")
+    existing_text = (
+        config_path.read_text(encoding="utf-8") if config_path.exists() else None
+    )
+    config_path.write_text(
+        render_init_config_yaml(config_data, existing_text=existing_text),
+        encoding="utf-8",
+    )
     print(tr("init.created_config", path=config_path))
     print(tr("init.next", path=config_path))
     return config_path
