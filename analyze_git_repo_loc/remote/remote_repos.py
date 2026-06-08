@@ -164,6 +164,8 @@ class RemoteRepoManager:
                 if origin.url != original_url:
                     origin.set_url(original_url)
         if last_error is not None:
+            if is_disk_space_error(last_error):
+                raise DiskSpaceError(tr("error.disk_space")) from last_error
             if self._auth.is_auth_failure(last_error):
                 self._auth.raise_auth_failure(repo_url, last_error)
             raise last_error
@@ -247,11 +249,21 @@ class RemoteRepoManager:
             ValueError: If the branch does not exist.
         """
         if branch_name in repo.heads:
-            repo.git.checkout(branch_name)
+            try:
+                repo.git.checkout(branch_name)
+            except GitCommandError as ex:
+                if is_disk_space_error(ex):
+                    raise DiskSpaceError(tr("error.disk_space")) from ex
+                raise
             return
         remote_ref = f"origin/{branch_name}"
         remote_refs = [ref.name for ref in repo.remotes.origin.refs]
         if remote_ref in remote_refs:
-            repo.git.checkout("-B", branch_name, remote_ref)
+            try:
+                repo.git.checkout("-B", branch_name, remote_ref)
+            except GitCommandError as ex:
+                if is_disk_space_error(ex):
+                    raise DiskSpaceError(tr("error.disk_space")) from ex
+                raise
             return
         raise ValueError(f"Branch '{branch_name}' not found in remote repository.")

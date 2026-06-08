@@ -168,6 +168,39 @@ class RemoteRepoManagerCacheTests(unittest.TestCase):
             },
         )
 
+    def test_fetch_disk_space_error_is_user_facing(self) -> None:
+        auth = Mock()
+        auth.build_auth_candidates.return_value = [GITHUB_PRIVATE_REPO_URL]
+        auth.git_env.return_value = {"GIT_TERMINAL_PROMPT": "0"}
+        auth.is_auth_failure.return_value = False
+        manager = RemoteRepoManager(auth)
+        repo = Mock()
+        origin = repo.remotes.origin
+        origin.url = GITHUB_PRIVATE_REPO_URL
+        repo.git.fetch.side_effect = GitCommandError(
+            "fetch",
+            128,
+            stderr="fatal: write error: No space left on device",
+        )
+
+        with self.assertRaises(DiskSpaceError):
+            # pylint: disable-next=protected-access
+            manager._fetch_with_auth(repo, GITHUB_PRIVATE_REPO_URL)
+
+    def test_checkout_disk_space_error_is_user_facing(self) -> None:
+        manager = RemoteRepoManager()
+        repo = Mock()
+        repo.heads = ["main"]
+        repo.git.checkout.side_effect = GitCommandError(
+            "checkout",
+            128,
+            stderr="error: unable to write file: No space left on device",
+        )
+
+        with self.assertRaises(DiskSpaceError):
+            # pylint: disable-next=protected-access
+            manager._checkout_branch(repo, "main")
+
 
 class RemoteAuthServiceTests(unittest.TestCase):
     """Remote authentication token resolution tests."""
