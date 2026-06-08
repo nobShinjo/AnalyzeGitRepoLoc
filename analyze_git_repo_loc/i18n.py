@@ -125,6 +125,10 @@ _MESSAGES: dict[str, dict[str, str]] = {
         ),
         "cli.since_help": "Override start date for this run (YYYY-MM-DD).",
         "cli.until_help": "Override end date for this run (YYYY-MM-DD).",
+        "error.disk_space": (
+            "Insufficient disk space. Free up disk space or choose a different "
+            "output/cache directory, then run the command again."
+        ),
         "error.message": "Error message: {message}",
         "error.stack_trace": "Stack trace:",
         "error.type": "Error type: {type}",
@@ -384,6 +388,10 @@ _MESSAGES: dict[str, dict[str, str]] = {
         "cli.run_help": "YAML 設定ファイルから解析を実行します。対話実行も可能です。",
         "cli.since_help": "この実行だけ開始日を上書きします (YYYY-MM-DD)。",
         "cli.until_help": "この実行だけ終了日を上書きします (YYYY-MM-DD)。",
+        "error.disk_space": (
+            "ディスク容量が不足しています。空き容量を増やすか、別の出力先または"
+            "キャッシュディレクトリを指定してから、もう一度実行してください。"
+        ),
         "error.message": "エラーメッセージ: {message}",
         "error.stack_trace": "スタックトレース:",
         "error.type": "エラー種別: {type}",

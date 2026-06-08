@@ -47,6 +47,7 @@ from analyze_git_repo_loc.analysis.git_repo_loc_analyzer import (
 )
 from analyze_git_repo_loc.colored_console_printer import ColoredConsolePrinter
 from analyze_git_repo_loc.config.yaml_config import merge_yaml_config
+from analyze_git_repo_loc.errors import DiskSpaceError, is_disk_space_error
 from analyze_git_repo_loc.i18n import (
     resolve_display_language,
     set_language_override,
@@ -352,6 +353,10 @@ def handle_exception(ex: Exception) -> None:
     """
     if isinstance(ex, RemoteAuthError):
         tqdm.write(str(ex))
+        sys.exit(1)
+    if is_disk_space_error(ex):
+        message = str(ex) if isinstance(ex, DiskSpaceError) else tr("error.disk_space")
+        print(message, file=sys.stderr)
         sys.exit(1)
     print(tr("error.unexpected"), file=sys.stderr)
     print(tr("error.type", type=type(ex).__name__), file=sys.stderr)

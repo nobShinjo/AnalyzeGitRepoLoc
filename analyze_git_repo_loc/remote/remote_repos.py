@@ -25,6 +25,8 @@ from urllib.parse import urlparse
 from git import GitCommandError, InvalidGitRepositoryError, NoSuchPathError, Repo
 
 from analyze_git_repo_loc.analysis.git_repo_loc_analyzer import GitRepoLOCAnalyzer
+from analyze_git_repo_loc.errors import DiskSpaceError, is_disk_space_error
+from analyze_git_repo_loc.i18n import tr
 from analyze_git_repo_loc.remote.remote_auth import RemoteAuthService
 
 
@@ -190,6 +192,8 @@ class RemoteRepoManager:
                 last_error = ex
                 if repo_path.exists():
                     self._remove_cache_path(repo_path)
+                if is_disk_space_error(ex):
+                    raise DiskSpaceError(tr("error.disk_space")) from ex
         if last_error is not None:
             if self._auth.is_auth_failure(last_error):
                 self._auth.raise_auth_failure(repo_url, last_error)

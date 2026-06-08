@@ -9,6 +9,9 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
+from git import GitCommandError
+
+from analyze_git_repo_loc.errors import DiskSpaceError
 from analyze_git_repo_loc.remote.remote_auth import build_host_provider_env_var
 from analyze_git_repo_loc.remote.remote_auth import RemoteAuthService
 from analyze_git_repo_loc.remote.remote_auth import build_host_token_env_var
@@ -117,6 +120,29 @@ class RemoteRepoManagerCacheTests(unittest.TestCase):
                 "GCM_INTERACTIVE": "never",
             },
         )
+
+    def test_clone_disk_space_error_is_user_facing(self) -> None:
+        auth = Mock()
+        auth.build_auth_candidates.return_value = [GITHUB_PRIVATE_REPO_URL]
+        auth.git_env.return_value = {"GIT_TERMINAL_PROMPT": "0"}
+        auth.is_auth_failure.return_value = False
+        manager = RemoteRepoManager(auth)
+        clone_error = GitCommandError(
+            "clone",
+            128,
+            stderr="fatal: write error: No space left on device",
+        )
+
+        with patch(
+            "analyze_git_repo_loc.remote.remote_repos.Repo.clone_from",
+            side_effect=clone_error,
+        ):
+            with self.assertRaises(DiskSpaceError):
+                # pylint: disable-next=protected-access
+                manager._clone_with_auth(
+                    GITHUB_PRIVATE_REPO_URL,
+                    Path("cache/private"),
+                )
 
     def test_fetch_uses_noninteractive_git_auth_env(self) -> None:
         auth = Mock()
