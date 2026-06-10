@@ -839,6 +839,56 @@ class TuiWizardStateTests(unittest.TestCase):
         self.assertIn("repositories:", rendered)
         self.assertIn("path: https://github.com/org/alpha.git", rendered)
 
+    def test_save_wizard_config_preserves_commented_entries_under_repositories(
+        self,
+    ) -> None:
+        ref = RemoteRepositoryRef(
+            "github",
+            "alpha",
+            "org/alpha",
+            "https://github.com/org/alpha.git",
+            "",
+            "https://github.com/org/alpha",
+            "main",
+        )
+        state = TuiWizardState(
+            provider_targets=[],
+            auth_tokens={},
+            repository_catalog=[ref],
+            selected_repositories=[SelectedRepositoryConfig(ref=ref, branch="main")],
+            output=Path("out"),
+        )
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            path = Path(tmp_dir) / "config.yml"
+            path.write_text(
+                "\n".join(
+                    [
+                        "settings:",
+                        "  output: old-out",
+                        "repositories:",
+                        "  - path: https://github.com/org/old.git",
+                        "    branch: release",
+                        "  # - path: https://github.com/org/commented.git",
+                        "  #   branch: develop",
+                        "  #   exclude_dirs:",
+                        "  #     - node_modules",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            save_wizard_config(path, state)
+
+            rendered = path.read_text(encoding="utf-8")
+
+        self.assertIn("path: https://github.com/org/alpha.git", rendered)
+        self.assertNotIn("path: https://github.com/org/old.git", rendered)
+        self.assertIn("  # - path: https://github.com/org/commented.git", rendered)
+        self.assertIn("  #   branch: develop", rendered)
+        self.assertIn("  #   exclude_dirs:", rendered)
+        self.assertIn("  #     - node_modules", rendered)
+
     def test_fetch_repository_catalog_wraps_provider_errors(self) -> None:
         target = ProviderTarget(
             key="github",

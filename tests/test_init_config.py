@@ -20,6 +20,7 @@ from analyze_git_repo_loc.config.init_config import (
     build_init_config_data,
     render_init_config_yaml,
     resolve_init_config_path,
+    run_init_config,
 )
 from analyze_git_repo_loc.config.init_wizard_runtime import (
     _build_register_refresh_handler,
@@ -132,6 +133,104 @@ class InitConfigGenerationTests(unittest.TestCase):
         self.assertIn("branch: release", rendered)
         self.assertIn("# repositories:", rendered)
         self.assertIn("#   - path: https://github.com/org/commented.git", rendered)
+
+    def test_render_init_config_yaml_preserves_commented_entries_under_repositories(
+        self,
+    ) -> None:
+        config = build_init_config_data(
+            InitConfigOptions(
+                github_enabled=True,
+                gitlab_enabled=False,
+                output=Path("reports"),
+            )
+        )
+        existing_text = "\n".join(
+            [
+                "settings:",
+                "  output: old-out",
+                "repositories:",
+                "  - path: https://github.com/org/active.git",
+                "    branch: release",
+                "  # - path: https://github.com/org/commented.git",
+                "  #   branch: develop",
+                "  #   exclude_dirs:",
+                "  #     - node_modules",
+                "interactive:",
+                "  quick_defaults:",
+                "    cache_policy: update",
+            ]
+        ) + "\n"
+
+        rendered = render_init_config_yaml(config, existing_text=existing_text)
+
+        self.assertIn("  # - path: https://github.com/org/commented.git", rendered)
+        self.assertIn("  #   branch: develop", rendered)
+        self.assertIn("  #   exclude_dirs:", rendered)
+        self.assertIn("  #     - node_modules", rendered)
+
+    def test_render_init_config_yaml_preserves_unindented_repository_items(
+        self,
+    ) -> None:
+        config = build_init_config_data(
+            InitConfigOptions(
+                github_enabled=True,
+                gitlab_enabled=False,
+                output=Path("reports"),
+            )
+        )
+        existing_text = "\n".join(
+            [
+                "settings:",
+                "  output: out",
+                "repositories:",
+                "- path: https://github.com/org/active.git",
+                "  branch: main",
+                "- path: https://github.com/org/second.git",
+                "  branch: develop",
+                "interactive:",
+                "  quick_defaults:",
+                "    cache_policy: use",
+            ]
+        ) + "\n"
+
+        rendered = render_init_config_yaml(config, existing_text=existing_text)
+
+        self.assertIn("- path: https://github.com/org/active.git", rendered)
+        self.assertIn("  branch: main", rendered)
+        self.assertIn("- path: https://github.com/org/second.git", rendered)
+        self.assertIn("  branch: develop", rendered)
+
+    def test_run_init_config_preserves_existing_repository_candidates(self) -> None:
+        answers = iter(["", "", "", "", "", "", "", "", "", "", ""])
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config_path = Path(tmp_dir) / "config.yml"
+            config_path.write_text(
+                "\n".join(
+                    [
+                        "settings:",
+                        "  output: old-out",
+                        "repositories:",
+                        "  - path: https://github.com/org/active.git",
+                        "    branch: release",
+                        "  # - path: https://github.com/org/commented.git",
+                        "  #   branch: develop",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            run_init_config(
+                default_path=config_path,
+                prompt=lambda _message: next(answers),
+                confirm_overwrite=lambda _path: True,
+            )
+
+            rendered = config_path.read_text(encoding="utf-8")
+
+        self.assertIn("path: https://github.com/org/active.git", rendered)
+        self.assertIn("  # - path: https://github.com/org/commented.git", rendered)
+        self.assertIn("  #   branch: develop", rendered)
 
     def test_self_hosted_gitlab_config_uses_custom_base_url(self) -> None:
         config = build_init_config_data(
