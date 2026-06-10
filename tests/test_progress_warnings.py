@@ -38,6 +38,28 @@ from analyze_git_repo_loc.repo_progress import (
 class RepositoryWarningTests(unittest.TestCase):
     """Repository warning collection tests."""
 
+    def test_utils_resolve_analysis_repo_path_forwards_update_remote(self) -> None:
+        manager = Mock()
+        manager.is_git_url.return_value = True
+        manager.prepare_remote_repository.return_value = Path("cache/repo")
+
+        with patch.object(utils, "_REMOTE_REPO_MANAGER", manager):
+            # pylint: disable-next=protected-access
+            result = utils._resolve_analysis_repo_path(
+                "https://github.com/org/repo.git",
+                "main",
+                Path("cache"),
+                update_remote=False,
+            )
+
+        self.assertEqual(result, Path("cache/repo"))
+        manager.prepare_remote_repository.assert_called_once_with(
+            repo_url="https://github.com/org/repo.git",
+            branch_name="main",
+            cache_dir=Path("cache"),
+            update_remote=False,
+        )
+
     def test_missing_exclude_dir_is_collected_without_direct_stderr(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             repo_path = Path(tmp_dir) / "alpha"

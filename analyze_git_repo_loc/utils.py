@@ -392,7 +392,11 @@ def get_time_interval_and_period(interval: str) -> tuple[str, str]:
 
 
 def _resolve_analysis_repo_path(
-    repo_path: Path | str, branch_name: str, cache_dir: Path
+    repo_path: Path | str,
+    branch_name: str,
+    cache_dir: Path,
+    *,
+    update_remote: bool = True,
 ) -> Path | str:
     """
     Resolve the analysis path for a repository, cloning if needed.
@@ -401,6 +405,7 @@ def _resolve_analysis_repo_path(
         repo_path (Path | str): Repository path or URL.
         branch_name (str): Branch to analyze.
         cache_dir (Path): Cache directory for remote clones.
+        update_remote (bool): Whether to fetch updates for existing remote caches.
 
     Returns:
         Path | str: Local path to analyze.
@@ -410,6 +415,7 @@ def _resolve_analysis_repo_path(
             repo_url=repo_path,
             branch_name=branch_name,
             cache_dir=cache_dir,
+            update_remote=update_remote,
         )
     return repo_path
 
@@ -521,6 +527,7 @@ class _AnalyzeSingleRepositoryKwargs(TypedDict):
     languages: list[str] | None
     clear_cache: bool
     show_progress: bool
+    update_remote_cache: NotRequired[bool]
     progress_queue: NotRequired[ProgressQueue | None]
 
 
