@@ -1,6 +1,6 @@
 [project]
 name = "analyze-git-repo-loc"
-version = "3.1.0"
+version = "3.2.0"
 description = "Analyze Git repositories and visualize code LOC."
 readme = "README.md"
 requires-python = ">=3.14"
