@@ -30,6 +30,7 @@ from analyze_git_repo_loc.interactive.tui_wizard import (
     normalize_final_action,
     render_final_review,
     selected_targets_to_settings,
+    save_wizard_config,
     wizard_state_to_config,
 )
 from analyze_git_repo_loc.remote.remote_catalog import (
@@ -156,6 +157,151 @@ class TuiWizardStateTests(unittest.TestCase):
         self.assertIn("branch_loader", selector.call_args.kwargs)
         branch.assert_not_called()
         self.assertEqual(result.repo_paths[0][1], "develop")
+
+    def test_run_tui_wizard_reopens_repository_selector_from_final_actions(self) -> None:
+        alpha = RemoteRepositoryRef(
+            "github",
+            "alpha",
+            "org/alpha",
+            "https://github.com/org/alpha.git",
+            "",
+            "https://github.com/org/alpha",
+            "main",
+        )
+        beta = RemoteRepositoryRef(
+            "github",
+            "beta",
+            "org/beta",
+            "https://github.com/org/beta.git",
+            "",
+            "https://github.com/org/beta",
+            "develop",
+        )
+        args = argparse.Namespace(
+            output=Path("out"),
+            since=None,
+            until=None,
+            interval="monthly",
+            author_name=None,
+            lang=None,
+            exclude_dirs=None,
+            workers=None,
+            clear_cache=False,
+            no_plot_show=True,
+            config=Path("config.yml"),
+        )
+        config = {"interactive": {"providers": {"github": {"enabled": True}}}}
+
+        with patch(
+            "analyze_git_repo_loc.interactive.tui_wizard.choose_auto_provider_targets",
+            return_value=[
+                ProviderTarget("github", "github", "GitHub", "https://api.github.com")
+            ],
+        ):
+            with patch(
+                "analyze_git_repo_loc.interactive.tui_wizard._authenticate_provider_targets",
+                return_value=({"github": "token"}, {"github": "env"}),
+            ):
+                with patch(
+                    "analyze_git_repo_loc.interactive.tui_wizard._fetch_repository_catalog",
+                    return_value=[alpha, beta],
+                ):
+                    with patch(
+                        "analyze_git_repo_loc.interactive.tui_wizard.run_repository_selector",
+                        side_effect=[
+                            RepositorySelectionResult(
+                                selected_refs=[alpha],
+                                selected_branches={"org/alpha": "main"},
+                            ),
+                            RepositorySelectionResult(
+                                selected_refs=[beta],
+                                selected_branches={"org/beta": "release"},
+                            ),
+                        ],
+                    ) as selector:
+                        with patch(
+                            "analyze_git_repo_loc.interactive.tui_wizard._run_wizard_steps",
+                            side_effect=["select", "run"],
+                        ):
+                            result = tui_wizard.run_tui_wizard(args, config)
+
+        self.assertEqual(selector.call_count, 2)
+        self.assertEqual(
+            selector.call_args_list[1].kwargs["initial_selected_refs"],
+            [alpha],
+        )
+        self.assertEqual(
+            selector.call_args_list[1].kwargs["initial_selected_branches"],
+            {"org/alpha": "main"},
+        )
+        self.assertEqual(result.repo_paths[0][0], "https://github.com/org/beta.git")
+        self.assertEqual(result.repo_paths[0][1], "release")
+
+    def test_run_tui_wizard_preselects_configured_repository_and_branch(self) -> None:
+        ref = RemoteRepositoryRef(
+            "github",
+            "alpha",
+            "org/alpha",
+            "https://github.com/org/alpha.git",
+            "",
+            "https://github.com/org/alpha",
+            "main",
+        )
+        args = argparse.Namespace(
+            output=Path("out"),
+            since=None,
+            until=None,
+            interval="monthly",
+            author_name=None,
+            lang=None,
+            exclude_dirs=None,
+            workers=1,
+            clear_cache=False,
+            no_plot_show=True,
+            config=Path("config.yml"),
+        )
+        config = {
+            "interactive": {"providers": {"github": {"enabled": True}}},
+            "repositories": [
+                {
+                    "path": "https://github.com/org/alpha.git",
+                    "branch": "release",
+                }
+            ],
+        }
+
+        with patch(
+            "analyze_git_repo_loc.interactive.tui_wizard.choose_auto_provider_targets",
+            return_value=[
+                ProviderTarget("github", "github", "GitHub", "https://api.github.com")
+            ],
+        ):
+            with patch(
+                "analyze_git_repo_loc.interactive.tui_wizard._authenticate_provider_targets",
+                return_value=({"github": "token"}, {"github": "env"}),
+            ):
+                with patch(
+                    "analyze_git_repo_loc.interactive.tui_wizard._fetch_repository_catalog",
+                    return_value=[ref],
+                ):
+                    with patch(
+                        "analyze_git_repo_loc.interactive.tui_wizard.run_repository_selector",
+                        return_value=RepositorySelectionResult(
+                            selected_refs=[ref],
+                            selected_branches={"org/alpha": "release"},
+                        ),
+                    ) as selector:
+                        with patch(
+                            "analyze_git_repo_loc.interactive.tui_wizard._run_wizard_steps",
+                            return_value="run",
+                        ):
+                            tui_wizard.run_tui_wizard(args, config)
+
+        self.assertEqual(selector.call_args.kwargs["initial_selected_refs"], [ref])
+        self.assertEqual(
+            selector.call_args.kwargs["initial_selected_branches"],
+            {"org/alpha": "release"},
+        )
 
     def test_run_tui_wizard_preserves_repository_overrides_from_config(self) -> None:
         ref = RemoteRepositoryRef(
@@ -730,6 +876,98 @@ class TuiWizardStateTests(unittest.TestCase):
         self.assertNotIn("tui", exported)
         self.assertNotIn("auth_tokens", rendered)
 
+    def test_save_wizard_config_preserves_commented_repository_candidates(self) -> None:
+        ref = RemoteRepositoryRef(
+            "github",
+            "alpha",
+            "org/alpha",
+            "https://github.com/org/alpha.git",
+            "",
+            "https://github.com/org/alpha",
+            "main",
+        )
+        state = TuiWizardState(
+            provider_targets=[],
+            auth_tokens={},
+            repository_catalog=[ref],
+            selected_repositories=[SelectedRepositoryConfig(ref=ref, branch="main")],
+            output=Path("out"),
+        )
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            path = Path(tmp_dir) / "config.yml"
+            path.write_text(
+                "\n".join(
+                    [
+                        "settings:",
+                        "  output: old-out",
+                        "# repositories:",
+                        "#   - path: https://github.com/org/commented.git",
+                        "#     branch: develop",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            save_wizard_config(path, state)
+
+            rendered = path.read_text(encoding="utf-8")
+
+        self.assertIn("# repositories:", rendered)
+        self.assertIn("#   - path: https://github.com/org/commented.git", rendered)
+        self.assertIn("repositories:", rendered)
+        self.assertIn("path: https://github.com/org/alpha.git", rendered)
+
+    def test_save_wizard_config_preserves_commented_entries_under_repositories(
+        self,
+    ) -> None:
+        ref = RemoteRepositoryRef(
+            "github",
+            "alpha",
+            "org/alpha",
+            "https://github.com/org/alpha.git",
+            "",
+            "https://github.com/org/alpha",
+            "main",
+        )
+        state = TuiWizardState(
+            provider_targets=[],
+            auth_tokens={},
+            repository_catalog=[ref],
+            selected_repositories=[SelectedRepositoryConfig(ref=ref, branch="main")],
+            output=Path("out"),
+        )
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            path = Path(tmp_dir) / "config.yml"
+            path.write_text(
+                "\n".join(
+                    [
+                        "settings:",
+                        "  output: old-out",
+                        "repositories:",
+                        "  - path: https://github.com/org/old.git",
+                        "    branch: release",
+                        "  # - path: https://github.com/org/commented.git",
+                        "  #   branch: develop",
+                        "  #   exclude_dirs:",
+                        "  #     - node_modules",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            save_wizard_config(path, state)
+
+            rendered = path.read_text(encoding="utf-8")
+
+        self.assertIn("path: https://github.com/org/alpha.git", rendered)
+        self.assertNotIn("path: https://github.com/org/old.git", rendered)
+        self.assertIn("  # - path: https://github.com/org/commented.git", rendered)
+        self.assertIn("  #   branch: develop", rendered)
+        self.assertIn("  #   exclude_dirs:", rendered)
+        self.assertIn("  #     - node_modules", rendered)
+
     def test_fetch_repository_catalog_wraps_provider_errors(self) -> None:
         target = ProviderTarget(
             key="github",
@@ -834,10 +1072,59 @@ class TuiWizardStateTests(unittest.TestCase):
     def test_normalize_final_action_supports_short_keys(self) -> None:
         self.assertEqual(normalize_final_action(""), "run")
         self.assertEqual(normalize_final_action("e"), "edit")
+        self.assertEqual(normalize_final_action("i"), "select")
         self.assertEqual(normalize_final_action("details"), "details")
         self.assertEqual(normalize_final_action("s"), "save")
+        self.assertEqual(normalize_final_action("x"), "save_run")
         self.assertEqual(normalize_final_action("c"), "cancel")
         self.assertIsNone(normalize_final_action("wat"))
+
+    def test_run_wizard_steps_saves_without_running_and_returns_to_actions(self) -> None:
+        state = TuiWizardState(
+            provider_targets=[],
+            auth_tokens={},
+            repository_catalog=[],
+            selected_repositories=[],
+        )
+        save_callback = Mock()
+        with patch(
+            "analyze_git_repo_loc.interactive.tui_wizard._prompt_final_action",
+            side_effect=["save", "run"],
+        ):
+            # pylint: disable-next=protected-access
+            action = tui_wizard._run_wizard_steps(
+                state,
+                save_callback=save_callback,
+            )
+
+        self.assertEqual(action, "run")
+        save_callback.assert_called_once_with(state)
+
+    def test_final_action_details_returns_to_compact_action_menu(self) -> None:
+        state = TuiWizardState(
+            provider_targets=[],
+            auth_tokens={},
+            repository_catalog=[],
+            selected_repositories=[],
+        )
+        with patch(
+            "analyze_git_repo_loc.interactive.tui_wizard._prompt",
+            side_effect=["d", ""],
+        ):
+            with patch(
+                "analyze_git_repo_loc.interactive.tui_wizard.render_final_review",
+                side_effect=lambda _state, **kwargs: (
+                    "detailed" if kwargs["detailed"] else "compact"
+                ),
+            ) as render:
+                # pylint: disable-next=protected-access
+                action = tui_wizard._prompt_final_action(state)
+
+        self.assertEqual(action, "run")
+        self.assertEqual(
+            [call.kwargs["detailed"] for call in render.call_args_list],
+            [False, True, False],
+        )
 
     def test_final_review_color_mode_emits_ansi_sequences(self) -> None:
         state = TuiWizardState(

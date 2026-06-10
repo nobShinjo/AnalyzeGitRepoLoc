@@ -22,6 +22,7 @@ from typing import Any
 
 import yaml
 
+from analyze_git_repo_loc.config.yaml_preservation import preserve_repository_blocks
 from analyze_git_repo_loc.interactive.tui_state import (
     SelectedRepositoryConfig,
     TuiWizardState,
@@ -195,6 +196,9 @@ def apply_wizard_state(
     args.workers = state.workers
     args.output = state.output
     args.clear_cache = state.clear_cache
+    args.cache_policy = "clear" if state.clear_cache else "use"
+    if state.refresh_remote_cache_only:
+        args.cache_policy = "update"
     args.no_plot_show = state.no_plot_show
     return args
 
@@ -219,7 +223,12 @@ def wizard_state_to_config(state: TuiWizardState) -> dict[str, Any]:
 
 def save_wizard_config(path: Path, state: TuiWizardState) -> None:
     """Save non-secret wizard settings to YAML."""
+    existing_text = path.read_text(encoding="utf-8") if path.exists() else None
     path.write_text(
-        _render_yaml_text(wizard_state_to_config(state)),
+        preserve_repository_blocks(
+            _render_yaml_text(wizard_state_to_config(state)),
+            existing_text,
+            preserve_active=False,
+        ),
         encoding="utf-8",
     )

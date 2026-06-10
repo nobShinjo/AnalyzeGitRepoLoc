@@ -47,6 +47,7 @@ from analyze_git_repo_loc.analysis.git_repo_loc_analyzer import (
 )
 from analyze_git_repo_loc.colored_console_printer import ColoredConsolePrinter
 from analyze_git_repo_loc.config.yaml_config import merge_yaml_config
+from analyze_git_repo_loc.errors import DiskSpaceError, is_disk_space_error
 from analyze_git_repo_loc.i18n import (
     resolve_display_language,
     set_language_override,
@@ -353,6 +354,10 @@ def handle_exception(ex: Exception) -> None:
     if isinstance(ex, RemoteAuthError):
         tqdm.write(str(ex))
         sys.exit(1)
+    if is_disk_space_error(ex):
+        message = str(ex) if isinstance(ex, DiskSpaceError) else tr("error.disk_space")
+        print(message, file=sys.stderr)
+        sys.exit(1)
     print(tr("error.unexpected"), file=sys.stderr)
     print(tr("error.type", type=type(ex).__name__), file=sys.stderr)
     print(tr("error.message", message=str(ex)), file=sys.stderr)
@@ -387,7 +392,11 @@ def get_time_interval_and_period(interval: str) -> tuple[str, str]:
 
 
 def _resolve_analysis_repo_path(
-    repo_path: Path | str, branch_name: str, cache_dir: Path
+    repo_path: Path | str,
+    branch_name: str,
+    cache_dir: Path,
+    *,
+    update_remote: bool = True,
 ) -> Path | str:
     """
     Resolve the analysis path for a repository, cloning if needed.
@@ -396,6 +405,7 @@ def _resolve_analysis_repo_path(
         repo_path (Path | str): Repository path or URL.
         branch_name (str): Branch to analyze.
         cache_dir (Path): Cache directory for remote clones.
+        update_remote (bool): Whether to fetch updates for existing remote caches.
 
     Returns:
         Path | str: Local path to analyze.
@@ -405,6 +415,7 @@ def _resolve_analysis_repo_path(
             repo_url=repo_path,
             branch_name=branch_name,
             cache_dir=cache_dir,
+            update_remote=update_remote,
         )
     return repo_path
 
@@ -516,6 +527,7 @@ class _AnalyzeSingleRepositoryKwargs(TypedDict):
     languages: list[str] | None
     clear_cache: bool
     show_progress: bool
+    update_remote_cache: NotRequired[bool]
     progress_queue: NotRequired[ProgressQueue | None]
 
 

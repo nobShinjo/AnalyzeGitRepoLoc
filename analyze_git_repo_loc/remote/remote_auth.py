@@ -105,10 +105,12 @@ def get_cli_token(
             command,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=15,
             check=False,
         )
-    except OSError, subprocess.SubprocessError:
+    except (OSError, subprocess.SubprocessError, UnicodeError):
         return None
     if result.returncode != 0:
         return None

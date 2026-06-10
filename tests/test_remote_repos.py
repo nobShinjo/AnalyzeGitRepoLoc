@@ -9,6 +9,9 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
+from git import GitCommandError
+
+from analyze_git_repo_loc.errors import DiskSpaceError
 from analyze_git_repo_loc.remote.remote_auth import build_host_provider_env_var
 from analyze_git_repo_loc.remote.remote_auth import RemoteAuthService
 from analyze_git_repo_loc.remote.remote_auth import build_host_token_env_var
@@ -118,6 +121,29 @@ class RemoteRepoManagerCacheTests(unittest.TestCase):
             },
         )
 
+    def test_clone_disk_space_error_is_user_facing(self) -> None:
+        auth = Mock()
+        auth.build_auth_candidates.return_value = [GITHUB_PRIVATE_REPO_URL]
+        auth.git_env.return_value = {"GIT_TERMINAL_PROMPT": "0"}
+        auth.is_auth_failure.return_value = False
+        manager = RemoteRepoManager(auth)
+        clone_error = GitCommandError(
+            "clone",
+            128,
+            stderr="fatal: write error: No space left on device",
+        )
+
+        with patch(
+            "analyze_git_repo_loc.remote.remote_repos.Repo.clone_from",
+            side_effect=clone_error,
+        ):
+            with self.assertRaises(DiskSpaceError):
+                # pylint: disable-next=protected-access
+                manager._clone_with_auth(
+                    GITHUB_PRIVATE_REPO_URL,
+                    Path("cache/private"),
+                )
+
     def test_fetch_uses_noninteractive_git_auth_env(self) -> None:
         auth = Mock()
         auth.build_auth_candidates.return_value = [GITHUB_PRIVATE_REPO_URL]
@@ -141,6 +167,62 @@ class RemoteRepoManagerCacheTests(unittest.TestCase):
                 "GCM_INTERACTIVE": "never",
             },
         )
+
+    def test_existing_cache_can_skip_fetch_for_use_policy(self) -> None:
+        manager = RemoteRepoManager()
+        repo = Mock()
+
+        with patch(
+            "analyze_git_repo_loc.remote.remote_repos.Repo",
+            return_value=repo,
+        ):
+            with patch.object(manager, "_ensure_origin_matches") as ensure:
+                with patch.object(manager, "_fetch_with_auth") as fetch:
+                    with patch.object(manager, "_checkout_branch") as checkout:
+                        result = manager.prepare_remote_repository(
+                            GITHUB_PRIVATE_REPO_URL,
+                            "main",
+                            Path("cache"),
+                            update_remote=False,
+                        )
+
+        self.assertTrue(str(result).startswith(str(Path("cache") / "remote-repos")))
+        ensure.assert_called_once_with(repo, GITHUB_PRIVATE_REPO_URL)
+        fetch.assert_not_called()
+        checkout.assert_called_once_with(repo, "main")
+
+    def test_fetch_disk_space_error_is_user_facing(self) -> None:
+        auth = Mock()
+        auth.build_auth_candidates.return_value = [GITHUB_PRIVATE_REPO_URL]
+        auth.git_env.return_value = {"GIT_TERMINAL_PROMPT": "0"}
+        auth.is_auth_failure.return_value = False
+        manager = RemoteRepoManager(auth)
+        repo = Mock()
+        origin = repo.remotes.origin
+        origin.url = GITHUB_PRIVATE_REPO_URL
+        repo.git.fetch.side_effect = GitCommandError(
+            "fetch",
+            128,
+            stderr="fatal: write error: No space left on device",
+        )
+
+        with self.assertRaises(DiskSpaceError):
+            # pylint: disable-next=protected-access
+            manager._fetch_with_auth(repo, GITHUB_PRIVATE_REPO_URL)
+
+    def test_checkout_disk_space_error_is_user_facing(self) -> None:
+        manager = RemoteRepoManager()
+        repo = Mock()
+        repo.heads = ["main"]
+        repo.git.checkout.side_effect = GitCommandError(
+            "checkout",
+            128,
+            stderr="error: unable to write file: No space left on device",
+        )
+
+        with self.assertRaises(DiskSpaceError):
+            # pylint: disable-next=protected-access
+            manager._checkout_branch(repo, "main")
 
 
 class RemoteAuthServiceTests(unittest.TestCase):
@@ -243,6 +325,8 @@ class RemoteAuthServiceTests(unittest.TestCase):
             ["gh", "auth", "token", "--hostname", "git.example.com"],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=15,
             check=False,
         )
@@ -277,9 +361,23 @@ class RemoteAuthServiceTests(unittest.TestCase):
             ["gh", "auth", "token", "--hostname", "github.com"],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=15,
             check=False,
         )
+
+    def test_github_cli_missing_falls_back_to_original_url(self) -> None:
+        auth = RemoteAuthService()
+
+        with patch.dict("os.environ", {}, clear=True):
+            with patch(
+                "analyze_git_repo_loc.remote.remote_auth.shutil.which",
+                return_value=None,
+            ):
+                candidates = auth.build_auth_candidates(GITHUB_PRIVATE_REPO_URL)
+
+        self.assertEqual(candidates, [GITHUB_PRIVATE_REPO_URL])
 
     def test_gitlab_cli_token_is_used_when_env_token_is_missing(self) -> None:
         auth = RemoteAuthService()

@@ -91,10 +91,23 @@ class RepositorySelectorState:
     branch_cache: dict[str, list[str]] = field(default_factory=dict)
     branch_errors: dict[str, str] = field(default_factory=dict)
     selected_branches: dict[str, str] = field(default_factory=dict)
+    initial_selected_refs: list[RemoteRepositoryRef] = field(default_factory=list)
+    initial_selected_branches: dict[str, str] = field(default_factory=dict)
     selected_indexes: set[int] = field(default_factory=set)
     confirmed: bool = False
     cancelled: bool = False
     branch_selection_requested: bool = False
+
+    def __post_init__(self) -> None:
+        """Apply initial repository and branch selections."""
+        if self.initial_selected_branches:
+            self.selected_branches.update(self.initial_selected_branches)
+        if self.initial_selected_refs:
+            self.selected_indexes.update(
+                index
+                for index, ref in enumerate(self.repositories)
+                if ref in self.initial_selected_refs
+            )
 
     @property
     def visible_indexes(self) -> list[int]:
@@ -457,6 +470,8 @@ def run_repository_selector(
     repositories: list[RemoteRepositoryRef],
     *,
     branch_loader: Callable[[RemoteRepositoryRef], list[str]] | None = None,
+    initial_selected_refs: list[RemoteRepositoryRef] | None = None,
+    initial_selected_branches: dict[str, str] | None = None,
     return_result: bool = False,
 ) -> list[RemoteRepositoryRef] | RepositorySelectionResult:
     """
@@ -505,7 +520,12 @@ def run_repository_selector(
             "Install dependencies with `uv sync --active`."
         ) from ex
 
-    state = RepositorySelectorState(repositories, branch_loader=branch_loader)
+    state = RepositorySelectorState(
+        repositories,
+        branch_loader=branch_loader,
+        initial_selected_refs=initial_selected_refs or [],
+        initial_selected_branches=initial_selected_branches or {},
+    )
     search_field = TextArea(
         height=1,
         prompt="Search: ",

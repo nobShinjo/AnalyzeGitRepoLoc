@@ -16,6 +16,7 @@ from unittest.mock import ANY, MagicMock, Mock, patch
 import pandas as pd
 
 from analyze_git_repo_loc import utils
+from analyze_git_repo_loc.analysis import analysis_runner
 from analyze_git_repo_loc.analysis.analysis_runner import _SingleRepositoryAnalysisRequest
 from analyze_git_repo_loc.analysis.git_repo_loc_analyzer import (
     GitRepoLOCAnalyzer,
@@ -37,6 +38,28 @@ from analyze_git_repo_loc.repo_progress import (
 
 class RepositoryWarningTests(unittest.TestCase):
     """Repository warning collection tests."""
+
+    def test_utils_resolve_analysis_repo_path_forwards_update_remote(self) -> None:
+        manager = Mock()
+        manager.is_git_url.return_value = True
+        manager.prepare_remote_repository.return_value = Path("cache/repo")
+
+        with patch.object(utils, "_REMOTE_REPO_MANAGER", manager):
+            # pylint: disable-next=protected-access
+            result = utils._resolve_analysis_repo_path(
+                "https://github.com/org/repo.git",
+                "main",
+                Path("cache"),
+                update_remote=False,
+            )
+
+        self.assertEqual(result, Path("cache/repo"))
+        manager.prepare_remote_repository.assert_called_once_with(
+            repo_url="https://github.com/org/repo.git",
+            branch_name="main",
+            cache_dir=Path("cache"),
+            update_remote=False,
+        )
 
     def test_missing_exclude_dir_is_collected_without_direct_stderr(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -548,6 +571,72 @@ class RepositoryProgressTests(unittest.TestCase):
             )
 
         self.assertIs(impl.call_args.kwargs["error_handler"], error_handler)
+
+    def test_duplicate_local_git_roots_are_analyzed_sequentially(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            repo_root = Path(tmp_dir) / "repo"
+            (repo_root / ".git").mkdir(parents=True)
+            (repo_root / "src").mkdir()
+            (repo_root / "docs").mkdir()
+            repo_entries = [
+                (repo_root / "src", "main", [], None),
+                (repo_root / "docs", "main", [], None),
+            ]
+
+            sequential, parallel = self._run_analyze_with_worker_probe(repo_entries)
+
+        sequential.assert_called_once()
+        parallel.assert_not_called()
+
+    def test_duplicate_remote_cache_paths_are_analyzed_sequentially(self) -> None:
+        repo_entries = [
+            ("https://github.com/org/alpha.git", "main", [], None),
+            ("git@github.com:org/alpha.git", "main", [], None),
+        ]
+
+        sequential, parallel = self._run_analyze_with_worker_probe(repo_entries)
+
+        sequential.assert_called_once()
+        parallel.assert_not_called()
+
+    def _run_analyze_with_worker_probe(
+        self,
+        repo_entries: list[tuple],
+    ) -> tuple[Mock, Mock]:
+        args = argparse.Namespace(
+            repo_paths=repo_entries,
+            workers=2,
+            output=Path("out"),
+        )
+        progress = MagicMock()
+        progress_context = MagicMock()
+        progress_context.__enter__.return_value = progress
+        progress_factory = Mock(return_value=progress_context)
+        manager = Mock()
+        progress_queue = Mock()
+        manager.Queue.return_value = progress_queue
+        manager_factory = Mock(return_value=manager)
+        listener_state = (Mock(), Mock())
+        sequential = Mock(side_effect=self._record_probe_result)
+        parallel = Mock(side_effect=self._record_probe_result)
+
+        analysis_runner.analyze_git_repositories(
+            args,
+            worker_count_resolver=lambda _workers, _repo_count: 2,
+            build_repo_progress_bars=Mock(return_value=({}, {})),
+            progress_listener_starter=Mock(return_value=listener_state),
+            sequential_analyzer=sequential,
+            parallel_analyzer=parallel,
+            progress_listener_cleanup=Mock(),
+            repository_warning_printer=Mock(),
+            repository_exclude_summary_printer=Mock(),
+            progress_factory=progress_factory,
+            manager_factory=manager_factory,
+        )
+        return sequential, parallel
+
+    def _record_probe_result(self, **kwargs: Any) -> None:
+        kwargs["results"][0] = pd.DataFrame({"repository": ["alpha"]})
 
     def test_analyze_git_repositories_starts_repo_child_progress_bars(self) -> None:
         loc_data = pd.DataFrame({"repository": ["alpha"]})

@@ -25,6 +25,8 @@ from urllib.parse import urlparse
 from git import GitCommandError, InvalidGitRepositoryError, NoSuchPathError, Repo
 
 from analyze_git_repo_loc.analysis.git_repo_loc_analyzer import GitRepoLOCAnalyzer
+from analyze_git_repo_loc.errors import DiskSpaceError, is_disk_space_error
+from analyze_git_repo_loc.i18n import tr
 from analyze_git_repo_loc.remote.remote_auth import RemoteAuthService
 
 
@@ -50,7 +52,12 @@ class RemoteRepoManager:
         return value.startswith("git@") and ":" in value
 
     def prepare_remote_repository(
-        self, repo_url: str, branch_name: str, cache_dir: Path
+        self,
+        repo_url: str,
+        branch_name: str,
+        cache_dir: Path,
+        *,
+        update_remote: bool = True,
     ) -> Path:
         """
         Clone or update a remote repository in the local cache.
@@ -59,6 +66,7 @@ class RemoteRepoManager:
             repo_url (str): Remote repository URL.
             branch_name (str): Branch to check out.
             cache_dir (Path): Base cache directory for clones.
+            update_remote (bool): Whether to fetch updates for existing caches.
 
         Returns:
             Path: Local path to the cached clone.
@@ -67,7 +75,8 @@ class RemoteRepoManager:
         try:
             repo = Repo(repo_path)
             self._ensure_origin_matches(repo, repo_url)
-            self._fetch_with_auth(repo, repo_url)
+            if update_remote:
+                self._fetch_with_auth(repo, repo_url)
         except InvalidGitRepositoryError, NoSuchPathError:
             if repo_path.exists():
                 self._remove_cache_path(repo_path)
@@ -162,6 +171,8 @@ class RemoteRepoManager:
                 if origin.url != original_url:
                     origin.set_url(original_url)
         if last_error is not None:
+            if is_disk_space_error(last_error):
+                raise DiskSpaceError(tr("error.disk_space")) from last_error
             if self._auth.is_auth_failure(last_error):
                 self._auth.raise_auth_failure(repo_url, last_error)
             raise last_error
@@ -190,6 +201,8 @@ class RemoteRepoManager:
                 last_error = ex
                 if repo_path.exists():
                     self._remove_cache_path(repo_path)
+                if is_disk_space_error(ex):
+                    raise DiskSpaceError(tr("error.disk_space")) from ex
         if last_error is not None:
             if self._auth.is_auth_failure(last_error):
                 self._auth.raise_auth_failure(repo_url, last_error)
@@ -243,11 +256,21 @@ class RemoteRepoManager:
             ValueError: If the branch does not exist.
         """
         if branch_name in repo.heads:
-            repo.git.checkout(branch_name)
+            try:
+                repo.git.checkout(branch_name)
+            except GitCommandError as ex:
+                if is_disk_space_error(ex):
+                    raise DiskSpaceError(tr("error.disk_space")) from ex
+                raise
             return
         remote_ref = f"origin/{branch_name}"
         remote_refs = [ref.name for ref in repo.remotes.origin.refs]
         if remote_ref in remote_refs:
-            repo.git.checkout("-B", branch_name, remote_ref)
+            try:
+                repo.git.checkout("-B", branch_name, remote_ref)
+            except GitCommandError as ex:
+                if is_disk_space_error(ex):
+                    raise DiskSpaceError(tr("error.disk_space")) from ex
+                raise
             return
         raise ValueError(f"Branch '{branch_name}' not found in remote repository.")

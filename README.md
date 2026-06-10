@@ -40,6 +40,7 @@ The CLI is organized around two subcommands:
 
 ```shell
 python -m analyze_git_repo_loc init [--config config.yml]
+python -m analyze_git_repo_loc doctor [--config config.yml] [--remote] [--strict]
 python -m analyze_git_repo_loc run [--config config.yml] [options]
 python -m analyze_git_repo_loc run -i [--config config.yml]
 ```
@@ -74,9 +75,10 @@ output file is `config.yml`. If the file already exists, the CLI asks for
 another file name; entering the same existing path requires explicit overwrite
 confirmation.
 
-The generated config stores common non-secret defaults only. It does not save
-repositories, tokens, client IDs, or authentication choices. After creation,
-run:
+For a new file, the generated config stores common non-secret defaults only. It
+does not save repositories, tokens, client IDs, or authentication choices. When
+updating an existing config, `init` preserves existing `repositories` entries
+and commented repository candidates under `repositories:`. After creation, run:
 
 ```shell
 python -m analyze_git_repo_loc run -i
@@ -94,8 +96,9 @@ analysis pipeline with the selected repositories.
 
 When only one provider is configured and `GITHUB_TOKEN` / `GITLAB_TOKEN` or an
 existing `gh` / `glab` login is available, `run -i` starts at Quick Review.
-Press Enter to run, `e` to edit, `d` for details, `s` to save config then run,
-or `c` to cancel.
+Press Enter to run, `e` to edit, `d` for details, `s` to save config only,
+`x` to save config then run, `i` to return to repository selection, or `c` to
+cancel. After details or save-only actions, the menu returns to Quick Review.
 
 #### Example : Validate configuration
 
@@ -181,9 +184,16 @@ Notes:
 - `repositories` entries may be a string (path/URL) or a mapping with `path`,
   `branch`, `exclude_dirs`, `include_subpath`, and exclude template settings.
   Branch defaults to `main`.
+- `init` and `run -i` preserve existing `repositories` entries and commented
+  repository candidates such as `# - path: ...` under `repositories:` when
+  rewriting config.
 - `lang`, `author_name`, `exclude_dirs`, `exclude_template_names`, and
   `exclude_template_files` accept a YAML list or a
   comma-separated string.
+- `settings.workers` controls parallel repository analysis. If multiple entries
+  resolve to the same local Git root or the same remote cache path, analysis
+  falls back to a single worker for that run to avoid `.git/config.lock`
+  conflicts; independent repositories still use the configured worker count.
 - `exclude_template_mode` can be `auto`, `manual`, or `off`. `auto` detects
   common project layouts and merges template excludes with manual
   `exclude_dirs`; `manual` uses only `exclude_dirs`; `off` disables excludes.
@@ -208,7 +218,8 @@ Notes:
   warnings are reserved for manual excludes.
 - Quick Review starts with a compact summary and uses terminal colors when
   supported to distinguish headings, summary values, actions, and cache states.
-  Press `d` to show repository-level details and full execution conditions.
+  Press `d` to show repository-level details and full execution conditions,
+  then return to the final action menu.
 - Interactive-selected repositories may include `include_subpath` when saving config;
   the analysis run treats it as a repository-root-relative subpath.
 - Interactive authentication is selected at runtime. It offers environment tokens

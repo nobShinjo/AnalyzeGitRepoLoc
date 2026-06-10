@@ -846,6 +846,28 @@ def load_repository_overrides(config_data: dict[str, Any]) -> dict[str, dict[str
     return overrides
 
 
+def _initial_repository_selection(
+    repository_catalog: list[RemoteRepositoryRef],
+    overrides: dict[str, dict[str, Any]],
+) -> tuple[list[RemoteRepositoryRef], dict[str, str]]:
+    """Return selector defaults derived from saved repository config."""
+    selected_refs: list[RemoteRepositoryRef] = []
+    selected_branches: dict[str, str] = {}
+    for ref in repository_catalog:
+        repository = SelectedRepositoryConfig(
+            ref=ref,
+            branch=ref.default_branch or "main",
+        )
+        override = _find_repository_override(repository, overrides)
+        if not override:
+            continue
+        selected_refs.append(ref)
+        branch = str(override.get("branch") or "").strip()
+        if branch:
+            selected_branches[ref.full_name] = branch
+    return selected_refs, selected_branches
+
+
 def _prompt_branch_selection(state: TuiWizardState) -> None:
     print()
     print(tr("tui.branch_selection"))
@@ -1126,6 +1148,78 @@ def _filter_present_excludes(
     return excludes or []
 
 
+def _selection_result_values(
+    selection_result: RepositorySelectionResult | list[RemoteRepositoryRef],
+) -> tuple[list[RemoteRepositoryRef], dict[str, str]]:
+    """Return selected refs and branches from a repository selector result."""
+    if isinstance(selection_result, RepositorySelectionResult):
+        return selection_result.selected_refs, selection_result.selected_branches
+    return selection_result, {}
+
+
+def _repository_selection_key(ref: RemoteRepositoryRef) -> str:
+    """Return a stable key for selected repository state reuse."""
+    return f"{ref.provider}:{ref.full_name}"
+
+
+def _selected_refs_from_state(state: TuiWizardState) -> list[RemoteRepositoryRef]:
+    """Return currently selected repository references."""
+    return [repository.ref for repository in state.selected_repositories]
+
+
+def _selected_branches_from_state(state: TuiWizardState) -> dict[str, str]:
+    """Return branch defaults for the repository selector."""
+    return {
+        repository.ref.full_name: repository.branch
+        for repository in state.selected_repositories
+        if repository.branch
+    }
+
+
+def _apply_repository_selection(
+    state: TuiWizardState,
+    selected_refs: list[RemoteRepositoryRef],
+    selected_branches: dict[str, str],
+    repository_overrides: dict[str, dict[str, Any]],
+) -> None:
+    """Replace selected repositories while preserving matching edited settings."""
+    existing_by_key = {
+        _repository_selection_key(repository.ref): repository
+        for repository in state.selected_repositories
+    }
+    selected_repositories: list[SelectedRepositoryConfig] = []
+    for ref in selected_refs:
+        existing = existing_by_key.get(_repository_selection_key(ref))
+        if existing is None:
+            repository = SelectedRepositoryConfig(
+                ref=ref,
+                branch=ref.default_branch or "main",
+                cache_status=determine_cache_status(
+                    ref,
+                    clone_protocol=state.clone_protocol,
+                    output=state.output,
+                ),
+                exclude_dirs=[],
+            )
+            _apply_repository_override(
+                repository,
+                _find_repository_override(repository, repository_overrides),
+            )
+        else:
+            repository = existing
+            repository.cache_status = determine_cache_status(
+                ref,
+                clone_protocol=state.clone_protocol,
+                output=state.output,
+            )
+        selected_branch = selected_branches.get(ref.full_name)
+        if selected_branch:
+            repository.branch = selected_branch
+        selected_repositories.append(repository)
+    state.selected_repositories = selected_repositories
+    state.recommendations = build_lightweight_recommendations(state)
+
+
 def apply_wizard_state(
     args: argparse.Namespace, state: TuiWizardState
 ) -> argparse.Namespace:
@@ -1153,11 +1247,19 @@ def normalize_final_action(raw: str) -> str | None:
         "run": "run",
         "e": "edit",
         "edit": "edit",
+        "i": "select",
+        "interactive": "select",
+        "select": "select",
+        "selection": "select",
+        "back": "select",
         "d": "details",
         "details": "details",
         "s": "save",
         "save": "save",
-        "save+run": "save",
+        "x": "save_run",
+        "save+run": "save_run",
+        "save-run": "save_run",
+        "save_run": "save_run",
         "c": "cancel",
         "cancel": "cancel",
     }
@@ -1165,16 +1267,16 @@ def normalize_final_action(raw: str) -> str | None:
 
 
 def _prompt_final_action(state: TuiWizardState) -> str:
-    detailed = False
     while True:
         print()
-        print(render_final_review(state, color=True, detailed=detailed))
+        print(render_final_review(state, color=True, detailed=False))
         raw = _prompt(tr("tui.action"), "")
         action = normalize_final_action(raw)
         if action == "details":
-            detailed = True
+            print()
+            print(render_final_review(state, color=True, detailed=True))
             continue
-        if action in {"run", "edit", "cancel", "save"}:
+        if action in {"run", "edit", "cancel", "save", "save_run", "select"}:
             return action
         print(tr("tui.choose_action"))
 
@@ -1217,9 +1319,19 @@ def _prompt_edit_category() -> str:
         print(tr("tui.choose_category"))
 
 
-def _run_wizard_steps(state: TuiWizardState) -> str:
+def _run_wizard_steps(
+    state: TuiWizardState,
+    *,
+    save_callback: Callable[[TuiWizardState], None] | None = None,
+) -> str:
     while True:
         action = _prompt_final_action(state)
+        if action == "save":
+            if save_callback is not None:
+                save_callback(state)
+            continue
+        if action == "select":
+            return action
         if action != "edit":
             return action
         while True:
@@ -1265,17 +1377,18 @@ def run_tui_wizard(
         clone_protocol=settings.defaults.clone_protocol,
     )
     repository_catalog = _fetch_repository_catalog(provider_targets, auth_tokens)
+    initial_refs, initial_branches = _initial_repository_selection(
+        repository_catalog,
+        repository_overrides,
+    )
     selection_result = run_repository_selector(
         repository_catalog,
         branch_loader=_build_branch_loader(provider_targets, auth_tokens),
+        initial_selected_refs=initial_refs,
+        initial_selected_branches=initial_branches,
         return_result=True,
     )
-    if isinstance(selection_result, RepositorySelectionResult):
-        selected_refs = selection_result.selected_refs
-        selected_branches = selection_result.selected_branches
-    else:
-        selected_refs = selection_result
-        selected_branches = {}
+    selected_refs, selected_branches = _selection_result_values(selection_result)
     state = build_initial_wizard_state(
         args=args,
         settings=settings,
@@ -1293,11 +1406,34 @@ def run_tui_wizard(
         if selected_branch:
             repository.branch = selected_branch
     state.recommendations = build_lightweight_recommendations(state)
-    action = _run_wizard_steps(state)
+    while True:
+        action = _run_wizard_steps(
+            state,
+            save_callback=lambda current_state: save_wizard_config(
+                args.config,
+                current_state,
+            ),
+        )
+        if action != "select":
+            break
+        selection_result = run_repository_selector(
+            repository_catalog,
+            branch_loader=_build_branch_loader(provider_targets, auth_tokens),
+            initial_selected_refs=_selected_refs_from_state(state),
+            initial_selected_branches=_selected_branches_from_state(state),
+            return_result=True,
+        )
+        selected_refs, selected_branches = _selection_result_values(selection_result)
+        _apply_repository_selection(
+            state,
+            selected_refs,
+            selected_branches,
+            repository_overrides,
+        )
     if action == "cancel":
         from analyze_git_repo_loc.interactive.tui_selector import TuiSelectionCancelled
 
         raise TuiSelectionCancelled("Interactive run cancelled.")
-    if action == "save":
+    if action == "save_run":
         save_wizard_config(args.config, state)
     return apply_wizard_state(args, state)

@@ -40,6 +40,7 @@ from analyze_git_repo_loc.analysis.analysis_helpers import (
 from analyze_git_repo_loc.reporting.chart_builder import ChartBuilder, ChartStrategy
 from analyze_git_repo_loc.colored_console_printer import ColoredConsolePrinter
 from analyze_git_repo_loc.doctor import format_diagnostic_report, run_config_diagnostics
+from analyze_git_repo_loc.errors import DiskSpaceError
 from analyze_git_repo_loc.reporting.html_report import (
     ProgressEvent,
     generate_html_report,
@@ -255,53 +256,56 @@ def _generate_charts(
     author_analysis: pd.DataFrame,
     repository_trend_analysis: pd.DataFrame,
 ) -> None:
-    with tqdm(total=5, desc=tr("progress.charts.language_trend")) as progress_bar:
-        generate_trend_chart(
-            data=language_analysis,
-            category_column="Language",
-            time_interval=time_interval,
-            output_path=output_root,
-            no_plot_show=suppress_plot_show,
-        )
-        progress_bar.update(1)
+    try:
+        with tqdm(total=5, desc=tr("progress.charts.language_trend")) as progress_bar:
+            generate_trend_chart(
+                data=language_analysis,
+                category_column="Language",
+                time_interval=time_interval,
+                output_path=output_root,
+                no_plot_show=suppress_plot_show,
+            )
+            progress_bar.update(1)
 
-        progress_bar.set_description_str(tr("progress.charts.author_trend"))
-        generate_trend_chart(
-            data=author_analysis,
-            category_column="Author",
-            time_interval=time_interval,
-            output_path=output_root,
-            no_plot_show=suppress_plot_show,
-        )
-        progress_bar.update(1)
+            progress_bar.set_description_str(tr("progress.charts.author_trend"))
+            generate_trend_chart(
+                data=author_analysis,
+                category_column="Author",
+                time_interval=time_interval,
+                output_path=output_root,
+                no_plot_show=suppress_plot_show,
+            )
+            progress_bar.update(1)
 
-        progress_bar.set_description_str(tr("progress.charts.repository_trend"))
-        generate_all_repositories_trend_chart(
-            data=repository_trend_analysis,
-            time_interval=time_interval,
-            category_column="Repository",
-            output_path=output_dir,
-            no_plot_show=suppress_plot_show,
-        )
-        progress_bar.update(1)
+            progress_bar.set_description_str(tr("progress.charts.repository_trend"))
+            generate_all_repositories_trend_chart(
+                data=repository_trend_analysis,
+                time_interval=time_interval,
+                category_column="Repository",
+                output_path=output_dir,
+                no_plot_show=suppress_plot_show,
+            )
+            progress_bar.update(1)
 
-        progress_bar.set_description_str(tr("progress.charts.author_contribution"))
-        generate_author_contribution_chart(
-            data=author_analysis,
-            output_path=output_dir,
-            no_plot_show=suppress_plot_show,
-        )
-        progress_bar.update(1)
+            progress_bar.set_description_str(tr("progress.charts.author_contribution"))
+            generate_author_contribution_chart(
+                data=author_analysis,
+                output_path=output_dir,
+                no_plot_show=suppress_plot_show,
+            )
+            progress_bar.update(1)
 
-        progress_bar.set_description_str(tr("progress.charts.author_aggregate"))
-        generate_all_repositories_trend_chart(
-            data=repository_trend_analysis,
-            time_interval=time_interval,
-            category_column="Author",
-            output_path=output_dir,
-            no_plot_show=suppress_plot_show,
-        )
-        progress_bar.update(1)
+            progress_bar.set_description_str(tr("progress.charts.author_aggregate"))
+            generate_all_repositories_trend_chart(
+                data=repository_trend_analysis,
+                time_interval=time_interval,
+                category_column="Author",
+                output_path=output_dir,
+                no_plot_show=suppress_plot_show,
+            )
+            progress_bar.update(1)
+    except (DiskSpaceError, OSError) as ex:
+        handle_exception(ex)
 
 
 def _generate_report(
@@ -411,59 +415,64 @@ def main() -> None:
     # Output program name and description.
     _print_start(console, parser)
 
-    # Analyze the LOC in the Git repositories
-    loc_data_repositories = analyze_git_repositories(args)
-    time_interval, time_period = get_time_interval_and_period(args.interval)
+    try:
+        # Analyze the LOC in the Git repositories
+        loc_data_repositories = analyze_git_repositories(args)
+        time_interval, time_period = get_time_interval_and_period(args.interval)
 
-    repo_count = len(loc_data_repositories)
-    suppress_plot_show = args.no_plot_show or repo_count > 1
-    output_root = Path(args.output)
-    language_analysis, author_analysis, repository_trend_analysis = _build_analysis_data(
-        loc_data_repositories=loc_data_repositories,
-        time_interval=time_interval,
-        time_period=time_period,
-        output_root=output_root,
-        console=console,
-    )
+        repo_count = len(loc_data_repositories)
+        suppress_plot_show = args.no_plot_show or repo_count > 1
+        output_root = Path(args.output)
+        language_analysis, author_analysis, repository_trend_analysis = (
+            _build_analysis_data(
+                loc_data_repositories=loc_data_repositories,
+                time_interval=time_interval,
+                time_period=time_period,
+                output_root=output_root,
+                console=console,
+            )
+        )
 
-    # Save the analyzed data
-    console.print_h1(f"\n# {tr('run.section.save_data')}")
-    output_dir = output_root / datetime.now().strftime("%Y%m%d%H%M%S")
-    _save_analysis_outputs(
-        output_dir=output_dir,
-        args=args,
-        time_interval=time_interval,
-        language_analysis=language_analysis,
-        author_analysis=author_analysis,
-        repository_trend_analysis=repository_trend_analysis,
-    )
+        # Save the analyzed data
+        console.print_h1(f"\n# {tr('run.section.save_data')}")
+        output_dir = output_root / datetime.now().strftime("%Y%m%d%H%M%S")
+        _save_analysis_outputs(
+            output_dir=output_dir,
+            args=args,
+            time_interval=time_interval,
+            language_analysis=language_analysis,
+            author_analysis=author_analysis,
+            repository_trend_analysis=repository_trend_analysis,
+        )
 
-    # Generate charts
-    console.print_h1(f"\n# {tr('run.section.generate_charts')}")
-    _generate_charts(
-        output_root=output_root,
-        output_dir=output_dir,
-        time_interval=time_interval,
-        suppress_plot_show=suppress_plot_show,
-        language_analysis=language_analysis,
-        author_analysis=author_analysis,
-        repository_trend_analysis=repository_trend_analysis,
-    )
+        # Generate charts
+        console.print_h1(f"\n# {tr('run.section.generate_charts')}")
+        _generate_charts(
+            output_root=output_root,
+            output_dir=output_dir,
+            time_interval=time_interval,
+            suppress_plot_show=suppress_plot_show,
+            language_analysis=language_analysis,
+            author_analysis=author_analysis,
+            repository_trend_analysis=repository_trend_analysis,
+        )
 
-    console.print_h1(f"\n# {tr('run.section.generate_html_report')}")
-    _generate_report(
-        output_dir=output_dir,
-        output_root=output_root,
-        time_interval=time_interval,
-        loc_data_repositories=loc_data_repositories,
-        language_analysis=language_analysis,
-        author_analysis=author_analysis,
-        repository_trend_analysis=repository_trend_analysis,
-        exclude_metadata=getattr(args, "exclude_metadata", None),
-    )
+        console.print_h1(f"\n# {tr('run.section.generate_html_report')}")
+        _generate_report(
+            output_dir=output_dir,
+            output_root=output_root,
+            time_interval=time_interval,
+            loc_data_repositories=loc_data_repositories,
+            language_analysis=language_analysis,
+            author_analysis=author_analysis,
+            repository_trend_analysis=repository_trend_analysis,
+            exclude_metadata=getattr(args, "exclude_metadata", None),
+        )
 
-    _maybe_open_report(output_dir=output_dir, args=args, repo_count=repo_count)
-    _print_output_summary(console, output_dir, output_root)
+        _maybe_open_report(output_dir=output_dir, args=args, repo_count=repo_count)
+        _print_output_summary(console, output_dir, output_root)
+    except (DiskSpaceError, OSError) as ex:
+        handle_exception(ex)
 
     console.print_h1("\n# LOC Analyze")
     print(f"{Cursor.UP()}{Cursor.FORWARD(50)}{Fore.GREEN}{tr('run.finish')}")

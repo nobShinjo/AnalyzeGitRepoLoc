@@ -8,6 +8,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
+import pandas as pd
+
 from analyze_git_repo_loc.analysis.git_repo_loc_analyzer import GitRepoLOCAnalyzer
 
 
@@ -167,6 +169,65 @@ class CommitProgressTests(unittest.TestCase):
                 ("advance", 1),
             ],
         )
+
+
+class CommitAnalysisCacheTests(unittest.TestCase):
+    """Commit analysis cache reuse tests."""
+
+    def test_uses_cached_commit_data_without_traversal_when_head_matches(self) -> None:
+        cached = pd.DataFrame(
+            [
+                {
+                    "Datetime": pd.Timestamp("2026-05-27T00:00:00Z"),
+                    "Repository": "alpha",
+                    "Branch": "main",
+                    "Commit_hash": "abc123",
+                    "Author": "Nob",
+                    "Language": "Python",
+                    "NLOC_Added": 1,
+                    "NLOC_Deleted": 0,
+                    "NLOC": 1,
+                }
+            ]
+        )
+        analyzer = GitRepoLOCAnalyzer(
+            repo_path=Path("alpha"),
+            branch_name="main",
+            cache_dir=Path("cache"),
+            output_dir=Path("out"),
+            show_progress=False,
+        )
+        # pylint: disable=protected-access
+        analyzer._cache_metadata = {"last_commit_hash": "abc123"}
+        analyzer._cache_commit_data = cached
+
+        with patch.object(analyzer, "_current_head_hash", return_value="abc123"):
+            with patch.object(analyzer, "_build_repository") as build_repository:
+                result = analyzer.get_commit_analysis()
+
+        build_repository.assert_not_called()
+        self.assertEqual(result["Commit_hash"].tolist(), ["abc123"])
+
+    def test_traverses_commits_when_cached_head_is_stale(self) -> None:
+        commits = []
+        analyzer = GitRepoLOCAnalyzer(
+            repo_path=Path("alpha"),
+            branch_name="main",
+            cache_dir=Path("cache"),
+            output_dir=Path("out"),
+            show_progress=False,
+        )
+        # pylint: disable=protected-access
+        analyzer._cache_metadata = {"last_commit_hash": "old"}
+        analyzer._cache_commit_data = pd.DataFrame()
+
+        with patch.object(analyzer, "_current_head_hash", return_value="new"):
+            with patch.object(analyzer, "_build_repository", return_value=object()):
+                with patch.object(analyzer, "_get_commits", return_value=commits) as get:
+                    result = analyzer.get_commit_analysis()
+
+        get.assert_called_once()
+        self.assertTrue(result.empty)
 
 
 if __name__ == "__main__":

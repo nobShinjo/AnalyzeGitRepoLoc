@@ -12,6 +12,42 @@
 
 ### Security
 
+## [3.2.0] - 2026-06-10
+
+### Added
+
+- Add a Quick Review action to return from the final confirmation menu to
+  interactive repository selection.
+- Add separate Quick Review actions for save-only and save-then-run workflows.
+- Add regression coverage for preserving repository config during `init` and
+  `run -i` saves.
+- Add regression coverage for duplicate Git worktree analysis lock avoidance.
+
+### Changed
+
+- Update README documentation for the current interactive final action menu,
+  config preservation behavior, and duplicate repository worker fallback.
+- Refresh the third-party license list.
+
+### Fixed
+
+- Preserve existing `repositories` entries and commented repository candidates
+  when regenerating YAML through `init` or `run -i`.
+- Keep selected repositories in config across repeated `init`, `run -i`, and
+  `init` workflows.
+- Avoid `.git/config.lock` conflicts by falling back to a single worker when
+  multiple analysis entries resolve to the same local Git root or remote cache.
+- Forward remote cache policy options through compatibility wrappers.
+- Reuse cached remote analysis data consistently with the selected cache policy.
+- Handle disk-space exhaustion during runtime analysis, remote fetch, and
+  checkout with clearer errors.
+- Tolerate missing GitHub/GitLab CLI tools and UTF-8 command output when
+  resolving interactive authentication.
+
+### Removed
+
+### Security
+
 ## [3.1.0] - 2026-06-07
 
 ### Added
@@ -278,6 +314,8 @@
 - Provided functionality to generate LOC trend charts by language and author.
 -
 
+[3.2.0](https://github.com/nobShinjo/AnalyzeGitRepoLoc/releases/tag/v3.2.0)
+[3.1.0](https://github.com/nobShinjo/AnalyzeGitRepoLoc/releases/tag/v3.1.0)
 [3.0.0](https://github.com/nobShinjo/AnalyzeGitRepoLoc/releases/tag/v3.0.0)
 [2.3.0](https://github.com/nobShinjo/AnalyzeGitRepoLoc/releases/tag/v2.3.0)
 [2.2.4](https://github.com/nobShinjo/AnalyzeGitRepoLoc/releases/tag/v2.2.4)
