@@ -719,6 +719,44 @@ def _resolve_worker_count(workers: int | None, repo_count: int) -> int:
     return max(1, resolved)
 
 
+def _find_local_git_root(path: Path) -> Path | None:
+    """Find the enclosing Git worktree root for a local path."""
+    current = path.expanduser().resolve(strict=False)
+    for candidate in (current, *current.parents):
+        if (candidate / ".git").exists():
+            return candidate.resolve(strict=False)
+    return None
+
+
+def _repository_concurrency_identity(
+    repo_entry: tuple,
+    cache_dir: Path,
+) -> tuple[str, str]:
+    """Return the local worktree/cache identity touched by a repository entry."""
+    repo_path, *_ = _unpack_repo_entry(repo_entry)
+    if isinstance(repo_path, str) and _REMOTE_REPO_MANAGER.is_git_url(repo_path):
+        cache_path = _REMOTE_REPO_MANAGER.get_remote_cache_path(cache_dir, repo_path)
+        return "remote", str(cache_path.resolve(strict=False)).casefold()
+    local_path = Path(repo_path)
+    git_root = _find_local_git_root(local_path)
+    identity_path = git_root if git_root is not None else local_path.resolve(strict=False)
+    return "local", str(identity_path).casefold()
+
+
+def _has_duplicate_repository_worktree(
+    repo_entries: list[tuple],
+    cache_dir: Path,
+) -> bool:
+    """Return whether multiple entries would touch the same Git worktree."""
+    seen: set[tuple[str, str]] = set()
+    for repo_entry in repo_entries:
+        identity = _repository_concurrency_identity(repo_entry, cache_dir)
+        if identity in seen:
+            return True
+        seen.add(identity)
+    return False
+
+
 def analyze_git_repositories(
     args: argparse.Namespace,
     *,
@@ -747,6 +785,11 @@ def analyze_git_repositories(
     repo_entries = list(args.repo_paths)
     repo_count = len(repo_entries)
     worker_count = worker_count_resolver(args.workers, repo_count)
+    if worker_count > 1 and _has_duplicate_repository_worktree(
+        repo_entries,
+        args.output / ".cache",
+    ):
+        worker_count = 1
     results: dict[int, pd.DataFrame] = {}
     warnings: list[str] = []
     exclude_summaries: list[dict[str, object]] = []
