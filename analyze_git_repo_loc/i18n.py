@@ -255,7 +255,10 @@ _MESSAGES: dict[str, dict[str, str]] = {
         "tui.edit_individual_repos": "Edit individual repositories",
         "tui.edit_per_repo_paths": "Edit per-repository path rules",
         "tui.enter_yes_no": "Enter y or n.",
-        "tui.final_actions": "[Enter] Run   e Edit   d Details   s Save+Run   c Cancel",
+        "tui.final_actions": (
+            "[Enter] Run   e Edit   d Details   s Save   x Save+Run   "
+            "i Select repos   c Cancel"
+        ),
         "tui.global_excludes": "Global excludes: {value} (applied only when present)",
         "tui.global_excludes_prompt": "Global exclude paths",
         "tui.include_subpath_prompt": "{repo} include subpath",
@@ -512,7 +515,10 @@ _MESSAGES: dict[str, dict[str, str]] = {
         "tui.edit_individual_repos": "リポジトリごとに編集する",
         "tui.edit_per_repo_paths": "リポジトリごとのパスルールを編集する",
         "tui.enter_yes_no": "y または n を入力してください。",
-        "tui.final_actions": "[Enter] 実行   e 編集   d 詳細   s 保存して実行   c キャンセル",
+        "tui.final_actions": (
+            "[Enter] 実行   e 編集   d 詳細   s 保存   x 保存して実行   "
+            "i リポジトリ選択   c キャンセル"
+        ),
         "tui.global_excludes": "グローバル除外: {value} (存在する場合のみ適用)",
         "tui.global_excludes_prompt": "グローバル除外パス",
         "tui.include_subpath_prompt": "{repo} 解析サブパス",
