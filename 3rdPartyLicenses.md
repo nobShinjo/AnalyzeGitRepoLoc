@@ -1,28 +1,29 @@
+# Third-party Licenses
+
 | Name            | Version           | License                                            |
 |-----------------|-------------------|----------------------------------------------------|
-| GitPython       | 3.1.50            | BSD-3-Clause                                       |
+| GitPython       | 3.2.1             | BSD-3-Clause                                       |
 | Jinja2          | 3.1.6             | BSD License                                        |
-| MarkupSafe      | 3.0.3             | BSD-3-Clause                                       |
-| PyDriller       | 2.9               | Apache Software License                            |
+| MarkupSafe      | 3.0.4             | BSD-3-Clause                                       |
+| PyDriller       | 2.12              | Apache Software License                            |
 | PyYAML          | 6.0.3             | MIT License                                        |
-| Pygments        | 2.19.2            | BSD License                                        |
+| Pygments        | 2.21.0            | BSD-2-Clause                                       |
 | colorama        | 0.4.6             | BSD License                                        |
 | gitdb           | 4.0.12            | BSD License                                        |
-| iniconfig       | 2.3.0             | MIT                                                |
-| lizard          | 1.19.0            | Freeware                                           |
-| narwhals        | 2.14.0            | MIT License                                        |
-| numpy           | 2.4.0             | BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0 |
-| packaging       | 25.0              | Apache Software License; BSD License               |
-| pandas          | 3.0.3             | BSD License                                        |
-| pathspec        | 0.12.1            | Mozilla Public License 2.0 (MPL 2.0)               |
-| plotly          | 6.8.0             | MIT                                                |
-| pluggy          | 1.6.0             | MIT License                                        |
-| prompt_toolkit  | 3.0.52            | BSD License                                        |
-| pytest          | 9.0.3             | MIT                                                |
-| python-dateutil | 2.9.0.post0       | Apache Software License; BSD License               |
-| pytz            | 2025.2            | MIT License                                        |
-| six             | 1.17.0            | MIT License                                        |
-| smmap           | 5.0.2             | BSD License                                        |
-| tqdm            | 4.68.1            | MPL-2.0 AND MIT                                    |
-| types-pytz      | 2025.2.0.20251108 | Apache-2.0                                         |
-| tzdata          | 2025.3            | Apache-2.0                                         |
+| iniconfig       | 2.3.1             | MIT                                                |
+| lizard          | 1.25.1            | Freeware                                           |
+| narwhals        | 2.28.0            | MIT                                                |
+| numpy           | 2.5.4             | BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0 |
+| packaging       | 26.3              | Apache-2.0 OR BSD-2-Clause                         |
+| pandas          | 3.1.1             | BSD-3-Clause                                       |
+| pathspec        | 1.1.1             | Mozilla Public License 2.0 (MPL 2.0)               |
+| plotly          | 7.1.0             | MIT                                                |
+| pluggy          | 1.7.0             | MIT License                                        |
+| prompt_toolkit  | 3.0.53            | BSD License                                        |
+| pytest          | 9.2.0             | MIT                                                |
+| python-dateutil | 4.0.0             | BSD-3-Clause                                       |
+| pytz            | 2026.6            | MIT License                                        |
+| smmap           | 5.0.3             | BSD License                                        |
+| tqdm            | 4.70.1            | MPL-2.0 AND MIT                                    |
+| types-pytz      | 2026.6.0.20261031 | Apache-2.0                                         |
+| tzdata          | 2026.6            | Apache-2.0                                         |

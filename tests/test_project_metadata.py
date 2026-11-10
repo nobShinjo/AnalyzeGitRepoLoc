@@ -6,20 +6,20 @@ import tomllib
 from pathlib import Path
 
 
-_EXPECTED_VERSION = "3.1.0"
+_EXPECTED_VERSION = "3.2.0"
 _EXPECTED_DEPENDENCIES = {
-    "pandas": ">=3.0.3",
-    "plotly": ">=6.7.0",
-    "tqdm": ">=4.67.3",
+    "pandas": ">=3.1.1",
+    "plotly": ">=7.1.0",
+    "tqdm": ">=4.70.1",
     "jinja2": ">=3.1.6",
-    "PyDriller": ">=2.9",
+    "PyDriller": ">=2.12",
     "PyYAML": ">=6.0.3",
     "pip-licenses": ">=5.5.5",
-    "prompt_toolkit": ">=3.0.52",
-    "GitPython": ">=3.1.50",
+    "prompt_toolkit": ">=3.0.53",
+    "GitPython": ">=3.2.1",
     "colorama": ">=0.4.6",
 }
-_EXPECTED_DEV_DEPENDENCIES = {"pytest": ">=9.0.3"}
+_EXPECTED_DEV_DEPENDENCIES = {"pytest": ">=9.2.0"}
 
 
 def _load_pyproject_data() -> dict[str, object]:
@@ -36,7 +36,7 @@ def _load_dependency_map(requirements: list[str]) -> dict[str, str]:
 
 
 def test_pyproject_version_and_dependency_floors_match_release_expectations() -> None:
-    """The release metadata should match the 3.1.0 dependency refresh plan."""
+    """The release metadata should match the current dependency refresh plan."""
     data = _load_pyproject_data()
     project = data["project"]
     assert isinstance(project, dict)
@@ -58,4 +58,4 @@ def test_uv_lock_pins_gitpython_to_secure_release() -> None:
     lock_path = Path(__file__).resolve().parents[1] / "uv.lock"
     lock_text = lock_path.read_text(encoding="utf-8")
 
-    assert 'name = "gitpython"\nversion = "3.1.50"' in lock_text
+    assert 'name = "gitpython"\nversion = "3.2.1"' in lock_text

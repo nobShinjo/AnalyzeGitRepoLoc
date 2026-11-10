@@ -7,17 +7,17 @@ requires-python = ">=3.14"
 license = { file = "LICENSE" }
 authors = [{ name = "Nob Shinjo" }]
 dependencies = [
-"pandas>=3.0.3",
-"plotly>=6.7.0",
-"tqdm>=4.67.3",
+"pandas>=3.1.1",
+"plotly>=7.1.0",
+"tqdm>=4.70.1",
 "jinja2>=3.1.6",
-"PyDriller>=2.9",
+"PyDriller>=2.12",
 "PyYAML>=6.0.3",
 "pip-licenses>=5.5.5",
-"prompt_toolkit>=3.0.52",
-"GitPython>=3.1.50",
+"prompt_toolkit>=3.0.53",
+"GitPython>=3.2.1",
 "colorama>=0.4.6",
 ]
 
 [dependency-groups]
-dev = ["pytest>=9.0.3"]
+dev = ["pytest>=9.2.0"]
