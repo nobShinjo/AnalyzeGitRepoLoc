@@ -32,6 +32,7 @@ import plotly.graph_objects as go
 from colorama import Cursor, Fore, Style
 from tqdm import tqdm
 
+from analyze_git_repo_loc import __version__
 from analyze_git_repo_loc.analysis.analysis_helpers import (
     prepare_author_contribution_data,
     prepare_summary_data,
@@ -396,8 +397,13 @@ def main() -> None:
     """
     # Parsing command line arguments
     parser = argparse.ArgumentParser(
-        prog="analyze_git_repo_loc",
+        prog="analyze-git-repo-loc",
         description=tr("cli.description"),
+    )
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"%(prog)s {__version__}",
     )
     args = parse_arguments(parser)
     if args.command == "init":

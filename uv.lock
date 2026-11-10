@@ -9,8 +9,8 @@ resolution-markers = [
 
 [[package]]
 name = "analyze-git-repo-loc"
-version = "3.2.0"
-source = { virtual = "." }
+version = "3.3.0"
+source = { editable = "." }
 dependencies = [
     { name = "colorama" },
     { name = "gitpython" },

@@ -1,7 +1,9 @@
-"""
-analyze_git_repo_loc package.
+"""AnalyzeGitRepoLoc package metadata.
+
+Description:
+    Exposes package-level metadata shared by the CLI entry points and tests.
 """
 
-__version__ = "2.2.4"
+__version__ = "3.3.0"
 __author__ = "Nob Shinjo"
 __license__ = "MIT"
