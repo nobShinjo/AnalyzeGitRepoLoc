@@ -15,13 +15,19 @@ CLI の表示言語は OS のロケールを参照して自動で切り替わり
 
 ## 要件
 
-1. このリポジトリを clone します。
-2. Python 3.14 以上を用意します。
-3. 依存関係を同期します。
+Git と [uv](https://docs.astral.sh/uv/getting-started/installation/) を用意します。
+Python 3.14 以上が必要です。必要に応じて uv が Python を取得します。
+
+このリポジトリを clone して、依存関係とプロジェクトを `.venv` にインストールします。
 
 ```shell
-uv sync --active
+git clone https://github.com/nobShinjo/AnalyzeGitRepoLoc
+cd AnalyzeGitRepoLoc
+uv venv --python 3.14
+uv sync --frozen
 ```
+
+仮想環境の手動アクティベートは任意です。
 
 ## 使い方
 
@@ -30,11 +36,14 @@ uv sync --active
 CLI は次の入口を中心にしています。
 
 ```shell
-python -m analyze_git_repo_loc init [--config config.yml]
-python -m analyze_git_repo_loc doctor [--config config.yml] [--remote] [--strict]
-python -m analyze_git_repo_loc run [--config config.yml] [options]
-python -m analyze_git_repo_loc run -i [--config config.yml]
+uv run analyze-git-repo-loc init [--config config.yml]
+uv run analyze-git-repo-loc doctor [--config config.yml] [--remote] [--strict]
+uv run analyze-git-repo-loc run [--config config.yml] [options]
+uv run analyze-git-repo-loc run -i [--config config.yml]
+uv run analyze-git-repo-loc --version
 ```
+
+モジュール形式の `uv run -m analyze_git_repo_loc` も同じ引数で起動できます。
 
 - `init`: 対話形式で初期 YAML 設定を作成します。
 - `doctor`: 解析前に YAML 設定、出力先、リポジトリ、認証設定を診断します。
@@ -64,7 +73,7 @@ OAuth Device Code、実行時だけ入力する one-time token を選べます�
 ### 初期設定を作成する
 
 ```shell
-python -m analyze_git_repo_loc init
+uv run analyze-git-repo-loc init
 ```
 
 `init` は対話形式で `config.yml` を作成します。
@@ -77,13 +86,13 @@ python -m analyze_git_repo_loc init
 作成後は次のように対話実行できます。
 
 ```shell
-python -m analyze_git_repo_loc run -i
+uv run analyze-git-repo-loc run -i
 ```
 
 ### 対話形式で解析する
 
 ```shell
-python -m analyze_git_repo_loc run -i --config ./config.yml
+uv run analyze-git-repo-loc run -i --config ./config.yml
 ```
 
 `run -i` は有効な GitHub/GitLab プロバイダーからリポジトリを取得し、
@@ -98,7 +107,7 @@ Enter で実行、`e` で編集、`d` で詳細、`s` で保存のみ、`x` で�
 ### 設定を診断する
 
 ```shell
-python -m analyze_git_repo_loc doctor --config ./config.yml
+uv run analyze-git-repo-loc doctor --config ./config.yml
 ```
 
 `doctor` は YAML 構造、解析設定、リポジトリパス、出力パス、
@@ -109,14 +118,14 @@ GitHub/GitLab プロバイダーとブランチを API 経由で確認し、`--s
 ### YAML からバッチ実行する
 
 ```shell
-python -m analyze_git_repo_loc run --config ./config.yml
+uv run analyze-git-repo-loc run --config ./config.yml
 ```
 
 `run` は YAML に定義されたリポジトリと解析設定を読み込みます。
 実行時の最小限の上書きとして、次のオプションを利用できます。
 
 ```shell
-python -m analyze_git_repo_loc run --config ./config.yml --interval weekly --output ./reports --no-plot-show
+uv run analyze-git-repo-loc run --config ./config.yml --interval weekly --output ./reports --no-plot-show
 ```
 
 ## YAML 設定
@@ -212,10 +221,10 @@ Git root、または同じリモートキャッシュパスを指す場合は、
 ## ヘルプ
 
 ```shell
-python -m analyze_git_repo_loc --help
-python -m analyze_git_repo_loc init --help
-python -m analyze_git_repo_loc doctor --help
-python -m analyze_git_repo_loc run --help
+uv run analyze-git-repo-loc --help
+uv run analyze-git-repo-loc init --help
+uv run analyze-git-repo-loc doctor --help
+uv run analyze-git-repo-loc run --help
 ```
 
 ## 対応言語
@@ -225,6 +234,20 @@ python -m analyze_git_repo_loc run --help
 ```shell
 pygmentize -L lexers
 ```
+
+## 開発
+
+```shell
+uv sync --frozen
+uv lock --check
+uv run pytest
+```
+
+開発ルールは [AGENTS.md](./AGENTS.md)、現行仕様は
+[docs/requirements.md](./docs/requirements.md)、今後の計画とリリース検証記録は
+[docs/plans/](./docs/plans/) を参照してください。
+[tasks/](./tasks/README.md) は履歴資料です。
+個人用 `config.yml` の差分はリリースのコミット対象から除外します。
 
 ## 作者
 

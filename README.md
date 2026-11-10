@@ -14,7 +14,10 @@ Analyze Git repositories and visualize code LOC.
 
 ## Requirement
 
-1. Clone to git repository.
+Install [uv](https://docs.astral.sh/uv/getting-started/installation/) and Git first.
+Python 3.14 or newer is required; uv can provision Python when needed.
+
+1. Clone the Git repository.
 
     ```shell
     git clone https://github.com/nobShinjo/AnalyzeGitRepoLoc
@@ -25,25 +28,26 @@ Analyze Git repositories and visualize code LOC.
     ```shell
     cd ./AnalyzeGitRepoLoc/
     uv venv --python 3.14
-    # Windows PowerShell
-    .venv\Scripts\Activate.ps1
-    # macOS/Linux
-    # source .venv/bin/activate
-    uv sync --active
+    uv sync --frozen
     ```
 
 ## Usage
 
 ### Command line
 
-The CLI is organized around two subcommands:
+The CLI provides three subcommands:
 
 ```shell
-python -m analyze_git_repo_loc init [--config config.yml]
-python -m analyze_git_repo_loc doctor [--config config.yml] [--remote] [--strict]
-python -m analyze_git_repo_loc run [--config config.yml] [options]
-python -m analyze_git_repo_loc run -i [--config config.yml]
+uv run analyze-git-repo-loc init [--config config.yml]
+uv run analyze-git-repo-loc doctor [--config config.yml] [--remote] [--strict]
+uv run analyze-git-repo-loc run [--config config.yml] [options]
+uv run analyze-git-repo-loc run -i [--config config.yml]
+uv run analyze-git-repo-loc --version
 ```
+
+`uv sync` installs the project and its console command into `.venv`.
+Manual activation is optional. The module entry point remains available as
+`uv run -m analyze_git_repo_loc` with the same arguments.
 
 Use `init` to create a starter config, `doctor` to validate YAML before a run,
 `run -i` for the guided interactive workflow, and `run` for non-interactive
@@ -67,7 +71,7 @@ Set one of the following environment variables before running the CLI:
 #### Example : Create an initial config
 
 ```shell
-python -m analyze_git_repo_loc init
+uv run analyze-git-repo-loc init
 ```
 
 `init` interactively creates a minimal interactive-ready YAML config. The default
@@ -81,13 +85,13 @@ updating an existing config, `init` preserves existing `repositories` entries
 and commented repository candidates under `repositories:`. After creation, run:
 
 ```shell
-python -m analyze_git_repo_loc run -i
+uv run analyze-git-repo-loc run -i
 ```
 
 #### Example : Guided interactive analysis
 
 ```shell
-python -m analyze_git_repo_loc run -i --config ./config.yml
+uv run analyze-git-repo-loc run -i --config ./config.yml
 ```
 
 The interactive run lists repositories from enabled GitHub/GitLab providers, lets you
@@ -103,7 +107,7 @@ cancel. After details or save-only actions, the menu returns to Quick Review.
 #### Example : Validate configuration
 
 ```shell
-python -m analyze_git_repo_loc doctor --config ./config.yml
+uv run analyze-git-repo-loc doctor --config ./config.yml
 ```
 
 `doctor` performs lightweight local checks for YAML structure, analysis settings,
@@ -114,14 +118,14 @@ warnings as failures.
 #### Example : Batch run from YAML
 
 ```shell
-python -m analyze_git_repo_loc run --config ./config.yml
+uv run analyze-git-repo-loc run --config ./config.yml
 ```
 
 `run` reads repositories and stable analysis settings from YAML. A small set of
 runtime overrides remains available:
 
 ```shell
-python -m analyze_git_repo_loc run --config ./config.yml --interval weekly --output ./reports --no-plot-show
+uv run analyze-git-repo-loc run --config ./config.yml --interval weekly --output ./reports --no-plot-show
 ```
 
 ### YAML configuration
@@ -268,7 +272,7 @@ cleared with the YAML `settings.clear_cache` value.
 Example: stdout while running
 
 ```text
-# Start analyze_git_repo_loc.
+# Start analyze-git-repo-loc.
 - Analyze Git repositories and visualize code LOC.
 
 Analyzing repositories:  50%|=====     | 1/2 [00:06<00:06,  6.04s/it]
@@ -298,11 +302,11 @@ Generating HTML report: 100%|==========| 4/4 [00:01<00:00,  3.52it/s]
 ### Help
 
 ```shell
-python -m analyze_git_repo_loc --help
+uv run analyze-git-repo-loc --help
 ```
 
 ```text
-usage: analyze_git_repo_loc [-h] [-L {auto,en,jp}] {init,doctor,run} ...
+usage: analyze-git-repo-loc [-h] [--version] [-L {auto,en,jp}] {init,doctor,run} ...
 
 Analyze Git repositories and visualize code LOC.
 
@@ -316,10 +320,24 @@ positional arguments:
 
 options:
   -h, --help            show this help message and exit
+  --version             show program's version number and exit
   -L, --display-language {auto,en,jp}
                         Display language for this run (auto, en, or jp;
                         default: auto).
 ```
+
+## Development
+
+```shell
+uv sync --frozen
+uv lock --check
+uv run pytest
+```
+
+Development rules: [AGENTS.md](./AGENTS.md). Current behavior:
+[requirements](./docs/requirements.md). New plans and release verification:
+[docs/plans](./docs/plans/). [tasks](./tasks/README.md) contains historical records.
+Keep personal `config.yml` changes out of release commits.
 
 ## Author
 

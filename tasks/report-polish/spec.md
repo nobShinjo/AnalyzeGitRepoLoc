@@ -13,4 +13,4 @@
 - Keep the offline single-report architecture.
 - Add no new package dependencies.
 - Preserve hashed remote cache paths for clone collision avoidance.
-- Do not touch local `config.yml` or `.serena/memories/`.
+- Do not touch personal configuration or generated agent state.

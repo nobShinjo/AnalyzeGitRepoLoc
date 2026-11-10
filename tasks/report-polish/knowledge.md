@@ -16,4 +16,4 @@
 
 - Display names and DOM ids should remain separate concepts.
 - Use tests that assert behavior-oriented markers rather than exact full HTML.
-- Keep `config.yml` and `.serena/memories/` out of commits.
+- Keep personal configuration and generated agent state out of commits.

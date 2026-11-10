@@ -15,5 +15,4 @@
 - Secrets stay in environment variables.
 - API calls use `urllib.request` to avoid new HTTP dependencies.
 - `prompt_toolkit` is imported only in the interactive TUI path.
-- OpenSpec is intentionally not used for this change.
-
+- This change uses repository-local task records.

@@ -3,7 +3,8 @@
 ## Python Project Basics
 
 - Target runtime: Python 3.14+.
-- Use `python -m analyze_git_repo_loc` to run the CLI.
+- Use `uv run analyze-git-repo-loc` to run the CLI.
+- Keep `uv run -m analyze_git_repo_loc` available as an alternate entry point.
 - Keep dependencies minimal and explicit.
 - Prefer clear, testable functions with small scopes.
 
@@ -14,21 +15,36 @@
 ## Virtual Environments (venv)
 
 - Use `.venv` for running commands and tests in this project.
-- Create a local environment in `.venv`.
-- Use `python -m venv .venv`.
-- Activate:
-  - Windows PowerShell: `.venv\\Scripts\\Activate.ps1`
-  - macOS/Linux: `source .venv/bin/activate`
-- Deactivate with `deactivate`.
+- Run `uv venv --python 3.14`, then `uv sync --frozen`.
+- uv selects the project `.venv`; manual activation is optional.
 
 ## uv
 
 - Use `uv` for dependency management.
-- Example:
-  - `uv venv --python 3.14`
-  - `.venv\\Scripts\\Activate.ps1` (PowerShell) or `source .venv/bin/activate`
-  - `uv sync --active`
-  - `uv lock`
+- On Windows, execute uv commands outside the sandbox using the escalation
+  approval mechanism so uv can access its managed Python and cache.
+- After dependency changes, run `uv lock`, `uv sync --frozen`, and
+  `uv lock --check`.
+- Run the full test suite with `uv run pytest`; the default `dev` group includes
+  pytest and the project is installed into `.venv`.
+- For CLI changes, check `--version` and help for the top level and each
+  subcommand, then run `doctor` and a non-interactive analysis with a temporary
+  configuration and repository.
+- For release preparation, audit locked dependencies and regenerate
+  `3rdPartyLicenses.md` with `uv run pip-licenses --format=markdown
+  --ignore-packages analyze-git-repo-loc --output-file=3rdPartyLicenses.md`,
+  then prepend a level-one Markdown heading.
+
+## Project Documents and Local State
+
+- Read [docs/requirements.md](docs/requirements.md) when changing public behavior.
+  Update it to describe the current CLI and supported behavior.
+- Put new work plans and verification evidence in [docs/plans/](docs/plans/).
+- Treat [tasks/](tasks/) and dated older plans as historical records; unchecked
+  boxes alone do not establish current work requirements.
+- Preserve personal `config.yml` changes and exclude that file from release
+  staging. Use temporary configurations for validation.
+- Keep user-wide Codex settings outside the project change scope.
 
 ## Conventional Commits
 

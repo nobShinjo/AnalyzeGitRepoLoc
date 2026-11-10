@@ -11,7 +11,7 @@ released behavior.
 - Keep release edits limited to README, changelog, sample configuration,
   packaging metadata, and behavior-preserving code organization.
 - Do not include local working state such as `config.yml`, IDE settings, or
-  generated Serena/cache files in release commits unless explicitly requested.
+  generated agent/cache files in release commits unless explicitly requested.
 - Rebuild the local Python environment before final verification because the
   current `.venv` points at a missing uv-managed Python executable.
 - Regenerate CLI help snippets from the live command before publishing docs.
