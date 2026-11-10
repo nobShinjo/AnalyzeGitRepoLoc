@@ -12,6 +12,41 @@
 
 ### Security
 
+## [3.3.0] - 2026-11-11
+
+### Added
+
+- Add a console-script entry point so the CLI can be invoked with
+  `uv run analyze-git-repo-loc`.
+- Add a top-level `--version` flag backed by the package version metadata.
+
+### Changed
+
+- Update README and README.ja command examples from `python -m` to `uv run`.
+- Configure `uv run pytest` to include the `dev` dependency group by default.
+- Bump the package version metadata to `3.3.0` across `pyproject.toml`,
+  `analyze_git_repo_loc.__init__`, and CLI version output.
+- Add explicit Hatchling wheel and source distribution configuration so
+  `uv sync` installs the package, templates, assets, and console command.
+- Refresh runtime dependencies and pytest to current stable releases and
+  regenerate the lockfile and third-party license inventory.
+- Consolidate current specifications in `docs/requirements.md`, development
+  rules in `AGENTS.md`, and new plans in `docs/plans/`; retain `tasks/` as history.
+
+### Fixed
+
+- Align package metadata tests with the current release version and CLI entry
+  point expectations.
+
+### Removed
+
+- Remove retired specification tooling and tracked agent workspace files.
+
+### Security
+
+- Require GitPython 3.2.1 or newer to include upstream security fixes.
+- Audit all locked runtime and development dependencies during release preparation.
+
 ## [3.2.0] - 2026-06-10
 
 ### Added
@@ -166,16 +201,20 @@
 
 ### Fixed
 
-- 8e0875e Ensure paths and parameters are correctly quoted in `analyze_git_repo_loc.ps1` to handle spaces and special characters.
-- 33eacc7 Convert date arguments to datetime objects. Converted 'since' and 'until' arguments from strings to datetime objects in the main function.
+- 8e0875e Ensure paths and parameters are correctly quoted in `analyze_git_repo_loc.ps1` to handle spaces and special
+  characters.
+- 33eacc7 Convert date arguments to datetime objects. Converted 'since' and 'until' arguments from strings to datetime
+  objects in the main function.
 -
 
 ## [2.2.0] - 2024-12-18
 
 ### Added
 
-- Introduced a new feature to exclude specified directories from analysis using the `--exclude-dirs` option. Multiple directories can be separated by commas and should be specified as relative paths from the repository root.
-- Added new parameters to `Scripts\analyze_git_repo_loc.ps1` to specify the output directory, date range, analysis interval, languages, author name, and cache clearing.
+- Introduced a new feature to exclude specified directories from analysis using the `--exclude-dirs` option. Multiple
+  directories can be separated by commas and should be specified as relative paths from the repository root.
+- Added new parameters to `Scripts\analyze_git_repo_loc.ps1` to specify the output directory, date range, analysis
+  interval, languages, author name, and cache clearing.
 - Added help descriptions for these parameters in  `Scripts\analyze_git_repo_loc.ps1`.
 
 ## [2.1.3] - 2024-10-18
@@ -187,23 +226,30 @@
 ### Changed
 
 - Refactored `launch.json` to add `--no-plot-show` option.
-- Improved data preparation and chart generation in `data-processing` by optimizing cumulative sum calculations, simplifying groupby and pivot operations, and enhancing readability.
-- Refactored chart title handling in `generate_trend_chart` and `ChartBuilder` by renaming `sub_title` parameter to `title` for clarity and consistency.
+- Improved data preparation and chart generation in `data-processing` by optimizing cumulative sum calculations,
+  simplifying groupby and pivot operations, and enhancing readability.
+- Refactored chart title handling in `generate_trend_chart` and `ChartBuilder` by renaming `sub_title` parameter to
+  `title` for clarity and consistency.
 
 ## [2.1.2] - 2024-10-16
 
 ### Changed
 
-- Renamed the `repository_analysis` variable to `repository_trend_analysis` for improved clarity, reflecting its specific use for trend analysis.
-- Reorganized how analyzed data is saved by consolidating DataFrame parameters into a dictionary, which simplifies the `save_analysis_data` function.
-- Updated chart generation functions and their arguments to ensure consistency across repository and author-related analyses.
+- Renamed the `repository_analysis` variable to `repository_trend_analysis` for improved clarity, reflecting its
+  specific use for trend analysis.
+- Reorganized how analyzed data is saved by consolidating DataFrame parameters into a dictionary, which simplifies the
+  `save_analysis_data` function.
+- Updated chart generation functions and their arguments to ensure consistency across repository and author-related
+  analyses.
 - Modified chart titles to emphasize NLOC (non-blank lines of code) trends.
 
 ## [2.1.1] - 2024-10-15
 
 ### HotFixed
 
-- Fixed an issue where using the `--clear-cache` option did not properly clear cached data, causing analysis to use outdated data. Initialized `_cache_commit_data` attribute to `None` in `GitRepoLOCAnalyzer` class to ensure proper cache handling.
+- Fixed an issue where using the `--clear-cache` option did not properly clear cached data, causing analysis to use
+  outdated data. Initialized `_cache_commit_data` attribute to `None` in `GitRepoLOCAnalyzer` class to ensure proper
+  cache handling.
 
 ## [2.1.0] - 2024-10-15
 
@@ -224,7 +270,8 @@
 - Refactored `language_extensions.py` to remove duplicate file extensions and commented out code.
 - Refactored `git_repo_loc_analyzer.ps1` to update repository list file path.
 - Refactored `git_repo_loc_analyzer.py` to remove unused imports and update dependencies.
-- Refactored `generate_repository_trend_chart` function to skip generating chart if data is empty or there is only one repository.
+- Refactored `generate_repository_trend_chart` function to skip generating chart if data is empty or there is only one
+  repository.
 
 ## [2.0.0] - 2024-10-14
 
@@ -314,6 +361,7 @@
 - Provided functionality to generate LOC trend charts by language and author.
 -
 
+[3.3.0](https://github.com/nobShinjo/AnalyzeGitRepoLoc/releases/tag/v3.3.0)
 [3.2.0](https://github.com/nobShinjo/AnalyzeGitRepoLoc/releases/tag/v3.2.0)
 [3.1.0](https://github.com/nobShinjo/AnalyzeGitRepoLoc/releases/tag/v3.1.0)
 [3.0.0](https://github.com/nobShinjo/AnalyzeGitRepoLoc/releases/tag/v3.0.0)

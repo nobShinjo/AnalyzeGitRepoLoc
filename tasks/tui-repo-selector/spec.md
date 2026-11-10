@@ -25,7 +25,7 @@ pipeline without changing the normal CLI behavior.
 - No token input inside the TUI.
 - No YAML generation-only mode.
 - No new HTTP dependency.
-- No OpenSpec change artifacts for this work.
+- Use repository-local task records for this work.
 
 ## YAML Shape
 
@@ -57,4 +57,3 @@ tui:
 - API failures surface as a user-facing TUI setup error.
 - Empty API results surface as a user-facing TUI setup error.
 - TUI cancel exits with code `1` before analysis starts.
-
